@@ -23,6 +23,8 @@ vi.mock('electron', () => ({
         partition,
         requestHandler: undefined,
         checkHandler: undefined,
+        userAgent: undefined,
+        setUserAgent: vi.fn((agent: string) => { created.userAgent = agent }),
         setPermissionRequestHandler: vi.fn((handler: unknown) => { created.requestHandler = handler }),
         setPermissionCheckHandler: vi.fn((handler: unknown) => { created.checkHandler = handler }),
         setDevicePermissionHandler: vi.fn(),
@@ -38,13 +40,16 @@ vi.mock('electron', () => ({
   Menu: { buildFromTemplate: vi.fn(() => ({ popup: vi.fn() })) },
 }))
 
-const { CHAT_PARTITION, DesktopBrowserGuests, chatNavigationAllowed, parseChatConfig } = await import('../src/browser-guests.ts')
+const { CHAT_PARTITION, DesktopBrowserGuests, chatLoginAllowed, chatNavigationAllowed, parseChatConfig } = await import('../src/browser-guests.ts')
 
 const OWNER = (): Electron.WebContents & EventEmitter => {
   const owner = new EventEmitter() as Electron.WebContents & EventEmitter
   Object.assign(owner, { id: 7, send: vi.fn(), isDestroyed: () => false })
   return owner
 }
+
+type WindowOpenResult = { action: 'deny' } | { action: 'allow'; overrideBrowserWindowOptions?: unknown }
+type AttachedGuest = EventEmitter & { windowOpen?: (details: { url: string; postBody?: unknown }) => WindowOpenResult }
 
 /** Minimal guest double with the events the policy attaches to. */
 function guest() {
@@ -56,10 +61,10 @@ function guest() {
     setURL: (next: string) => { url = next },
     close: () => { closed = true; emitter.emit('destroyed') },
     isDestroyed: () => closed,
-    setWindowOpenHandler: (handler: (details: { url: string; postBody?: unknown }) => { action: 'deny' }) => {
+    setWindowOpenHandler: (handler: (details: { url: string; postBody?: unknown }) => WindowOpenResult) => {
       self.windowOpen = handler
     },
-    windowOpen: undefined as ((details: { url: string; postBody?: unknown }) => { action: 'deny' }) | undefined,
+    windowOpen: undefined as ((details: { url: string; postBody?: unknown }) => WindowOpenResult) | undefined,
   })
   return self
 }
@@ -240,7 +245,7 @@ describe('DesktopBrowserGuests chat kind', () => {
     const guests = new DesktopBrowserGuests(() => undefined)
     guests.bind(windowOf(owner), () => () => {}, MESSAGES)
     const lease = guests.acquireChat(owner, { url: 'https://chat.deepseek.com/', allowedOrigins: ['https://chat.deepseek.com'] }).lease
-    const attached = attach(owner, lease) as EventEmitter & { windowOpen?: (details: { url: string; postBody?: unknown }) => { action: 'deny' } }
+    const attached = attach(owner, lease) as AttachedGuest
 
     const inside = { isMainFrame: true, url: 'https://chat.deepseek.com/a', preventDefault: vi.fn() }
     attached.emit('will-frame-navigate', inside)
@@ -269,5 +274,75 @@ describe('DesktopBrowserGuests chat kind', () => {
     expect(blocked.preventDefault).toHaveBeenCalled()
     expect(state.openExternal).toHaveBeenCalledWith('https://example.com/x')
     expect(state.warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('chatLoginAllowed', () => {
+  it('accepts the site sign-in providers over credential-free HTTPS', () => {
+    expect(chatLoginAllowed('https://accounts.google.com/o/oauth2/v2/auth?client_id=x')).toBe(true)
+    expect(chatLoginAllowed('https://appleid.apple.com/auth/authorize?client_id=x')).toBe(true)
+    expect(chatLoginAllowed('https://www.google.com/accounts?x=1')).toBe(true)
+  })
+
+  it('rejects the site itself, plain HTTP, credentials, and other hosts', () => {
+    expect(chatLoginAllowed('https://chat.deepseek.com/')).toBe(false)
+    expect(chatLoginAllowed('http://accounts.google.com/')).toBe(false)
+    expect(chatLoginAllowed('https://user:pass@accounts.google.com/')).toBe(false)
+    expect(chatLoginAllowed('https://example.com/')).toBe(false)
+    expect(chatLoginAllowed('javascript:alert(1)')).toBe(false)
+  })
+})
+
+describe('DesktopBrowserGuests chat sign-in windows', () => {
+  const CONFIG = { url: 'https://chat.deepseek.com/', allowedOrigins: ['https://chat.deepseek.com'] }
+
+  it('gives the chat session a desktop Chrome user agent', () => {
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.acquireChat(owner, CONFIG)
+    const chatSession = state.sessions.find(value => value.partition === CHAT_PARTITION)!
+    expect(chatSession.userAgent).toEqual(expect.stringContaining('Chrome/'))
+    expect(chatSession.userAgent).not.toEqual(expect.stringContaining('Electron/'))
+  })
+
+  it('opens a sign-in provider in an embedded window on the chat partition', () => {
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    const attached = attach(owner, lease) as AttachedGuest
+
+    const opened = attached.windowOpen?.({ url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=x' })
+    expect(opened).toMatchObject({
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        webPreferences: { partition: CHAT_PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
+      },
+    })
+    expect(state.openExternal).not.toHaveBeenCalled()
+  })
+
+  it('applies the same user agent to a created sign-in window and denies its own popups', () => {
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    const attached = attach(owner, lease)
+
+    const webContents = {
+      setUserAgent: vi.fn(),
+      setWindowOpenHandler: vi.fn((handler: unknown) => { webContents.windowOpen = handler }),
+      windowOpen: undefined as unknown,
+    }
+    const child = Object.assign(new EventEmitter(), {
+      webContents,
+      destroy: vi.fn(),
+      isDestroyed: () => false,
+    })
+    attached.emit('did-create-window', child)
+
+    expect(webContents.setUserAgent).toHaveBeenCalledWith(expect.stringContaining('Chrome/'))
+    const handler = webContents.setWindowOpenHandler.mock.calls[0]![0] as () => WindowOpenResult
+    expect(handler()).toEqual({ action: 'deny' })
   })
 })
