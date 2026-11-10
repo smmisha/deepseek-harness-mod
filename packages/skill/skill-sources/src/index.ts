@@ -30,7 +30,7 @@ export interface SkillApplication {
 /** One source switch stored in this profile's settings. */
 export interface SkillSourceSwitch {
   /** Whether the source contributes skills; absent keeps the source's own default. */
-  readonly enabled: boolean
+  readonly enabled?: boolean
 }
 
 /** Plugin configuration: the persisted switches and the application list. */
@@ -61,7 +61,7 @@ export const Config = z.object({
     title: z.string().min(1),
   })).default(DEFAULT_APPLICATIONS.map(application => ({ ...application }))),
   sources: z.dict(z.object({
-    enabled: z.boolean().default(false).description('Whether this source contributes skills; absent keeps the source default.'),
+    enabled: z.boolean().description('Whether this source contributes skills; absent keeps the source default.'),
   })).default({}).volatile(),
   skills: z.dict(z.dict(z.boolean())).default({}).volatile(),
 })
@@ -193,6 +193,13 @@ export default class SkillSources extends Service implements SkillSourcesService
   }
 
   private invalidateAll(): void {
-    for (const invalidate of this.invalidators) invalidate()
+    for (const invalidate of this.invalidators) {
+      try {
+        invalidate()
+      } catch (error) {
+        // One provider's failure must not leave the others on a stale catalog.
+        this.ownerContext.logger.warn(error)
+      }
+    }
   }
 }
