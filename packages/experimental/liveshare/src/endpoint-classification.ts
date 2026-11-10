@@ -162,6 +162,9 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'productAnalytics/watchPolicy': 'owner-only', // owner product analytics
   'pluginRegistryProbe/fastest': 'owner-only', // owner plugin registry probe
   'sessionReferenceResolver/candidates': 'owner-only', // owner composer reference resolution
+  'skillSources/describe': 'owner-only', // owner local skill inventory and source folders
+  'skillSources/setSource': 'owner-only', // owner switches one local source on or off
+  'skillSources/setSkill': 'owner-only', // owner switches one local skill on or off
   'officeToPdf/generation': 'owner-only', // owner document export
   'officeToPdf/render': 'owner-only', // owner document export
   'speech/cancelPreparation': 'owner-only', // owner voice input
