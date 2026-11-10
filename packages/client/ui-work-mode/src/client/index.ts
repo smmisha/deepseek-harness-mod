@@ -75,6 +75,7 @@ export function apply(ctx: ClientContext, config: Config = Config({})): void {
       unsubscribe()
       // Unloading the plugin must not strand the frame in the chat chrome.
       ctx.layout.setChrome('full')
+      ctx.layout.setFrameCovered(false)
     }
   }, 'ui-work-mode: frame chrome')
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({

@@ -9,8 +9,10 @@ function bench() {
   const ctx = new Context()
   const slots = new SlotRegistry(ctx)
   const setChrome = vi.fn()
+  const setFrameCovered = vi.fn()
   ctx.provide('layout', {
     setChrome,
+    setFrameCovered,
     selectPanel: vi.fn(),
     panelInfo: { getSnapshot: () => ({ activePanelId: null }), subscribe: () => () => {} },
   })
@@ -20,7 +22,7 @@ function bench() {
     children: { 'shell.overlay': { kind: 'list', scope: 'root' } },
   } as never, () => null)
   const fiber = ctx.plugin({ inject: [...inject] as string[], apply })
-  return { ctx, slots, setChrome, fiber }
+  return { ctx, slots, setChrome, setFrameCovered, fiber }
 }
 
 describe('ui-work-mode browser half', () => {
@@ -37,11 +39,12 @@ describe('ui-work-mode browser half', () => {
   })
 
   it('removes the surface and restores the shell with the plugin fiber', async () => {
-    const { slots, setChrome, fiber } = bench()
+    const { slots, setChrome, setFrameCovered, fiber } = bench()
     await fiber.await()
     expect(setChrome).toHaveBeenLastCalledWith('full')
     await fiber.dispose()
     expect(slots.entries('shell.overlay')).toHaveLength(0)
     expect(setChrome).toHaveBeenLastCalledWith('full')
+    expect(setFrameCovered).toHaveBeenLastCalledWith(false)
   })
 })

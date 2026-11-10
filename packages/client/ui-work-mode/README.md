@@ -26,7 +26,7 @@ The window's top strip carries a two-segment switch between Chat and Harness. Ch
 
 <a id="use-this-package"></a>
 
-Chat is the only mode that hides chrome: the plugin calls `ctx.layout.setChrome('minimal')`, the frame renders the centre column alone, and the layer covers that column with the guest. Harness calls `setChrome('full')` and the previous sidebar, panels, and selected panel come back untouched. The plugin stores the selection in the persisted `dsh.work-mode.v1` store; first launch starts in Harness.
+Chat is the only mode that hides chrome: the plugin calls `ctx.layout.setChrome('minimal')`, the frame hides the occupied columns while keeping them mounted, and the same mapping marks the frame covered so those columns leave the interaction order; the layer covers the frame with the guest. Harness calls `setChrome('full')` and the previous sidebar, panels, and selected panel come back untouched. The plugin stores the selection in the persisted `dsh.work-mode.v1` store; first launch starts in Harness.
 
 The guest is attached once and never moved or unmounted while the plugin lives: switching to Harness hides the layer with `opacity` and `inert` (not `display: none`, which detaches the guest and reloads it), so an open chat, its scroll position, a typed draft, and a running answer survive the switch. The Desktop shell keeps the guest's renderer unthrottled while it is hidden for the same reason. The site loads on the first Chat visit, not at application start.
 
