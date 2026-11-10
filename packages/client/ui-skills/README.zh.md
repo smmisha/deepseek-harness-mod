@@ -44,7 +44,7 @@ kind: "package-reference"
 
 <a id="understand-the-implementation"></a>
 
-该标签是一个 `plugins.tab` 贡献；它从 `dsh-skill-filesystem` 发布的 `skillSources` Remote 命名空间读取清单，那里为每个扫描来源和每个发现技能各报告一行，包括仅因同名被覆盖、或 frontmatter 无法解析的技能。写入不经过该命名空间：Host 把开关保存在 `skill-sources` 配置设置条目中，所有提供者实例共用，并在每次写入后使目录缓存失效。
+该标签是一个 `plugins.tab` 贡献；它从 `dsh-skill-filesystem` 发布的 `skillSources` Remote 命名空间读取清单，那里为每个扫描来源和每个发现技能各报告一行，包括仅因同名被覆盖、或 frontmatter 无法解析的技能。写入经过同一命名空间：`setSource` 与 `setSkill` 把开关保存进 `skill-sources` 配置条目，然后使所有已挂载的提供者失效，因此下一个模型步骤会发布替换目录。
 
 搜索、展开和分页是展示状态，保存在组件内；每次写入后重新获取清单。
 
@@ -70,7 +70,6 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 标签不解析*当前*会话的项目根：清单向 Host 请求时不带工作目录，因此项目的 `.dsh/skills` 与 `.agents/skills` 只有在 Host 的查找经由其他路径到达时才出现。
 - 该标签从不读取技能正文；描述来自 frontmatter，只改正文不会改变该行。
 - 写入是无条件的（没有修订栅栏）：两个同时的切换会互相覆盖。
 - 行未虚拟化；包含数百个技能的来源按每页五十条分页。

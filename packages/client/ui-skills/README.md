@@ -44,7 +44,7 @@ Switching a source or a skill calls the Host `skillSources` Remote, which update
 
 <a id="understand-the-implementation"></a>
 
-The tab is a `plugins.tab` contribution; it reads its inventory from the `skillSources` Remote namespace published by `dsh-skill-filesystem`, which reports one row per scanned source and one row per discovered skill, including skills that only lost a duplicate name or whose frontmatter did not parse. Writes do not go through that namespace: they update the Host entry's volatile `sources` and `skills` fields, and the Host provider invalidates its cache on the Loader's volatile-update event.
+The tab is a `plugins.tab` contribution; it reads its inventory from the `skillSources` Remote namespace published by `dsh-skill-filesystem`, which reports one row per scanned source and one row per discovered skill, including skills that only lost a duplicate name or whose frontmatter did not parse. Writes go through the same namespace: `setSource` and `setSkill` persist into the `skill-sources` profile entry and then invalidate every mounted provider, so the next model step publishes a replacement catalog.
 
 Search, expansion, and pagination are presentation state and live in the component; the inventory is refetched after each write.
 
@@ -68,7 +68,6 @@ Appending the replacement catalog keeps the earlier prefix; the changed entries 
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- The project roots of the *active* session are not resolved by the tab: the inventory asks the Host without a working directory, so project `.dsh/skills` and `.agents/skills` appear only when the Host's lookup reaches them through another path.
 - A skill body is never read by this tab; descriptions come from frontmatter, and a body-only edit does not change the row.
 - The write is unconditional (no revision fence): two simultaneous toggles overwrite each other.
 - Rows are not virtualized; a source with hundreds of skills pages by fifty entries instead.
