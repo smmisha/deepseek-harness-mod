@@ -15,6 +15,7 @@
   "showMore": "Afficher plus ({count} restantes)",
   "loading": "Chargement des compétences…",
   "failed": "Impossible de lire les compétences : {error}",
+  "writeFailed": "Impossible d'enregistrer l'interrupteur : {error}",
   "pathTooltip": "Chemin complet : {path}",
   "sourceProjectDsh": "Projet .dsh/skills",
   "sourceProjectAgents": "Projet .agents/skills",

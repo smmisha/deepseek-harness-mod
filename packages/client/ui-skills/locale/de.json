@@ -15,6 +15,7 @@
   "showMore": "Mehr anzeigen ({count} übrig)",
   "loading": "Skills werden geladen…",
   "failed": "Skills konnten nicht gelesen werden: {error}",
+  "writeFailed": "Schalter konnte nicht gespeichert werden: {error}",
   "pathTooltip": "Vollständiger Pfad: {path}",
   "sourceProjectDsh": "Projekt .dsh/skills",
   "sourceProjectAgents": "Projekt .agents/skills",

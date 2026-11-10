@@ -15,6 +15,7 @@
   "showMore": "Показать ещё ({count})",
   "loading": "Загрузка скиллов…",
   "failed": "Не удалось прочитать скиллы: {error}",
+  "writeFailed": "Не удалось сохранить переключатель: {error}",
   "pathTooltip": "Полный путь: {path}",
   "sourceProjectDsh": "Проект: .dsh/skills",
   "sourceProjectAgents": "Проект: .agents/skills",

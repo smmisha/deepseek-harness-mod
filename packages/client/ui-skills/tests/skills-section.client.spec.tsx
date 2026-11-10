@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** Skills tab: source rows, switches, statuses, search, and pagination. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import { SkillsSection, type SkillsSectionProps } from '../src/client/SkillsSection.tsx'
 import { en, type SkillsLocaleKey } from '../src/client/locales.ts'
@@ -71,6 +71,11 @@ function props(overrides: FaceStub = {}): SkillsSectionProps {
   } as SkillsSectionProps
 }
 
+/** Sessions state whose single retained main-view Session lives in `cwd`. */
+function sessionsAt(cwd: string): NonNullable<SkillsSectionProps['useSessions']> {
+  return selector => selector({ byId: { current: { retainedBy: { mainView: 1 }, cwd } } })
+}
+
 describe('SkillsSection', () => {
   it('lists sources with kind, shortened path, counts, and the missing-folder state', async () => {
     render(<SkillsSection {...props()} />)
@@ -126,6 +131,40 @@ describe('SkillsSection', () => {
     await screen.findByText('Could not read skills: host is gone')
   })
 
+  it('drops a load that lands after the working directory changed', async () => {
+    const pending: ((value: readonly LocalSourceView[]) => void)[] = []
+    const load = vi.fn(() => new Promise<readonly LocalSourceView[]>((resolve) => { pending.push(resolve) }))
+    const view = render(<SkillsSection {...props({ load })} useSessions={sessionsAt('C:\\old')} />)
+    await waitFor(() => { expect(pending).toHaveLength(1) })
+    view.rerender(<SkillsSection {...props({ load })} useSessions={sessionsAt('C:\\new')} />)
+    await waitFor(() => { expect(pending).toHaveLength(2) })
+    const [oldLoad, newLoad] = pending
+    if (oldLoad === undefined || newLoad === undefined) throw new Error('expected two loads')
+    await act(async () => {
+      newLoad(SOURCES)
+      oldLoad([])
+    })
+    await screen.findByText('Claude Code')
+    expect(load).toHaveBeenLastCalledWith('C:\\new')
+  })
+
+  it('ignores a rejection that lands after the working directory changed', async () => {
+    const pending: { resolve: (value: readonly LocalSourceView[]) => void; reject: (error: unknown) => void }[] = []
+    const load = vi.fn(() => new Promise<readonly LocalSourceView[]>((resolve, reject) => { pending.push({ resolve, reject }) }))
+    const view = render(<SkillsSection {...props({ load })} useSessions={sessionsAt('C:\\old')} />)
+    await waitFor(() => { expect(pending).toHaveLength(1) })
+    view.rerender(<SkillsSection {...props({ load })} useSessions={sessionsAt('C:\\new')} />)
+    await waitFor(() => { expect(pending).toHaveLength(2) })
+    const [oldLoad, newLoad] = pending
+    if (oldLoad === undefined || newLoad === undefined) throw new Error('expected two loads')
+    await act(async () => {
+      newLoad.resolve(SOURCES)
+      oldLoad.reject(new Error('old failure'))
+    })
+    await screen.findByText('Claude Code')
+    expect(screen.queryByText('Could not read skills: old failure')).toBeNull()
+  })
+
   it('ignores sessions without a main-view retainer', async () => {
     const load = vi.fn(async () => SOURCES)
     render(<SkillsSection {...props({ load })} useSessions={selector => selector({
@@ -178,7 +217,7 @@ describe('SkillsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Additional folders' }))
     expect(screen.getByText('This source has no skills')).toBeTruthy()
     fireEvent.click(screen.getByRole('switch', { name: 'Enable source Additional folders' }))
-    await screen.findByText('Could not read skills: write refused')
+    await screen.findByText('Could not save the switch: write refused')
     fireEvent.click(screen.getByRole('button', { name: '~/.agents folders' }))
     expect(screen.getByText('Overridden by unknown-source')).toBeTruthy()
     expect(screen.getByText('~\\.agents\\skills\\plain\\SKILL.md')).toBeTruthy()

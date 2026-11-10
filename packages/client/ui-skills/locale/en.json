@@ -15,6 +15,7 @@
   "showMore": "Show more ({count} left)",
   "loading": "Loading skills…",
   "failed": "Could not read skills: {error}",
+  "writeFailed": "Could not save the switch: {error}",
   "pathTooltip": "Full path: {path}",
   "sourceProjectDsh": "Project .dsh/skills",
   "sourceProjectAgents": "Project .agents/skills",

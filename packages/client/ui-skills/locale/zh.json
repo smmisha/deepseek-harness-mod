@@ -15,6 +15,7 @@
   "showMore": "显示更多（还有 {count}）",
   "loading": "正在读取技能…",
   "failed": "无法读取技能：{error}",
+  "writeFailed": "无法保存开关：{error}",
   "pathTooltip": "完整路径：{path}",
   "sourceProjectDsh": "项目 .dsh/skills",
   "sourceProjectAgents": "项目 .agents/skills",

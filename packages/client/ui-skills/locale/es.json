@@ -15,6 +15,7 @@
   "showMore": "Mostrar más (quedan {count})",
   "loading": "Cargando habilidades…",
   "failed": "No se pudieron leer las habilidades: {error}",
+  "writeFailed": "No se pudo guardar el interruptor: {error}",
   "pathTooltip": "Ruta completa: {path}",
   "sourceProjectDsh": "Proyecto .dsh/skills",
   "sourceProjectAgents": "Proyecto .agents/skills",

@@ -15,6 +15,7 @@
   "showMore": "Mostrar mais ({count} restantes)",
   "loading": "Carregando habilidades…",
   "failed": "Não foi possível ler as habilidades: {error}",
+  "writeFailed": "Não foi possível salvar a chave: {error}",
   "pathTooltip": "Caminho completo: {path}",
   "sourceProjectDsh": "Projeto .dsh/skills",
   "sourceProjectAgents": "Projeto .agents/skills",

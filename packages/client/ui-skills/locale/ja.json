@@ -15,6 +15,7 @@
   "showMore": "さらに表示（残り {count}）",
   "loading": "スキルを読み込み中…",
   "failed": "スキルを読み込めませんでした: {error}",
+  "writeFailed": "スイッチを保存できませんでした: {error}",
   "pathTooltip": "完全なパス: {path}",
   "sourceProjectDsh": "プロジェクト .dsh/skills",
   "sourceProjectAgents": "プロジェクト .agents/skills",

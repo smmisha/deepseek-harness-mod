@@ -58,6 +58,7 @@ const SOURCE_TITLES: Readonly<Record<string, SkillsLocaleKey>> = {
 export function SkillsSection({ t, useSessions, load, setSource, setSkill }: SkillsSectionProps): ReactNode {
   const [sources, setSources] = useState<readonly LocalSourceView[] | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const [writeFailure, setWriteFailure] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<readonly string[]>([])
   const [expanded, setExpanded] = useState<readonly string[]>([])
@@ -74,14 +75,34 @@ export function SkillsSection({ t, useSessions, load, setSource, setSkill }: Ski
     }
   }
 
-  useEffect(() => { void refresh() }, [cwd])
+  // A response for a previous working directory must never replace the current
+  // one: the cleanup marks the in-flight load stale and it drops its result.
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const next = await load(cwd)
+        if (!active) return
+        setSources(next)
+        setFailure(null)
+      } catch (error) {
+        if (!active) return
+        setFailure(error instanceof Error ? error.message : String(error))
+      }
+    })()
+    return () => { active = false }
+  }, [cwd])
 
   const withBusy = async (key: string, write: () => Promise<string | undefined>): Promise<void> => {
     setBusy(previous => [...previous, key])
     try {
       const error = await write()
-      if (error !== undefined) setFailure(error)
-      else await refresh()
+      if (error !== undefined) {
+        setWriteFailure(error)
+        return
+      }
+      setWriteFailure(null)
+      await refresh()
     } finally {
       setBusy(previous => previous.filter(entry => entry !== key))
     }
@@ -121,6 +142,7 @@ export function SkillsSection({ t, useSessions, load, setSource, setSkill }: Ski
         />
       </div>
       {failure !== null && <p className={css.error} role="alert">{t('failed', { error: failure })}</p>}
+      {writeFailure !== null && <p className={css.error} role="alert">{t('writeFailed', { error: writeFailure })}</p>}
       {rows.length === 0 && <p className={css.message}>{t('noMatches')}</p>}
       <ul className={css.sources}>
         {rows.map(({ source, skills }) => {
