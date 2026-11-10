@@ -33,6 +33,11 @@ type LayoutInfo = {
    */
   chrome: ChromeMode
   /**
+   * Whether a feature's surface covers the frame. Covered columns keep their
+   * occupants mounted but leave painting and the interaction order.
+   */
+  covered: boolean
+  /**
    * Height of a frame-wide strip a feature reserves above every column, or
    * null when the platform's own caption band already covers it.
    */
@@ -73,6 +78,7 @@ type LayoutActions = {
   toggleSidebar: (draft: LayoutState) => void
   setViewportWidth: (draft: LayoutState, width: number) => void
   setChrome: (draft: LayoutState, mode: ChromeMode) => void
+  setFrameCovered: (draft: LayoutState, covered: boolean) => void
   setTopBand: (draft: LayoutState, px: number | null) => void
   setRightbar: (draft: LayoutState, px: number) => void
   openRightbar: (draft: LayoutState, track: boolean, fullscreen: boolean) => void
@@ -97,6 +103,7 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         viewportWidth: window.innerWidth,
         narrowExpanded: false,
         chrome: 'full',
+        covered: false,
         topBand: null,
         rightbar: null,
         rightbarShown: false,
@@ -139,6 +146,9 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       },
       setChrome: (d, mode: ChromeMode) => {
         d.layoutInfo.chrome = mode
+      },
+      setFrameCovered: (d, covered: boolean) => {
+        d.layoutInfo.covered = covered
       },
       setTopBand: (d, px: number | null) => {
         d.layoutInfo.topBand = px

@@ -44,7 +44,9 @@ async function bench(collapsed = false, track?: TrackProductEvent) {
   const layout = {
     panelInfo: runtime.panelInfo,
     chrome: createSnapshotStore<ChromeMode>('full'),
+    frameCovered: createSnapshotStore(false),
     setChrome: vi.fn(),
+    setFrameCovered: vi.fn(),
     setTopBand: vi.fn(),
     beginNavigation: vi.fn(() => new AbortController().signal),
     toggleSidebar: vi.fn(),

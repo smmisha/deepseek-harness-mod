@@ -797,21 +797,35 @@ describe('sidebar drawer', () => {
     expect(tracks(frame)).toEqual([0, 0])
   })
 
-  it('renders the centre column alone in minimal chrome and restores the shell after', () => {
-    const { frame, instance, slotCalls, rerenderFrame } = mountFrame()
-    const mounted = slotCalls.length
+  it('keeps the occupied columns mounted but hidden in minimal chrome', () => {
+    const { frame, instance, rerenderFrame } = mountFrame()
+    const sidebarBefore = frame.querySelector('[data-testid="sidebar-content"]')
+    const rightbarBefore = frame.querySelector('[data-testid="rightbar-content"]')
+    expect(sidebarBefore).not.toBeNull()
+    expect(rightbarBefore).not.toBeNull()
     act(() => { instance.actions.setChrome('minimal') })
     rerenderFrame()
     expect(tracks(frame)).toEqual([0, 0])
-    // Neither the navigation column nor the right panel is drawn while focused.
-    const focused = slotCalls.slice(mounted)
-    expect(focused.some(call => call.key === 'sidebar')).toBe(false)
-    expect(focused.some(call => call.key === 'rightbar')).toBe(false)
-    expect(frame.querySelector('[data-side="sidebar"]')).toBeNull()
-    const beforeRestore = slotCalls.length
+    // Occupants survive the round trip: a Browser page and an Inspector keep their state.
+    expect(frame.querySelector('[data-testid="sidebar-content"]')).toBe(sidebarBefore)
+    expect(frame.querySelector('[data-testid="rightbar-content"]')).toBe(rightbarBefore)
+    expect(frame.querySelectorAll('[data-frame-hidden]')).toHaveLength(3)
     act(() => { instance.actions.setChrome('full') })
     rerenderFrame()
     expect(tracks(frame)).toEqual([280, 0])
-    expect(slotCalls.slice(beforeRestore).some(call => call.key === 'sidebar')).toBe(true)
+    expect(frame.querySelectorAll('[data-frame-hidden]')).toHaveLength(0)
+    expect(frame.querySelector('[data-testid="sidebar-content"]')).toBe(sidebarBefore)
+  })
+
+  it('takes the centre column out of the interaction order while a surface covers it', () => {
+    const { frame, instance, rerenderFrame } = mountFrame()
+    const main = frame.querySelector('[data-testid="main-content"]')
+    expect(main?.closest('[inert]')).toBeNull()
+    act(() => { instance.actions.setFrameCovered(true) })
+    rerenderFrame()
+    expect(main?.closest('[inert]')).not.toBeNull()
+    act(() => { instance.actions.setFrameCovered(false) })
+    rerenderFrame()
+    expect(main?.closest('[inert]')).toBeNull()
   })
 })

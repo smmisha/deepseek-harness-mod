@@ -55,8 +55,13 @@ function MainPanel({ usePanelInfo, renderSlot }: Pick<PropsRuntime<'root'>, 'use
  * occupant's panel is positioned against the column's right edge, which never
  * moves, so it can hang over the centre when there is no track.
  */
-function RightbarColumn(props: { children?: ReactNode; inert: boolean }) {
-  return <div className={css.rightbarCol} data-rightbar-col {...{ inert: props.inert ? '' : undefined }}>{props.children}</div>
+function RightbarColumn(props: { children?: ReactNode; inert: boolean; hidden: boolean }) {
+  return (
+    <div className={css.rightbarCol} data-rightbar-col data-frame-hidden={props.hidden || undefined}
+      {...{ inert: props.inert ? '' : undefined }}>
+      {props.children}
+    </div>
+  )
 }
 
 /**
@@ -142,6 +147,9 @@ export function AppFrame({
   // A feature's focused mode owns the frame: the centre column alone, with every
   // width and panel preference kept for the return to full chrome.
   const minimal = layoutInfo.chrome === 'minimal'
+  // A covering feature owns the interaction order: the columns stay mounted but
+  // leave painting and focus until the surface closes.
+  const covered = layoutInfo.covered
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useLayoutEffect(() => {
@@ -197,6 +205,12 @@ export function AppFrame({
   const cols = computeColumns(
     viewport, drawer ? 0 : sidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0, collapsedWidth, centeredSidebar,
   )
+  // A hidden occupant keeps the geometry it would have in full chrome, so the
+  // right panel stays eligible and returns at the width the reader left.
+  const hiddenNormal = minimal
+    ? computeColumns(viewport, layoutInfo.sidebar,
+      layoutInfo.rightbar ?? Math.round(viewport * RIGHTBAR_DEFAULT_RATIO), SIDEBAR_COLLAPSED, centeredSidebar)
+    : normal
   const colsRef = useRef(cols)
   colsRef.current = cols
   const rightbarWidth = useRef(normal.rightbar)
@@ -273,11 +287,13 @@ export function AppFrame({
   const sidebarWidth = drawer
     ? Math.min(layoutInfo.sidebar || SIDEBAR_DEFAULT, Math.max(0, viewport - 48))
     : cols.sidebar
-  const sidebar = useMemo(() => (minimal ? null : renderSlot('sidebar', {
+  // Minimal chrome hides the occupied columns instead of unmounting them, so a
+  // Browser page and an open Inspector keep their state across the round trip.
+  const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
     width: sidebarWidth,
     drawer,
-  })), [renderSlot, minimal, sidebarCollapsed, sidebarWidth, drawer])
+  }), [renderSlot, sidebarCollapsed, sidebarWidth, drawer])
   const main = useMemo(() => (
     <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
   ), [usePanelInfo, renderSlot])
@@ -317,22 +333,21 @@ export function AppFrame({
         onClick={drawerOpen ? () => { actions.toggleSidebar() } : undefined} />}
       <div className={css.sidebarCol}
         style={drawer ? { width: sidebarWidth } : undefined}
-        {...{ inert: drawer && sidebarCollapsed ? '' : undefined }}>
+        data-frame-hidden={minimal || undefined}
+        {...{ inert: minimal || (drawer && sidebarCollapsed) ? '' : undefined }}>
         {sidebar}
       </div>
       <>
-        <CenterColumn inert={drawerOpen}>{main}</CenterColumn>
-        {!minimal && (
-          <RightbarColumn inert={drawerOpen}>
-            {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
-          </RightbarColumn>
-        )}
+        <CenterColumn inert={drawerOpen || covered}>{main}</CenterColumn>
+        <RightbarColumn inert={minimal || drawerOpen} hidden={minimal}>
+          {renderSlot('rightbar', { width: hiddenNormal.rightbar, viewportWidth: viewport, canShow: hiddenNormal.rightbar > 0 })}
+        </RightbarColumn>
       </>
-      {!minimal && (
-        <div className={css.bottomRow} data-shell-bottom {...{ inert: drawerOpen ? '' : undefined }}>
-          {renderSlot('shell.bottom', {})}
-        </div>
-      )}
+      <div className={css.bottomRow} data-shell-bottom
+        data-frame-hidden={minimal || undefined}
+        {...{ inert: minimal || drawerOpen ? '' : undefined }}>
+        {renderSlot('shell.bottom', {})}
+      </div>
       <div className={css.overlayLayer} data-shell-overlay>
         {overlays}
       </div>

@@ -82,6 +82,9 @@ async function bench() {
   }, {
     getSnapshot: () => layoutStore.getSnapshot().layoutInfo.chrome,
     subscribe: listener => layoutStore.subscribe(listener),
+  }, {
+    getSnapshot: () => layoutStore.getSnapshot().layoutInfo.covered,
+    subscribe: listener => layoutStore.subscribe(listener),
   })
   const notify = vi.fn()
   const menus = new MenuRegistry(notify)

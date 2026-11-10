@@ -398,3 +398,12 @@
 .overlayLayer > * {
   pointer-events: auto;
 }
+
+/* Minimal chrome keeps the occupants mounted so their state survives, while the
+   covering surface hides them and takes them out of the interaction order. */
+.sidebarCol[data-frame-hidden],
+.rightbarCol[data-frame-hidden],
+.bottomRow[data-frame-hidden] {
+  visibility: hidden;
+  pointer-events: none;
+}

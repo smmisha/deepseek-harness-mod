@@ -189,8 +189,12 @@ export function apply(ctx: ClientContext): void {
       getSnapshot: () => instance.getSnapshot().layoutInfo.chrome,
       subscribe: listener => instance.subscribe(listener),
     }
+    const frameCovered: HostObservable<boolean> = {
+      getSnapshot: () => instance.getSnapshot().layoutInfo.covered,
+      subscribe: listener => instance.subscribe(listener),
+    }
     const layout = new LayoutController(instance.actions, id =>
-      ctx.slots.entries('main').some(entry => entry.options.key === id), panelInfo, chrome)
+      ctx.slots.entries('main').some(entry => entry.options.key === id), panelInfo, chrome, frameCovered)
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: layout.panelInfo } })
     const disposeService = ctx.reflect.provide('layout', layout)
     const disposeRegistration = ctx.slots.register({

@@ -17,6 +17,7 @@ describe('createLayoutStore', () => {
         viewportWidth: 1920,
         narrowExpanded: false,
         chrome: 'full',
+        covered: false,
         topBand: null,
         rightbar: null,
         rightbarShown: false,
