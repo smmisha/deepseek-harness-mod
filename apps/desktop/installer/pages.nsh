@@ -32,6 +32,34 @@ Var InstallerCloseButton
     System::Call 'user32::MoveWindow(p ${HWND}, i r0, i r1, i r2, i r3, i 1)'
 !macroend
 
+; Centers a native button and widens it to fit its text, measured with the font that the owner-draw paint uses.
+!macro InstallerFitButton HWND FONT MINWIDTH Y HEIGHT
+    ${NSD_GetText} ${HWND} $R3
+    StrLen $R4 $R3
+    System::Call 'user32::GetDC(p ${HWND}) p.R5'
+    System::Call 'gdi32::SelectObject(p R5, p ${FONT}) p.R6'
+    System::Alloc 8
+    Pop $R7
+    System::Call 'gdi32::GetTextExtentPoint32W(p R5, w R3, i R4, p R7)'
+    System::Call '*$R7(i .R8)'
+    System::Free $R7
+    System::Call 'gdi32::SelectObject(p R5, p R6)'
+    System::Call 'user32::ReleaseDC(p ${HWND}, p R5)'
+    System::Call 'kernel32::MulDiv(i ${INSTALLER_BUTTON_TEXT_PADDING}, i $InstallerDpi, i 96) i.R9'
+    IntOp $R8 $R8 + $R9
+    IntOp $R8 $R8 + $R9
+    System::Call 'kernel32::MulDiv(i ${MINWIDTH}, i $InstallerDpi, i 96) i.R9'
+    ${If} $R8 < $R9
+        StrCpy $R8 $R9
+    ${EndIf}
+    System::Call 'kernel32::MulDiv(i ${INSTALLER_WINDOW_SIZE}, i $InstallerDpi, i 96) i.R9'
+    IntOp $R9 $R9 - $R8
+    IntOp $R9 $R9 / 2
+    System::Call 'kernel32::MulDiv(i ${Y}, i $InstallerDpi, i 96) i.R7'
+    System::Call 'kernel32::MulDiv(i ${HEIGHT}, i $InstallerDpi, i 96) i.R6'
+    System::Call 'user32::MoveWindow(p ${HWND}, i R9, i R7, i R8, i R6, i 1)'
+!macroend
+
 Function InstallerCreate
     nsDialogs::Create 1018
     Pop $InstallerDialog
@@ -88,13 +116,14 @@ Function InstallerCreate
     ${NSD_CreateLabel} 0 0 0 0 ""
     Pop $InstallerStatus
     !insertmacro InstallerPlace $InstallerStatus 48 ${INSTALLER_STATUS_Y} 504 ${INSTALLER_STATUS_HEIGHT}
-    ${NSD_AddStyle} $InstallerStatus ${SS_CENTER}|${SS_CENTERIMAGE}
+    ; Without SS_CENTERIMAGE the static control wraps long path messages instead of clipping them.
+    ${NSD_AddStyle} $InstallerStatus ${SS_CENTER}
     SendMessage $InstallerStatus ${WM_SETFONT} $InstallerSmallFont 1
     !insertmacro InstallerControlColors $InstallerStatus
 
     ${NSD_CreateButton} 0 0 0 0 "$(INSTALLER_CHOOSE_PATH)"
     Pop $InstallerChoose
-    !insertmacro InstallerPlace $InstallerChoose 232 438 136 28
+    !insertmacro InstallerFitButton $InstallerChoose $InstallerSmallFont ${INSTALLER_CHOOSE_WIDTH} ${INSTALLER_CHOOSE_Y} ${INSTALLER_CHOOSE_HEIGHT}
     ${NSD_OnClick} $InstallerChoose InstallerExpandPath
     ${NSD_OnNotify} $InstallerChoose InstallerPaintButton
     ${NSD_CreateBitmap} 0 0 0 0 ""
@@ -163,7 +192,7 @@ Function InstallerCreate
 
     ${NSD_CreateButton} 0 0 0 0 "$(INSTALLER_INSTALL)"
     Pop $InstallerButton
-    !insertmacro InstallerPlace $InstallerButton ${INSTALLER_BUTTON_X} ${INSTALLER_BUTTON_Y} ${INSTALLER_BUTTON_WIDTH} ${INSTALLER_BUTTON_HEIGHT}
+    !insertmacro InstallerFitButton $InstallerButton $InstallerFont ${INSTALLER_BUTTON_WIDTH} ${INSTALLER_BUTTON_Y} ${INSTALLER_BUTTON_HEIGHT}
     SendMessage $InstallerButton ${WM_SETFONT} $InstallerFont 1
     ${NSD_OnClick} $InstallerButton InstallerStart
     ${NSD_OnNotify} $InstallerButton InstallerPaintButton
@@ -203,6 +232,7 @@ Function InstallerRender
             ShowWindow $InstallerChoose 5
         ${EndIf}
     ${EndIf}
+    !insertmacro InstallerFitButton $InstallerButton $InstallerFont ${INSTALLER_BUTTON_WIDTH} ${INSTALLER_BUTTON_Y} ${INSTALLER_BUTTON_HEIGHT}
 FunctionEnd
 
 Function InstallerStart
@@ -269,7 +299,7 @@ Function InstallerValidateEditedPath
     ${NSD_GetText} $InstallerEdit $InstallerPath
     Call InstallerValidatePath
     ${NSD_SetText} $InstallerStatus "$InstallerError"
-    !insertmacro InstallerPlace $InstallerStatus 48 542 504 42
+    !insertmacro InstallerPlace $InstallerStatus 48 ${INSTALLER_ERROR_Y} 504 ${INSTALLER_ERROR_HEIGHT}
     ShowWindow $InstallerStatus 5
 FunctionEnd
 
