@@ -25,7 +25,7 @@ const PRESETS = join(BUNDLE_ROOT, 'web-app', 'presets')
 
 /** Loader rows of one patch file, flattened out of its insert lists. */
 function rows(file: string): Record<string, unknown>[] {
-  const document = parse(readFileSync(file, 'utf8')) as unknown
+  const document: unknown = parse(readFileSync(file, 'utf8'))
   const result: Record<string, unknown>[] = []
   const walk = (value: unknown): void => {
     if (Array.isArray(value)) { for (const entry of value) walk(entry); return }

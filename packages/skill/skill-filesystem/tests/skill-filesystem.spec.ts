@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { FileSystem, FsError, FsVersion, type FsDirEntry, type FsEditOutcome, type FsEditRequest, type FsInfo, type FsPathInfo, type FsTarget, type FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import * as SkillFileSystem from '../src/index.ts'
-import SkillSources from '@deepseek-ai/dsh-skill-sources'
+import SkillSources, { type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
 
 /** Every temp dir created by this file, removed after each test. */
 const tempDirs: string[] = []
@@ -324,6 +324,79 @@ describe('FileSystemSkillProvider', () => {
     const views = await describeSources(ctx, outside)
     expect(views.find(view => view.id === 'project-dsh')?.displayPath.startsWith('.')).toBe(true)
     expect(views.find(view => view.id === 'custom')?.displayPath).toBe('~')
+  })
+
+  it('marks an overridden application skill by rank without a registry catalog', async () => {
+    const home = await tempDir('shadow-rank')
+    const project = await tempDir('shadow-rank-project')
+    const claude = join(home, '.claude', 'skills')
+    const codex = join(home, '.codex', 'skills')
+    await writeSkill(claude, 'dup-skill', 'Claude copy')
+    await writeSkill(claude, 'unique-skill', 'Only in Claude')
+    await writeSkill(codex, 'dup-skill', 'Codex copy')
+    const fakeSources: SkillSourcesService = {
+      read: () => ({
+        sources: { 'claude-code': { enabled: true }, codex: { enabled: true } },
+        skills: {},
+      }),
+      applications: () => [
+        { id: 'claude-code', dir: claude, title: 'Claude Code' },
+        { id: 'codex', dir: codex, title: 'Codex' },
+      ],
+      setSource: async () => undefined,
+      setSkill: async () => undefined,
+      register: () => () => {},
+    }
+    const ctx = new Context()
+    ctx.provide('skillSources', fakeSources)
+    const provider = new SkillFileSystem.FileSystemSkillProvider(ctx, {
+      invalidate: () => {},
+      signal: new AbortController().signal,
+    }, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    const views = await provider.describeSources({ cwd: project, winners: new Map() })
+    const codexRow = views.find(view => view.id === 'codex')?.skills.find(skill => skill.name === 'dup-skill')
+    const claudeRow = views.find(view => view.id === 'claude-code')?.skills.find(skill => skill.name === 'dup-skill')
+    expect(codexRow?.shadowedBy).toBe('claude-code')
+    expect(claudeRow?.shadowedBy).toBeUndefined()
+    const withRegistry = await provider.describeSources({
+      cwd: project,
+      winners: new Map([['dup-skill', 'runtime'], ['unique-skill', 'runtime']]),
+    })
+    const claudeDup = withRegistry.find(view => view.id === 'claude-code')?.skills.find(skill => skill.name === 'dup-skill')
+    const codexDup = withRegistry.find(view => view.id === 'codex')?.skills.find(skill => skill.name === 'dup-skill')
+    expect(claudeDup?.shadowedBy).toBe('runtime')
+    expect(codexDup?.shadowedBy).toBe('claude-code')
+  })
+
+  it('shortens home and project roots and keeps other absolute roots', async () => {
+    const homeChild = await mkdtemp(join(homedir(), 'dsh-home-'))
+    tempDirs.push(homeChild)
+    await writeSkill(homeChild, 'home-skill', 'Under home')
+    const outside = await mkdtemp(process.platform === 'win32' ? 'C:\\temp\\dsh-outside-' : join(tmpdir(), 'dsh-outside-'))
+    tempDirs.push(outside)
+    const outsideExtra = await mkdtemp(process.platform === 'win32' ? 'C:\\temp\\dsh-extra-' : join(tmpdir(), 'dsh-extra-'))
+    tempDirs.push(outsideExtra)
+    const extra = join(outsideExtra, 'extra')
+    await writeSkill(extra, 'outside-skill', 'Outside home')
+    const ctx = await setupLocal(outside, { customSkillDirs: [homeChild, extra] })
+    const views = await describeSources(ctx, outside)
+    expect(views.find(view => view.path === homeChild)?.displayPath.startsWith('~')).toBe(true)
+    expect(views.find(view => view.path === extra)?.displayPath).toBe(extra)
+    const sameCwd = await setupLocal(outside, { customSkillDirs: [outside] })
+    expect((await describeSources(sameCwd, outside)).find(view => view.path === outside)?.displayPath).toBe('.')
+  })
+
+  it('expands a leading tilde in a configured application folder', async () => {
+    const fixture = await mkdtemp(join(homedir(), 'dsh-app-'))
+    tempDirs.push(fixture)
+    await writeSkill(fixture, 'tilde-skill', 'Expanded home folder')
+    const ctx = await setupLocal(await tempDir('tilde-home'), {}, {
+      applications: [{ id: 'claude-code', dir: `~/${basename(fixture)}`, title: 'Claude Code' }],
+      sources: { 'claude-code': { enabled: true } },
+    })
+    const view = (await describeSources(ctx)).find(entry => entry.id === 'claude-code')
+    expect(view?.path).toBe(fixture)
+    expect(view?.exists).toBe(true)
   })
 
   it('discovers project, custom, user, and agents skill roots in priority order', async () => {

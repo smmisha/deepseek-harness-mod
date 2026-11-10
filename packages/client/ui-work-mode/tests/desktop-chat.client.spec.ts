@@ -2,7 +2,7 @@
 /** The Electron `<webview>` guest lifecycle, without React. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createChatGuest, type ChatGuestState } from '../src/client/desktop-chat.ts'
-import type { DesktopChatBridge, DesktopChatConfig } from '../src/types.ts'
+import type { DesktopChatBridge, DesktopChatConfig, DesktopChatLeaseId } from '../src/types.ts'
 
 /** A stand-in element that records events the way Electron's webview does. */
 function fakeElement() {
@@ -15,7 +15,7 @@ function fakeElement() {
   return element
 }
 
-const CONFIG = { url: 'https://chat.deepseek.com/' } as DesktopChatConfig
+const CONFIG: DesktopChatConfig = { url: 'https://chat.deepseek.com/', allowedOrigins: ['https://chat.deepseek.com'] }
 const restores: (() => void)[] = []
 
 /** Install a stand-in for the element the production code creates. */
@@ -27,7 +27,9 @@ function installFakeElement(element: HTMLElement): void {
     Object.defineProperty(document, 'createElement', { configurable: true, value: original })
   })
 }
-const BRIDGE = { acquire: vi.fn(async () => ({ lease: 'lease-1', partition: 'persist:chat' })) } as unknown as DesktopChatBridge
+const BRIDGE: DesktopChatBridge = {
+  acquire: async () => ({ lease: 'lease-1' as DesktopChatLeaseId, partition: 'persist:chat' }),
+}
 
 afterEach(() => {
   for (const restore of restores.splice(0)) restore()

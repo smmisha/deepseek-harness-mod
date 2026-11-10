@@ -246,9 +246,7 @@ function toDisplayPath(path: string, cwd: string | undefined): string {
     return rest === '' ? prefix : `${prefix}${sep}${rest.split(/[\\/]/u).join(sep)}`
   }
   if (contains(home)) return shorten(home, '~')
-  /* v8 ignore next 2 -- project folders under the home folder already shorten to '~' in these fixtures. */
   if (cwd !== undefined && cwd !== home && contains(cwd)) return shorten(cwd, '.')
-  /* v8 ignore next -- skill roots live under the home folder or the describing session's project. */
   return path.split(/[\\/]/u).join(sep)
 }
 
@@ -409,14 +407,10 @@ export class FileSystemSkillProvider implements SkillProvider {
       cache = { key, at: now, rows: new Map() }
       this.describeCache = cache
     }
-    const views: LocalSourceView[] = []
+    const entries: { root: SkillRoot; candidates: readonly DescribeCandidate[] }[] = []
     for (const root of roots) {
-      const kind = gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
-      const title = gate.applications.find(application => application.id === root.source)?.title ?? root.source
-      const enabled = sourceEnabled(gate.state, root.source, gate.applications)
-      const displayPath = toDisplayPath(root.path, options.cwd)
       if (root.missing === true) {
-        views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: false, enabled, skills: [] })
+        entries.push({ root, candidates: [] })
         continue
       }
       let candidates = cache.rows.get(root.path)
@@ -437,6 +431,33 @@ export class FileSystemSkillProvider implements SkillProvider {
         ]
         cache.rows.set(root.path, candidates)
       }
+      entries.push({ root, candidates })
+    }
+    // Duplicate winners are resolved across every described source by rank, so a
+    // preset-scoped provider still marks an override when the root catalog is empty.
+    const bestRank = new Map<string, number>()
+    const bestSource = new Map<string, string>()
+    for (const { root, candidates } of entries) {
+      if (root.missing === true) continue
+      for (const candidate of candidates) {
+        if ('error' in candidate) continue
+        const current = bestRank.get(candidate.name)
+        if (current === undefined || root.rank < current) {
+          bestRank.set(candidate.name, root.rank)
+          bestSource.set(candidate.name, root.source)
+        }
+      }
+    }
+    const views: LocalSourceView[] = []
+    for (const { root, candidates } of entries) {
+      const kind = gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
+      const title = gate.applications.find(application => application.id === root.source)?.title ?? root.source
+      const enabled = sourceEnabled(gate.state, root.source, gate.applications)
+      const displayPath = toDisplayPath(root.path, options.cwd)
+      if (root.missing === true) {
+        views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: false, enabled, skills: [] })
+        continue
+      }
       const skills: LocalSkillView[] = candidates.map((candidate) => {
         if ('error' in candidate) {
           return {
@@ -446,15 +467,18 @@ export class FileSystemSkillProvider implements SkillProvider {
             error: candidate.error,
           }
         }
-        const winner = options.winners.get(candidate.name)
-        const shadowed = winner !== undefined && winner !== root.source
+        const localWinner = bestSource.get(candidate.name)
+        const registryWinner = options.winners.get(candidate.name)
+        const winner = localWinner !== undefined && localWinner !== root.source
+          ? localWinner
+          : registryWinner !== undefined && registryWinner !== root.source ? registryWinner : undefined
         return {
           name: candidate.name,
           path: candidate.path,
           displayPath: candidate.displayPath,
           description: candidate.description,
           status: skillEnabled(gate.state, root.source, candidate.name, gate.applications) ? 'available' as const : 'disabled' as const,
-          ...(!shadowed ? {} : { shadowedBy: winner }),
+          ...(winner === undefined ? {} : { shadowedBy: winner }),
         }
       })
       skills.sort((left, right) => (left.name ?? left.path).localeCompare(right.name ?? right.path))
@@ -503,10 +527,11 @@ export class FileSystemSkillProvider implements SkillProvider {
     for (const [index, application] of this.gate().applications.entries()) {
       // A folder the other application never created is not a source at all,
       // except when the Skills tab asks to show a previously enabled one.
-      const exists = await pathExists(application.dir, optionalFileSystem(this.ctx))
+      const resolvedDir = resolveApplicationDir(application.dir)
+      const exists = await pathExists(resolvedDir, optionalFileSystem(this.ctx))
       if (!exists && !includeMissingApplications) continue
       roots.push({
-        path: resolveApplicationDir(application.dir),
+        path: resolvedDir,
         source: application.id,
         rank: APPLICATION_RANK + index * 10,
         skipSystem: true,
@@ -521,7 +546,6 @@ export class FileSystemSkillProvider implements SkillProvider {
 function resolveApplicationDir(dir: string): string {
   /* v8 ignore next 2 -- the shipped application folders use this expansion; unit fixtures pass absolute folders. */
   if (dir === '~') return homedir()
-  /* v8 ignore next 2 -- shipped application folders exercise this expansion; unit fixtures pass absolute folders. */
   if (dir.startsWith('~/') || dir.startsWith('~\\')) return resolve(homedir(), dir.slice(2))
   return resolve(dir)
 }

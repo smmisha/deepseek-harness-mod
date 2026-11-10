@@ -28,11 +28,11 @@ The Plugins page gains a second tab, **Skills**, next to the installed plugins a
 
 Open **Plugins** and switch to **Skills**. Each source row shows its name, whether it belongs to the harness or another application, its folder, and `enabled N of M`. Expanding a row lists the discovered skills with name, description, file path, and a switch; a search field filters by name or description. Long sources render fifty skills at a time behind a **Show more** action.
 
-Switching a source or a skill writes the volatile settings of the `skill-filesystem` Host entry through the generated `settings` Remote, so the next model request sees the change without a restart and the session log records the changed catalog. A skill switched off is absent from the model catalog and from `/skill`; switching its source back on restores the per-skill choices.
+Switching a source or a skill calls the Host `skillSources` Remote, which updates the `skill-sources` profile settings entry and invalidates every mounted provider, so the next model request sees the change without a restart and the session log records the changed catalog. A skill switched off is absent from the model catalog and from `/skill`; switching its source back on restores the per-skill choices.
 
 ### What a reader sees
 
-- **Two tabs.** The Plugins page keeps **Installed** (and any market tab) and adds **Skills**; the tab appears only when this package is mounted.
+- **Two tabs.** The Plugins page keeps its plugin list tab and adds **Skills**; the tab appears only when this package is mounted.
 - **Defaults.** The harness's own folders (project `.dsh/skills`, `.agents/skills`, `~/.dsh/skills`, `~/.agents/skills`, bundled) are on. Another application's folder appears only when it exists and stays **off** until enabled.
 - **A switch writes settings.** Every toggle is stored in the `skill-sources` profile entry, so it survives a restart and is shared by Web and Desktop on the same profile.
 - **Switch a source or one skill.** The source switch hides all of its skills but remembers their individual choices; enabling it again restores them. A new skill in an enabled source starts enabled.

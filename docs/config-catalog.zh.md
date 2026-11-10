@@ -3385,7 +3385,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-skill-filesystem`
 
 - `inject`: `skills`
-- `source`: [`packages/skill/skill-filesystem/src/index.ts:48`](../packages/skill/skill-filesystem/src/index.ts)
+- `source`: [`packages/skill/skill-filesystem/src/index.ts:58`](../packages/skill/skill-filesystem/src/index.ts)
 
 ```ts config-catalog
 /** Local filesystem skill provider configuration. */
@@ -3438,6 +3438,44 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill-office -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-skill-sources -->
+<a id="deepseek-aidsh-skill-sources"></a>
+
+## `@deepseek-ai/dsh-skill-sources`
+
+- `inject`: `settings`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/skill/skill-sources/src/index.ts:37`](../packages/skill/skill-sources/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration: the persisted switches and the application list. */
+export interface Config {
+  /** Other applications' skill folders; every one starts switched off. */
+  applications?: SkillApplication[]
+  /** Source switches keyed by source id; absent keeps the source's default. */
+  sources?: Volatile<Record<string, SkillSourceSwitch>>
+  /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
+  skills?: Volatile<Record<string, Record<string, boolean>>>
+}
+
+/** Folders of another application whose skills may be shown. */
+export interface SkillApplication {
+  /** Source identity reported for its skills. */
+  readonly id: string
+  /** Folder scanned for skill bundles; `~` expands to the user's home. */
+  readonly dir: string
+  /** Reader-facing name, shown by the Skills tab. */
+  readonly title: string
+}
+
+/** One source switch stored in this profile's settings. */
+export interface SkillSourceSwitch {
+  /** Whether the source contributes skills; absent keeps the source's own default. */
+  readonly enabled: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill-sources -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-spill-local -->
 <a id="deepseek-aidsh-spill-local"></a>
@@ -4955,6 +4993,7 @@ export interface Config {
 | `@deepseek-ai/dsh-client-ui-sidebar-right` | — | [`packages/client/ui-sidebar-right/src/index.ts`](../packages/client/ui-sidebar-right/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar-terminal` | — | [`packages/client/ui-sidebar-terminal/src/index.ts`](../packages/client/ui-sidebar-terminal/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-skill` | — | [`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-skills` | — | [`packages/client/ui-skills/src/index.ts`](../packages/client/ui-skills/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-subagent` | — | [`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-tool` | — | [`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-user-questions` | — | [`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts) |

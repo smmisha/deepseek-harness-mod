@@ -27,12 +27,18 @@ export interface SkillApplication {
   readonly title: string
 }
 
+/** One source switch stored in this profile's settings. */
+export interface SkillSourceSwitch {
+  /** Whether the source contributes skills; absent keeps the source's own default. */
+  readonly enabled: boolean
+}
+
 /** Plugin configuration: the persisted switches and the application list. */
 export interface Config {
   /** Other applications' skill folders; every one starts switched off. */
   applications?: SkillApplication[]
   /** Source switches keyed by source id; absent keeps the source's default. */
-  sources?: Volatile<Record<string, { enabled: boolean }>>
+  sources?: Volatile<Record<string, SkillSourceSwitch>>
   /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
   skills?: Volatile<Record<string, Record<string, boolean>>>
 }

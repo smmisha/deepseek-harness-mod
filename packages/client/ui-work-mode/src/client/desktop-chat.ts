@@ -46,7 +46,8 @@ const ERR_ABORTED = -3
  * @returns the configured element after the lease is approved.
  * @throws when the shell refuses the request; the host renders its failure state.
  */
-export async function createChatGuest({ bridge, config, label, className, onState }: ChatGuestOptions): Promise<ChatGuestHandle> {
+export async function createChatGuest(options: ChatGuestOptions): Promise<ChatGuestHandle> {
+  const { bridge, config, label, className, onState } = options
   const reservation = await bridge.acquire(config)
   const element = document.createElement('webview') as WebviewElement
   let disposed = false

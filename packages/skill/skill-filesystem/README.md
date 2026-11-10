@@ -71,9 +71,6 @@ Load the plugin alongside the skill registry; it requires `ctx.skills`.
 | `dshHome` | `$DSH_HOME` or `~/.dsh` | Harness config root; its `skills` subdirectory is scanned |
 | `agentsHome` | `$DSH_AGENTS_HOME` or `~/.agents` | Shared agent config root scanned for compatible skills |
 | `customSkillDirs` | `[]` | Additional local skill roots, after project roots and before user roots |
-| `applications` | `[]` (the shipped profile lists Claude Code, Codex, Copilot, Gemini CLI, Antigravity, and OpenCode) | Other applications' skill folders, scanned only when the folder exists and ranked after the harness roots |
-| `sources` | `{}` | Volatile source switches by source id; absent keeps each source's default |
-| `skills` | `{}` | Volatile per-skill switches by source id and skill name; absent means enabled |
 | `watch` | `true` | Watch local roots and invalidate the provider when the catalog may have changed |
 | `bundledSkillDir` | — | Bundled skill root scanned at rank 600 when configured |
 
@@ -81,7 +78,7 @@ The remaining `watch*` fields tune Chokidar behavior — polling, stability wind
 
 ### Switches and other applications
 
-A switched-off source or skill never reaches the model catalog or `/skill`: `list()` and `get()` drop it before the registry merges providers. The switches themselves belong to the [`skill-sources`](../skill-sources/README.md) profile entry, which this provider reads through the `skillSources` service and which the Skills tab writes; the volatile fields above exist for deployments that configure switches statically. Every write invalidates each mounted provider, so the next step publishes a replacement catalog. A profile that still has the retired `$DSH_HOME/storages/skill-sources.json` document is migrated into `skill-sources` settings once and the document is renamed with a `.migrated` suffix.
+A switched-off source or skill never reaches the model catalog or `/skill`: `list()` skips switched-off roots before discovery and watching, and `get()` drops the skill before the registry merges providers. The application folders and the switches are not part of this provider's configuration; they belong to the [`skill-sources`](../skill-sources/README.md) profile entry, which this provider reads through the `skillSources` service and which the Skills tab writes. Every write invalidates each mounted provider, so the next step publishes a replacement catalog. `describeSources()` caches discovery per folder and only re-resolves statuses after a switch write.
 
 ### Change detection
 

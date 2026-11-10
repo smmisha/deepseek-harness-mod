@@ -41,7 +41,7 @@ vi.mock('electron', () => ({
 const { CHAT_PARTITION, DesktopBrowserGuests, chatNavigationAllowed, parseChatConfig } = await import('../src/browser-guests.ts')
 
 const OWNER = (): Electron.WebContents => {
-  const owner = new EventEmitter() as unknown as Electron.WebContents & EventEmitter
+  const owner = Object.create(null) as Electron.WebContents
   Object.assign(owner, { id: 7, send: vi.fn(), isDestroyed: () => false })
   return owner
 }
