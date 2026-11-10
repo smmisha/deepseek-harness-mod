@@ -149,6 +149,8 @@ Electron 拥有 `$DSH_HOME/profiles/desktop`。其 `dependencies` 包含 pnpm �
 
 只有主应用窗口启用 `<webview>`。guest 挂载必须匹配主进程签发的租约和分区；guest 保持 sandbox、context isolation 和 Web security，不启用 Node integration 或 guest preload。Browser IPC 监听只为应用文档创建。[Sidebar Browser](../../packages/client/ui-sidebar-browser/README.zh.md) 说明存储分组和 guest 限制；Host 鉴权仍独立于 URL 过滤而必需。
 
+「对话」标签的 guest 使用同样的挂载方式，但有自己的策略：唯一的持久分区 `persist:dsh-chat` 保存用户的登录状态，主框架导航白名单来自插件配置（默认 `https://chat.deepseek.com`），右键菜单提供标准编辑角色，并且只授予 `clipboard-sanitized-write`，让站点的复制控件可用而不开放剪贴板读取。白名单之外的页面以及所有 `window.open` 在打包构建中同样交给系统浏览器；外壳不注入凭据或请求头，不读取页面 DOM、Cookie 或存储，并在开发期间把被拒绝的导航记录为 `[chat-guest] blocked navigation`。隐藏标签时 guest 保持挂载且不被节流，正在生成的回答因此不会中断。[工作模式](../../packages/client/ui-work-mode/README.zh.md) 拥有该标签及其配置。
+
 `dsh-app://shell/` 无需联系 Host 即可提供打包的更新文档、脚本和样式。静态请求保留 GET/HEAD、路径范围和 MIME 处理；每个更新文档继续使用隔离 preload 和所属窗口的 IPC 校验。
 
 产品 UI 保留 Web 操作，包括通过共享认证 HTTP 路由执行的“打开方式…”。Desktop 使用 Web 的自动目录选择机制，并以共享 Web 模板的 bundle 列表初始化新 profile。

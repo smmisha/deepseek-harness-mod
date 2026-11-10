@@ -139,6 +139,9 @@ export function AppFrame({
   const frameRef = useRef<HTMLDivElement | null>(null)
   const viewport = layoutInfo.viewportWidth
   const foldedLandscape = useFoldedLandscape(matches => matches)
+  // A feature's focused mode owns the frame: the centre column alone, with every
+  // width and panel preference kept for the return to full chrome.
+  const minimal = layoutInfo.chrome === 'minimal'
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useLayoutEffect(() => {
@@ -169,23 +172,23 @@ export function AppFrame({
 
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   const windowsTitlebar = document.documentElement.hasAttribute('data-windows-titlebar')
-  const drawer = viewport < SIDEBAR_DRAWER_BREAKPOINT && !windowsTitlebar
-  const centeredSidebar = foldedLandscape && viewport >= SIDEBAR_DRAWER_BREAKPOINT
-  const sidebarCollapsed = narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0
+  const drawer = !minimal && viewport < SIDEBAR_DRAWER_BREAKPOINT && !windowsTitlebar
+  const centeredSidebar = !minimal && foldedLandscape && viewport >= SIDEBAR_DRAWER_BREAKPOINT
+  const sidebarCollapsed = minimal || (narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0)
   const drawerOpen = drawer && !sidebarCollapsed
   // Entering drawer mode from a collapsed rail hides the backing immediately.
   const [sidebarTransition, setSidebarTransition] = useState({ drawer, collapsed: sidebarCollapsed, instant: true })
   if (sidebarTransition.drawer !== drawer || sidebarTransition.collapsed !== sidebarCollapsed) {
     setSidebarTransition({ drawer, collapsed: sidebarCollapsed, instant: drawer && sidebarCollapsed && sidebarTransition.collapsed })
   }
-  const sidebarPreference = sidebarCollapsed
+  const sidebarPreference = minimal || sidebarCollapsed
     ? 0
     : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
-  const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
+  const rightbarPreference = minimal ? 0 : layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
   // Desktop reopen controls occupy the frame's shell.leading seat (macOS) or
   // the Windows caption row; neither platform keeps an icon rail.
   const darwin = document.documentElement.dataset.platform === 'darwin'
-  const collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED
+  const collapsedWidth = minimal ? 0 : drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
   // include that space before the occupant's first shown report arrives.
   const normal = computeColumns(
@@ -270,11 +273,11 @@ export function AppFrame({
   const sidebarWidth = drawer
     ? Math.min(layoutInfo.sidebar || SIDEBAR_DEFAULT, Math.max(0, viewport - 48))
     : cols.sidebar
-  const sidebar = useMemo(() => renderSlot('sidebar', {
+  const sidebar = useMemo(() => (minimal ? null : renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
     width: sidebarWidth,
     drawer,
-  }), [renderSlot, sidebarCollapsed, sidebarWidth, drawer])
+  })), [renderSlot, minimal, sidebarCollapsed, sidebarWidth, drawer])
   const main = useMemo(() => (
     <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
   ), [usePanelInfo, renderSlot])
@@ -283,13 +286,14 @@ export function AppFrame({
   // Windows native captions keep their controls in the caption row instead.
   // AppFrame.module.css reserves clearance for the seat's rendered controls.
   const leading = useMemo(() => renderSlot('shell.leading', {}), [renderSlot])
-  const leadingMounted = drawer || darwin && sidebarCollapsed
+  const leadingMounted = !minimal && (drawer || darwin && sidebarCollapsed)
 
   return (
     <div
       ref={frameRef}
       className={css.frame}
       style={{
+        ...(layoutInfo.topBand === null ? {} : { paddingTop: layoutInfo.topBand }),
         ...(windowsTitlebar
           ? { '--dsh-windows-sidebar-width': `${cols.sidebar}px` } : {}),
         gridTemplateColumns:
@@ -318,13 +322,17 @@ export function AppFrame({
       </div>
       <>
         <CenterColumn inert={drawerOpen}>{main}</CenterColumn>
-        <RightbarColumn inert={drawerOpen}>
-          {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
-        </RightbarColumn>
+        {!minimal && (
+          <RightbarColumn inert={drawerOpen}>
+            {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
+          </RightbarColumn>
+        )}
       </>
-      <div className={css.bottomRow} data-shell-bottom {...{ inert: drawerOpen ? '' : undefined }}>
-        {renderSlot('shell.bottom', {})}
-      </div>
+      {!minimal && (
+        <div className={css.bottomRow} data-shell-bottom {...{ inert: drawerOpen ? '' : undefined }}>
+          {renderSlot('shell.bottom', {})}
+        </div>
+      )}
       <div className={css.overlayLayer} data-shell-overlay>
         {overlays}
       </div>
@@ -334,8 +342,8 @@ export function AppFrame({
         </div>
       )}
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!drawer && !centeredSidebar && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
-      {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
+      {!minimal && !drawer && !centeredSidebar && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!minimal && layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
         <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
       )}
     </div>

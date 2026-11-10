@@ -390,6 +390,15 @@
     - id: ui-skill
       name: '@deepseek-ai/dsh-client-ui-skill'
 
+    # Chat/Harness tabs: the Chat tab embeds the DeepSeek chat site in a Desktop
+    # guest; Harness keeps the full product unchanged.
+    - id: ui-work-mode
+      name: '@deepseek-ai/dsh-client-ui-work-mode'
+
+    # Skills tab on the Plugins page: local skill sources with switches.
+    - id: ui-skills
+      name: '@deepseek-ai/dsh-client-ui-skills'
+
     - id: ui-agent-team
       name: '@deepseek-ai/dsh-client-ui-agent-team'
 

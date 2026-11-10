@@ -38,6 +38,10 @@
   box-sizing: border-box;
   position: relative;
   z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 28px;
   padding: 0 16px;
   border: 0;
@@ -55,6 +59,13 @@
 
 .tab[aria-selected='true'] {
   color: var(--dsw-alias-label-primary);
+}
+
+/* Decorative leading glyph; the segment text stays the accessible name. */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
 }
 
 @media (hover: hover) {

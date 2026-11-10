@@ -290,6 +290,11 @@ body {
   --dsw-specific-menu: var(--dsw-menu-surface-fill);
   --dsw-specific-selector: var(--dsw-static-neutral-bluish-60);
   --dsw-specific-sidebar-fill: var(--dsw-static-neutral-bluish-50);
+  /* Windows and Web have no window vibrancy: the mockup's blue-grey column is
+     approximated with an opaque composition in both themes. */
+  --dsw-specific-sidebar-fill-solid: color-mix(in srgb,
+    color-mix(in srgb, var(--dsw-specific-sidebar-fill) 60%, var(--dsw-static-neutral-bluish-200)) 95%,
+    var(--dsw-static-deepseek-300));
   --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-deepseek-100);
   --dsw-specific-sidebar-nav-item-active: var(--dsw-static-neutral-bluish-100);
   --dsw-specific-tip: var(--dsw-static-neutral-bluish-60);
@@ -414,6 +419,8 @@ body[data-ds-dark-theme] {
   --dsw-specific-menu: var(--dsw-menu-surface-fill);
   --dsw-specific-selector: var(--dsw-static-neutral-bluish-800);
   --dsw-specific-sidebar-fill: var(--dsw-static-neutral-bluish-900);
+  --dsw-specific-sidebar-fill-solid: color-mix(in srgb,
+    var(--dsw-static-neutral-bluish-950) 88%, var(--dsw-static-deepseek-500) 12%);
   --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-neutral-bluish-800);
   --dsw-specific-sidebar-nav-item-active: var(--dsw-static-neutral-bluish-750);
   --dsw-specific-tip: var(--dsw-static-neutral-bluish-800);

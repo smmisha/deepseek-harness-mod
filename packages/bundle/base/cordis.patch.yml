@@ -48,6 +48,11 @@
 
     - id: typert-loader
       name: '@deepseek-ai/dsh-typert-loader'
+      # The skill provider is nested behind the base include; its Remote
+      # namespace is registered explicitly instead of by entry discovery.
+      config:
+        packages:
+          - '@deepseek-ai/dsh-skill-filesystem'
 
     - id: typert-gateway
       name: '@deepseek-ai/dsh-api-gateway'
@@ -311,6 +316,11 @@
 
     - id: skill
       name: '@deepseek-ai/dsh-skill'
+
+    # Profile-owned skill switches and the application list; the Skills tab
+    # writes the volatile Config fields through the settings service.
+    - id: skill-sources
+      name: '@deepseek-ai/dsh-skill-sources'
 
     - id: skill-filesystem
       name: '@deepseek-ai/dsh-skill-filesystem'

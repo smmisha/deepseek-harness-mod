@@ -93,6 +93,7 @@
     "@deepseek-ai/dsh-shell-env": "workspace:*",
     "@deepseek-ai/dsh-skill": "workspace:*",
     "@deepseek-ai/dsh-skill-filesystem": "workspace:*",
+    "@deepseek-ai/dsh-skill-sources": "workspace:*",
     "@deepseek-ai/dsh-spill-local": "workspace:*",
     "@deepseek-ai/dsh-spill-policy": "workspace:*",
     "@deepseek-ai/dsh-storage": "workspace:*",

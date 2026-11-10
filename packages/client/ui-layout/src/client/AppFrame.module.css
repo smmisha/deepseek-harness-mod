@@ -120,35 +120,47 @@
   --dsh-frame-chrome-top: 0px;
 }
 
+/* The sidebar wash, the blue cast, and the tint live here once: macOS layers
+   them over vibrancy, Windows and Web layer the same washes over an opaque fill. */
+.frame {
+  --dsh-sidebar-wash-light: linear-gradient(
+    to bottom,
+    rgb(122 155 240 / 0.1),
+    rgb(122 155 240 / 0) 35%,
+    rgb(143 137 184 / 0) 68%,
+    rgb(143 137 184 / 0.09)
+  );
+  --dsh-sidebar-wash-dark: linear-gradient(
+    to bottom,
+    rgb(122 155 240 / 0.08),
+    rgb(122 155 240 / 0) 35%,
+    rgb(143 137 184 / 0) 68%,
+    rgb(143 137 184 / 0.07)
+  );
+  --dsh-sidebar-tint-light: color-mix(in srgb, color-mix(in srgb, var(--dsw-specific-sidebar-fill) 97%, rgb(122 155 240)) 40%, transparent);
+  --dsh-sidebar-tint-dark: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 50%, transparent);
+}
+
 :global([data-platform='darwin']) .frame:not([data-sidebar-drawer]) .sidebarCol {
-  /* A blue wash over the top of the translucent tint, gone by a third of the
-     column; a faint blue-grey-violet rises through the bottom third; and a
-     faint blue cast is mixed into the tint itself. Every layer stays
-     transparent so vibrancy shows. */
-  background:
-    linear-gradient(
-      to bottom,
-      rgb(122 155 240 / 0.1),
-      rgb(122 155 240 / 0) 35%,
-      rgb(143 137 184 / 0) 68%,
-      rgb(143 137 184 / 0.09)
-    ),
-    color-mix(in srgb, color-mix(in srgb, var(--dsw-specific-sidebar-fill) 97%, rgb(122 155 240)) 40%, transparent);
+  /* Every layer stays transparent so the window's vibrancy shows through. */
+  background: var(--dsh-sidebar-wash-light), var(--dsh-sidebar-tint-light);
   border-right: none;
 }
 
 /* Dark drops the blue cast (the light-mode wash reads purple over dark fills)
    and thins the fill so more wallpaper shows; the washes stay. */
 :global([data-platform='darwin']) :global([data-ds-dark-theme]) .frame:not([data-sidebar-drawer]) .sidebarCol {
-  background:
-    linear-gradient(
-      to bottom,
-      rgb(122 155 240 / 0.08),
-      rgb(122 155 240 / 0) 35%,
-      rgb(143 137 184 / 0) 68%,
-      rgb(143 137 184 / 0.07)
-    ),
-    color-mix(in srgb, var(--dsw-specific-sidebar-fill) 50%, transparent);
+  background: var(--dsh-sidebar-wash-dark), var(--dsh-sidebar-tint-dark);
+}
+
+/* Windows and Web have no vibrancy: the same washes sit on the opaque fill that
+   matches the mockup's blue-grey column. */
+:global(html:not([data-platform='darwin'])) .frame:not([data-sidebar-drawer]) .sidebarCol {
+  background: var(--dsh-sidebar-wash-light), var(--dsw-specific-sidebar-fill-solid);
+}
+
+:global(html:not([data-platform='darwin'])) :global([data-ds-dark-theme]) .frame:not([data-sidebar-drawer]) .sidebarCol {
+  background: var(--dsh-sidebar-wash-dark), var(--dsw-specific-sidebar-fill-solid);
 }
 
 /* macOS Reduce Transparency: the OS flattens the window's vibrancy layer to a

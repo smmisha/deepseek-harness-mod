@@ -23,6 +23,19 @@ import type { WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
 import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath } from '../src/paths.ts'
 import * as workspacePaths from '../src/paths.ts'
 
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
+
 const DOMAIN_VERSION = 2
 
 const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
@@ -208,7 +221,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     expect(storedState(pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
   })
 
-  it('bootstraps once from list headers only, in workspace/session createdAt order', async () => {
+  it.skipIf(!symlinkFilesAvailable)('bootstraps once from list headers only, in workspace/session createdAt order', async () => {
     const older = await makeDir('older')
     const newer = await makeDir('newer')
     const alias = join(base, 'older-link')
@@ -380,7 +393,7 @@ describe('WorkspaceRegistry create and lookup', () => {
     expect(fullyQualifiedWorkspacePath('work', 'linux')).toBe(false)
   })
 
-  it('creates newest-first and idempotently reuses a canonical path without retitling', async () => {
+  it.skipIf(!symlinkFilesAvailable)('creates newest-first and idempotently reuses a canonical path without retitling', async () => {
     const firstDir = await makeDir('first')
     const secondDir = await makeDir('second')
     const alias = join(base, 'first-link')
@@ -1490,7 +1503,7 @@ describe('first-use Workspace preparation', () => {
     expect((await h.registry.initializeDefault(h.resolveDirectory))?.path).toBe(path)
   })
 
-  it('titles the Workspace after the requested directory when that path is a symlink', async () => {
+  it.skipIf(!symlinkFilesAvailable)('titles the Workspace after the requested directory when that path is a symlink', async () => {
     const h = await firstUse()
     const target = join(h.directoryRoot, 'elsewhere')
     await mkdir(target)

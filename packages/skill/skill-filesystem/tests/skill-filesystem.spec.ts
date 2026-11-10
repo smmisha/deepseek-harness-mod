@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { FileSystem, FsError, FsVersion, type FsDirEntry, type FsEditOutcome, type FsEditRequest, type FsInfo, type FsPathInfo, type FsTarget, type FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import * as SkillFileSystem from '../src/index.ts'
+import SkillSources from '@deepseek-ai/dsh-skill-sources'
 
 /** Every temp dir created by this file, removed after each test. */
 const tempDirs: string[] = []
@@ -155,9 +156,21 @@ class TestFileSystem extends FileSystem {
   }
 }
 
-async function setupLocal(home: string, config: Partial<SkillFileSystem.Config> = {}): Promise<Context> {
+type SwitchConfig = {
+  applications?: { id: string; dir: string; title: string }[]
+  sources?: Record<string, { enabled: boolean }>
+  skills?: Record<string, Record<string, boolean>>
+}
+
+async function setupLocal(
+  home: string,
+  config: Partial<SkillFileSystem.Config> = {},
+  switches: SwitchConfig = {},
+): Promise<Context> {
   const ctx = new Context()
+  ctx.provide('settings', { update: async () => undefined })
   await ctx.plugin(SkillRegistry)
+  await ctx.plugin(SkillSources, switches)
   await ctx.plugin(SkillFileSystem, {
     dshHome: join(home, '.dsh'),
     agentsHome: join(home, '.agents'),
@@ -165,6 +178,27 @@ async function setupLocal(home: string, config: Partial<SkillFileSystem.Config> 
     ...config,
   })
   return ctx
+}
+
+/** Describe the mounted provider the way the Skills tab does. */
+async function describeSources(ctx: Context, cwd?: string): Promise<SkillFileSystem.LocalSourceView[]> {
+  const controller = ctx.root.get('skillSourcesController') as
+    { describe(directory: string | undefined): Promise<SkillFileSystem.LocalSourceView[]> } | undefined
+  if (controller === undefined) throw new Error('skillSourcesController is not mounted')
+  return await controller.describe(cwd)
+}
+
+/** Windows without Developer Mode refuses symlink creation, so those fixtures cannot run here. */
+const symlinksAvailable = await probeSymlinks()
+
+async function probeSymlinks(): Promise<boolean> {
+  const dir = await tempDir('symlink-probe')
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function waitFor<T>(read: () => Promise<T>, accept: (value: T) => boolean): Promise<T> {
@@ -185,6 +219,113 @@ describe('dsh-skill-filesystem plugin exports', () => {
 })
 
 describe('FileSystemSkillProvider', () => {
+  it('keeps another application folder switched off until the source is enabled', async () => {
+    const home = await tempDir('application-roots')
+    const project = await tempDir('application-roots-project')
+    const appRoot = join(home, '.claude', 'skills')
+    await writeSkill(appRoot, 'shared-skill', 'From another application')
+    await writeSkill(appRoot, 'app-only-skill', 'Available only through the other application')
+    await writeSkill(join(home, '.dsh', 'skills'), 'shared-skill', 'From the harness')
+    const applications = [
+      { id: 'claude-code', dir: appRoot, title: 'Claude Code' },
+      { id: 'codex', dir: join(home, '.codex', 'skills'), title: 'Codex' },
+    ]
+
+    const off = await setupLocal(home, {}, { applications })
+    const hidden = await off.skills.list({ cwd: project })
+    expect(hidden.find(skill => skill.name === 'shared-skill')?.source).toBe('user-dsh')
+    expect(hidden.find(skill => skill.name === 'app-only-skill')).toBeUndefined()
+
+    const on = await setupLocal(home, {}, {
+      applications,
+      sources: { 'claude-code': { enabled: true } },
+    })
+    const listed = await on.skills.list({ cwd: project })
+    expect(listed.find(skill => skill.name === 'shared-skill')?.source).toBe('user-dsh')
+    expect(listed.find(skill => skill.name === 'app-only-skill')?.source).toBe('claude-code')
+  })
+
+  it('describes titles, the disabled state, and the separate shadowed marker', async () => {
+    const home = await tempDir('describe-sources')
+    const project = await tempDir('describe-sources-project')
+    const appRoot = join(home, '.claude', 'skills')
+    await writeSkill(appRoot, 'shared-skill', 'From another application')
+    await writeSkill(appRoot, 'hidden-skill', 'Switched off inside an enabled source')
+    await writeSkill(join(home, '.dsh', 'skills'), 'shared-skill', 'From the harness')
+    await mkdir(join(appRoot, 'zzz-broken'), { recursive: true })
+    await writeFile(join(appRoot, 'zzz-broken', 'SKILL.md'), 'no frontmatter here')
+    await mkdir(join(appRoot, 'aaa-broken'), { recursive: true })
+    await writeFile(join(appRoot, 'aaa-broken', 'SKILL.md'), 'still no frontmatter')
+
+    const ctx = await setupLocal(home, {}, {
+      applications: [{ id: 'claude-code', dir: appRoot, title: 'Claude Code' }],
+      sources: { 'claude-code': { enabled: true } },
+      skills: { 'claude-code': { 'hidden-skill': false } },
+    })
+    const views = await describeSources(ctx, project)
+    const application = views.find(view => view.id === 'claude-code')
+    const harness = views.find(view => view.id === 'user-dsh')
+
+    expect(harness?.skills.find(skill => skill.name === 'shared-skill')?.shadowedBy).toBeUndefined()
+    expect(application?.kind).toBe('application')
+    expect(application?.title).toBe('Claude Code')
+    expect(application?.enabled).toBe(true)
+    expect(application?.skills.find(skill => skill.name === 'shared-skill')).toMatchObject({
+      status: 'available',
+      shadowedBy: 'user-dsh',
+    })
+    expect(application?.skills.find(skill => skill.name === 'hidden-skill')).toMatchObject({ status: 'disabled' })
+    const brokenPaths = (application?.skills ?? []).filter(skill => skill.status === 'invalid').map(skill => skill.path)
+    expect(brokenPaths).toHaveLength(2)
+    expect(new Set(brokenPaths).size).toBe(brokenPaths.length)
+  })
+
+  it('controller writes switches, hides a switched-off skill from get, and describes missing applications', async () => {
+    const home = await tempDir('switches-and-missing')
+    const project = await tempDir('switches-and-missing-project')
+    const appRoot = join(home, '.claude', 'skills')
+    await writeSkill(appRoot, 'shared-skill', 'From another application')
+    await writeSkill(appRoot, 'claude-only', 'Only in Claude')
+    await writeSkill(join(home, '.dsh', 'skills'), 'shared-skill', 'From the harness')
+    const updates: unknown[] = []
+    const ctx = new Context()
+    ctx.provide('settings', { update: async (...args: unknown[]) => { updates.push(args) } })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, {
+      applications: [
+        { id: 'claude-code', dir: appRoot, title: 'Claude Code' },
+        { id: 'codex', dir: join(home, '.codex', 'skills'), title: 'Codex' },
+      ],
+      sources: { 'claude-code': { enabled: true } },
+      skills: { 'claude-code': { 'claude-only': false } },
+    })
+    await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false, customSkillDirs: [join(project, 'extra')] })
+    const controller = ctx.root.get('skillSourcesController') as {
+      setSource(source: string, enabled: boolean): Promise<void>
+      setSkill(source: string, name: string, enabled: boolean): Promise<void>
+    }
+    await controller.setSource('codex', true)
+    await controller.setSkill('codex', 'x', false)
+    expect(updates).toHaveLength(2)
+    expect(await ctx.skills.get('claude-only', { cwd: project })).toBeUndefined()
+    const views = await describeSources(ctx, project)
+    expect(views.find(view => view.id === 'codex')).toMatchObject({ exists: false, enabled: false })
+    const cached = await describeSources(ctx, project)
+    expect(cached).toHaveLength(views.length)
+    const withoutCwd = await describeSources(ctx)
+    expect(withoutCwd.length).toBeGreaterThan(0)
+  })
+
+  it.skipIf(process.platform === 'win32')('shortens roots outside the home folder and a folder equal to home', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'dsh-fs-'))
+    tempDirs.push(outside)
+    await writeSkill(join(outside, '.dsh', 'skills'), 'out-skill', 'Outside the home folder')
+    const ctx = await setupLocal(outside, { customSkillDirs: [homedir()] })
+    const views = await describeSources(ctx, outside)
+    expect(views.find(view => view.id === 'project-dsh')?.displayPath.startsWith('.')).toBe(true)
+    expect(views.find(view => view.id === 'custom')?.displayPath).toBe('~')
+  })
+
   it('discovers project, custom, user, and agents skill roots in priority order', async () => {
     const home = await tempDir('skill-home')
     const project = await tempDir('skill-project')
@@ -423,7 +564,7 @@ describe('FileSystemSkillProvider', () => {
     expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['good-skill'])
   })
 
-  it.each([false, true])('publishes regular-file paths for linked skills while retaining their resource roots (filesystem service: %s)', async (withFileSystem) => {
+  it.skipIf(!symlinksAvailable).each([false, true])('publishes regular-file paths for linked skills while retaining their resource roots (filesystem service: %s)', async (withFileSystem) => {
     const home = await tempDir('skill-symlink-home')
     const external = await tempDir('skill-symlink-external')
     await writeSkill(external, 'linked-dir', 'Linked directory')
@@ -921,7 +1062,7 @@ describe('FileSystemSkillProvider', () => {
     disposeProvider()
   })
 
-  it('refreshes frontmatter through a followed skill symlink', { timeout: 10000 }, async () => {
+  it.skipIf(!symlinksAvailable)('refreshes frontmatter through a followed skill symlink', { timeout: 10000 }, async () => {
     const home = await tempDir('skill-watch-symlink-home')
     const external = await tempDir('skill-watch-symlink-external')
     const root = join(home, '.dsh/skills')

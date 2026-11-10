@@ -71,10 +71,17 @@ skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也�
 | `dshHome` | `$DSH_HOME` 或 `~/.dsh` | Harness 配置根目录；扫描其 `skills` 子目录 |
 | `agentsHome` | `$DSH_AGENTS_HOME` 或 `~/.agents` | 为兼容 skill 扫描的共享 agent 配置根目录 |
 | `customSkillDirs` | `[]` | 其他本地 skill 根目录，位于项目根之后、用户根之前 |
+| `applications` | `[]`（随包配置列出 Claude Code、Codex、Copilot、Gemini CLI、Antigravity、OpenCode） | 其他应用的 skill 目录；仅在目录存在时扫描，rank 排在 harness 根目录之后 |
+| `sources` | `{}` | 按 source id 的 volatile 来源开关；缺省保持该来源的默认值 |
+| `skills` | `{}` | 按 source id 与 skill 名的 volatile 单技能开关；缺省表示启用 |
 | `watch` | `true` | 监视本地根，并在目录可能变化时使提供方失效 |
 | `bundledSkillDir` | — | 配置后按 rank 600 扫描的随包提供的 skill 根目录 |
 
 其余 `watch*` 字段用于调节 Chokidar 行为——轮询、稳定窗口、间隔、项目上限与符号链接跟随。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-skill-filesystem)完整列出了所有字段，是这些字段的真源。
+
+### 开关与其他应用
+
+被关闭的来源或技能不会进入模型目录，也不会出现在 `/skill` 中：`list()` 与 `get()` 会在注册表合并提供者之前将其剔除。开关本身属于 [`skill-sources`](../skill-sources/README.zh.md) 配置条目，本提供者通过 `skillSources` 服务读取，技能标签页负责写入；上面的 volatile 字段用于静态配置开关的部署。每次写入都会使所有已挂载的提供者失效，因此下一步会发布替换目录。仍保留已废弃文档 `$DSH_HOME/storages/skill-sources.json` 的配置会在首次启动时迁移进 `skill-sources` 设置，并把该文档重命名为带 `.migrated` 后缀。
 
 ### 变更检测
 

@@ -15,6 +15,13 @@ import type { createLayoutStore } from './stores.ts'
 /** Identity shared by a sidebar panel entry and its main-slot occupant. */
 export type MainPanelId = Branded<'MainPanelId'>
 
+/**
+ * Frame chrome presentation. `full` renders the navigation column and the side
+ * panels around the centre; `minimal` renders the centre column alone. A feature
+ * maps its own modes onto this choice; the frame does not know the feature.
+ */
+export type ChromeMode = 'full' | 'minimal'
+
 /** Root-scoped navigation state exposed to panel-aware components. */
 export interface PanelInfo {
   /** Selected global panel; null displays the current Conversation. */
@@ -28,6 +35,22 @@ export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
 export interface ILayout {
   /** Selected central panel from the same root store used by `usePanelInfo`. */
   readonly panelInfo: HostObservable<PanelInfo>
+  /** Current frame chrome, from the same root store the frame renders. */
+  readonly chrome: HostObservable<ChromeMode>
+  /**
+   * Choose the frame chrome.
+   * @param mode - `full` keeps the navigation and side panels; `minimal` renders
+   *   the centre column alone. The sidebar and right panel preferences survive,
+   *   so returning to `full` restores the arrangement the reader left.
+   */
+  setChrome(mode: ChromeMode): void
+  /**
+   * Reserve a frame-wide strip above every column, or clear it.
+   * @param px - strip height in CSS pixels, or null when the platform's caption
+   *   band already reserves it. The frame renders the band; features never
+   *   compute the frame's top padding themselves.
+   */
+  setTopBand(px: number | null): void
   /**
    * Select a global central panel without changing the current Session.
    * @param panelId - registered main key, or null to show the Conversation.
@@ -61,12 +84,23 @@ export class LayoutController implements ILayout {
    * @param panels - actions of the instance shared with the root entry.
    * @param hasMainPanel - checks the live main-slot registry for a panel id.
    * @param panelInfo - root store's shared central-panel selection source.
+   * @param chrome - root store's shared frame-chrome source.
    */
   constructor(
     private readonly panels: PanelActions,
     private readonly hasMainPanel: (id: MainPanelId) => boolean,
     readonly panelInfo: HostObservable<PanelInfo>,
+    readonly chrome: HostObservable<ChromeMode>,
   ) {}
+
+  /** Choose the frame chrome, keeping every width and panel preference. */
+  setChrome(mode: ChromeMode): void {
+    this.panels.setChrome(mode)
+  }
+
+  setTopBand(px: number | null): void {
+    this.panels.setTopBand(px)
+  }
 
   /** Select a global panel or return to the Conversation. */
   selectPanel(panelId: MainPanelId | null): void {

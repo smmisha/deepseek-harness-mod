@@ -322,6 +322,7 @@
     { "path": "./packages/experimental/cua-macos" },
     { "path": "./packages/client/ui-sidebar-documentpreview/tsconfig.host.json" },
     { "path": "./packages/client/ui-sidebar-browser/tsconfig.host.json" },
+    { "path": "./packages/client/ui-work-mode/tsconfig.host.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.host.json" },
     { "path": "./packages/document/office-to-pdf" },
 
@@ -453,6 +454,7 @@
     { "path": "./packages/skill/skill" },
     { "path": "./packages/experimental/skill-badge" },
     { "path": "./packages/skill/skill-filesystem" },
+    { "path": "./packages/skill/skill-sources" },
     { "path": "./packages/skill/tool-skill" },
     { "path": "./packages/interaction/tool-ask-user" },
     { "path": "./packages/context/agent-instructions" },

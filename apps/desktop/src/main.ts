@@ -833,6 +833,10 @@ async function main(): Promise<void> {
     assertProductSender(event)
     return browserGuests.release(event.sender, lease)
   })
+  ipcMain.handle(DESKTOP_IPC.chatAcquire, (event, config: unknown) => {
+    assertProductSender(event)
+    return browserGuests.acquireChat(event.sender, config)
+  })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
     if (hostUrl === undefined || hostCookie === undefined || details.webContentsId !== mainWindow?.webContents.id) {
@@ -1295,7 +1299,8 @@ async function main(): Promise<void> {
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, false, true)
     mainWindow = window
-    browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
+    browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name),
+      () => currentDesktopLocale().messages)
     shortcuts.attach(window)
     window.on('focus', automaticCheck)
     // Closing hides: the page and the Host keep running, and the next show resumes the same document.

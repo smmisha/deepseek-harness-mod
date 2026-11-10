@@ -39,6 +39,19 @@ import type {
   SessionFormatRestore,
 } from '@deepseek-ai/dsh-session-format'
 
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
+
 const roots: string[] = []
 
 async function tempRoot(): Promise<string> {
@@ -1240,7 +1253,7 @@ describe('JSONL immutable generation publication', () => {
     expect(await readFile(expected, 'utf8')).toBe(line(header(SESSION_FORMAT_VERSION)) + line(event0))
   })
 
-  it.each(['different', 'malformed', 'symlink', 'directory'] as const)(
+  it.skipIf(!symlinkFilesAvailable).each(['different', 'malformed', 'symlink', 'directory'] as const)(
     'fails loud without altering a colliding %s target',
     async (kind) => {
       const root = await tempRoot()

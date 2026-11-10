@@ -58,6 +58,19 @@ import {
   type ChangeRenderItem,
 } from '../src/render.ts'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
 import {
   mountAgentLoopTestDependencies,
   mountAgentLoopTestHarness,
@@ -601,7 +614,7 @@ describe('workspace context instruction discovery', () => {
     }
   })
 
-  it('follows a symlinked instruction file to its target content', async () => {
+  it.skipIf(!symlinkFilesAvailable)('follows a symlinked instruction file to its target content', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     const outside = await tempRepo()
@@ -625,7 +638,7 @@ describe('workspace context instruction discovery', () => {
     }
   })
 
-  it('follows a symlinked instruction file through ctx.fs to its target content', async () => {
+  it.skipIf(!symlinkFilesAvailable)('follows a symlinked instruction file through ctx.fs to its target content', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     const outside = await tempRepo()
@@ -5221,7 +5234,7 @@ describe('dynamic nested workspace context injection', () => {
     }
   })
 
-  it('removes a previously loaded instruction file once it resolves to a directory through a symlink', async () => {
+  it.skipIf(!symlinkFilesAvailable)('removes a previously loaded instruction file once it resolves to a directory through a symlink', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
     try {

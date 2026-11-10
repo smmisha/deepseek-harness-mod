@@ -9,7 +9,7 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { IconGlobeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ILayout, MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { ChromeMode, ILayout, MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { PropsRenderSlots, PropsRuntime, SlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TrackProductEvent } from '@deepseek-ai/dsh-client-product-analytics/client'
 import { apply, inject } from '../src/client/index.ts'
@@ -43,6 +43,9 @@ async function bench(collapsed = false, track?: TrackProductEvent) {
   locale.setLocale('en')
   const layout = {
     panelInfo: runtime.panelInfo,
+    chrome: createSnapshotStore<ChromeMode>('full'),
+    setChrome: vi.fn(),
+    setTopBand: vi.fn(),
     beginNavigation: vi.fn(() => new AbortController().signal),
     toggleSidebar: vi.fn(),
     selectPanel: vi.fn((activePanelId: MainPanelId | null) => { runtime.panelInfo.set({ activePanelId }) }),

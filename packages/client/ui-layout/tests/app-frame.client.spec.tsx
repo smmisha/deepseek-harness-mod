@@ -796,4 +796,22 @@ describe('sidebar drawer', () => {
     expect(sidebarOwner().collapsed).toBe(true)
     expect(tracks(frame)).toEqual([0, 0])
   })
+
+  it('renders the centre column alone in minimal chrome and restores the shell after', () => {
+    const { frame, instance, slotCalls, rerenderFrame } = mountFrame()
+    const mounted = slotCalls.length
+    act(() => { instance.actions.setChrome('minimal') })
+    rerenderFrame()
+    expect(tracks(frame)).toEqual([0, 0])
+    // Neither the navigation column nor the right panel is drawn while focused.
+    const focused = slotCalls.slice(mounted)
+    expect(focused.some(call => call.key === 'sidebar')).toBe(false)
+    expect(focused.some(call => call.key === 'rightbar')).toBe(false)
+    expect(frame.querySelector('[data-side="sidebar"]')).toBeNull()
+    const beforeRestore = slotCalls.length
+    act(() => { instance.actions.setChrome('full') })
+    rerenderFrame()
+    expect(tracks(frame)).toEqual([280, 0])
+    expect(slotCalls.slice(beforeRestore).some(call => call.key === 'sidebar')).toBe(true)
+  })
 })

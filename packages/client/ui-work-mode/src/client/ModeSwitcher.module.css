@@ -1,0 +1,5 @@
+.switcher {
+  flex: none;
+  /* Only the capsule subtracts itself from the window drag row. */
+  -webkit-app-region: no-drag;
+}

@@ -11,6 +11,7 @@ import { syncNativeTheme } from './preload-theme.ts'
 import { syncWindowsAppearance } from './preload-windows.ts'
 import { installMandatoryUpdateOverlay } from './preload-mandatory-overlay.ts'
 import { createDesktopBrowserBridge } from './preload-browser.ts'
+import type { DesktopChatReservation } from '@deepseek-ai/dsh-client-ui-work-mode/types'
 import type { FileDragHandle } from '@deepseek-ai/dsh-util-file-drag'
 
 function createProductApi(): DshDesktopProductApi {
@@ -22,6 +23,9 @@ function createProductApi(): DshDesktopProductApi {
         Promise<{ bytes: Uint8Array; mediaType: string }>,
     },
     browser: createDesktopBrowserBridge(),
+    chat: {
+      acquire: config => ipcRenderer.invoke(DESKTOP_IPC.chatAcquire, config) as Promise<DesktopChatReservation>,
+    },
     fileDrag: {
       prepare: (source, requestId) => ipcRenderer.invoke(DESKTOP_IPC.fileDragPrepare, source, requestId) as
         Promise<FileDragHandle | undefined>,

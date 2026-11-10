@@ -1,0 +1,149 @@
+/* The working-mode surface: a frame-wide layer whose guest keeps the working
+ * area, plus the mode capsule in the window's top strip. The layer paints the
+ * center column only; the harness columns live behind it and the frame chrome
+ * is minimal while Chat is selected. */
+.root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.page {
+  position: absolute;
+  inset: var(--dsh-frame-top-clearance, 0px) 0 0 0;
+  pointer-events: auto;
+  background: var(--dsw-alias-bg-base);
+}
+
+/* Hidden, not unmounted: display:none would detach the guest and reload it. */
+.root[data-mode='harness'] .page {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guest {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+/* The failed guest keeps its element (and lease) but draws nothing under the card. */
+.guest[data-hidden] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--dsw-alias-bg-base);
+}
+
+/* The window strip: the capsule rides the native caption band on Desktop and
+ * floats above the content where no band exists. The strip itself stays
+ * click-through, and only the capsule opts out of the window drag geometry. */
+.bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.bar > * {
+  pointer-events: auto;
+}
+
+/* The failure card paints above the guest, which stays mounted underneath. */
+.card {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px;
+  background: var(--dsw-alias-bg-base);
+  text-align: center;
+}
+
+.centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+}
+
+.mark {
+  color: var(--dsw-alias-label-brand);
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.body {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.action {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.actionPrimary {
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: var(--dsw-alias-interactive-bg-active);
+  }
+
+  .actionPrimary:hover {
+    background: var(--dsw-alias-state-business-primary);
+    opacity: 0.9;
+  }
+}
+
+.action:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}

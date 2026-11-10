@@ -27,6 +27,19 @@ import type { LocalTarget } from '../src/fsio.ts'
 import { copyFileDaclWin32, readFileDaclWin32 } from '../src/win32.ts'
 import { FsError, FsTargetKey } from '@deepseek-ai/dsh-fs'
 
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
+
 let dir: string
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'dsh-fsio-'))
@@ -57,7 +70,7 @@ describe('resolveLocalTarget', () => {
     expect(target.targetKey).toBe(join(await realpath(dir), 'missing.txt'))
   })
 
-  it('two paths to the same file via a symlink share one targetKey', async () => {
+  it.skipIf(!symlinkFilesAvailable)('two paths to the same file via a symlink share one targetKey', async () => {
     const real = join(dir, 'real.txt')
     await writeFile(real, 'hi')
     const link = join(dir, 'link.txt')
@@ -73,7 +86,7 @@ describe('resolveLocalTarget', () => {
     expect(target.targetKey).toBe(join(await realpath(dir), 'no-such-dir', 'child.txt'))
   })
 
-  it('keeps the key stable across create when an ancestor is a symlink', async () => {
+  it.skipIf(!symlinkFilesAvailable)('keeps the key stable across create when an ancestor is a symlink', async () => {
     // A symlinked workspace root with a not-yet-created subdirectory: the
     // pre-create key (via the symlink, missing parent) must equal the
     // post-create key (file exists, realpathed) so observed-state survives.
@@ -194,7 +207,7 @@ describe('probe', () => {
 })
 
 describe('probeNoFollow', () => {
-  it('reports symlinks without following them', async () => {
+  it.skipIf(!symlinkFilesAvailable)('reports symlinks without following them', async () => {
     const real = join(dir, 'real.txt')
     const link = join(dir, 'link.txt')
     await writeFile(real, 'hi')
@@ -231,7 +244,7 @@ describe('listDirectory', () => {
     expect((await resolveLocalTarget(dir, child.target.displayPath)).targetKey).toBe(child.target.targetKey)
   })
 
-  it('lists direct children in stable order without reading content', async () => {
+  it.skipIf(!symlinkFilesAvailable)('lists direct children in stable order without reading content', async () => {
     const root = join(dir, 'skills')
     await mkdir(join(root, 'dir-skill'), { recursive: true })
     await writeFile(join(root, 'zeta.md'), 'zeta')
@@ -251,7 +264,7 @@ describe('listDirectory', () => {
     expect(entries.find(entry => entry.name === 'dir-skill')?.size).toBeUndefined()
   })
 
-  it('derives child target keys from the listed parent identity', async () => {
+  it.skipIf(!symlinkFilesAvailable)('derives child target keys from the listed parent identity', async () => {
     const realOne = join(dir, 'real-one')
     const realTwo = join(dir, 'real-two')
     const link = join(dir, 'link')
@@ -300,13 +313,13 @@ describe('listDirectory', () => {
     }
   })
 
-  it('translates preflight metadata IO failures into FS_IO_ERROR', async () => {
+  it.skipIf(!symlinkFilesAvailable)('translates preflight metadata IO failures into FS_IO_ERROR', async () => {
     const loop = join(dir, 'loop')
     await symlink(loop, loop)
     await expect(listDirectory(localTarget(loop))).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
   })
 
-  it('translates child resolution failures into structured listing errors', async () => {
+  it.skipIf(!symlinkFilesAvailable)('translates child resolution failures into structured listing errors', async () => {
     const root = join(dir, 'listed')
     await mkdir(root)
     const loop = join(root, 'loop')
@@ -314,7 +327,7 @@ describe('listDirectory', () => {
     await expect(listDirectory(localTarget(root))).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
   })
 
-  it('translates child permission failures into FS_PERMISSION_DENIED', async () => {
+  it.skipIf(!symlinkFilesAvailable)('translates child permission failures into FS_PERMISSION_DENIED', async () => {
     const root = join(dir, 'listed')
     const protectedRoot = join(dir, 'protected')
     const secret = join(protectedRoot, 'secret')

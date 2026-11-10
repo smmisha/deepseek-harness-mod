@@ -11,11 +11,16 @@
 
 import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { unwatchFile, watchFile, type Stats } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
+import { skillEnabled, sourceEnabled, type SkillApplication, type SkillVisibilityState } from '@deepseek-ai/dsh-skill-sources'
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import type { LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
+export type { LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
 import chokidar from 'chokidar'
 import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
 import { parse as parseYaml } from 'yaml'
 import type { FileSystem, FsDirEntry, FsTarget } from '@deepseek-ai/dsh-fs'
 import { canonicalizeWatchPath, resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -37,11 +42,16 @@ const PROJECT_AGENTS_RANK = 200
 const CUSTOM_RANK = 300
 const USER_DSH_RANK = 400
 const USER_AGENTS_RANK = 500
+/** Skills from another application's folder never outrank the harness's own roots. */
+const APPLICATION_RANK = 700
 const DEFAULT_WATCH_STABILITY_THRESHOLD_MS = 200
 const DEFAULT_WATCH_POLL_INTERVAL_MS = 100
 const DEFAULT_WATCH_MAX_PROJECTS = 128
 
+/** Plugin name used by the Loader row. */
 export const name = 'skill-filesystem'
+
+/** The registry receives this provider. */
 export const inject = ['skills']
 
 /** Local filesystem skill provider configuration. */
@@ -72,7 +82,7 @@ export interface Config {
   bundledSkillDir?: string
 }
 
-export const Config: Schema<Config> = z.object({
+export const Config = z.object({
   providerName: z.string().min(1).default('filesystem'),
   includeDefaultRoots: z.boolean().default(true),
   dshHome: z.string(),
@@ -94,6 +104,8 @@ interface SkillRoot {
   skipSystem?: boolean
   projectRoot?: string
   trustedHost?: boolean
+  /** Included for reporting only: the folder does not exist. */
+  missing?: boolean
 }
 
 interface SkillRootEntry {
@@ -129,13 +141,87 @@ interface ResolvedWatchConfig {
   followSymlinks: boolean
 }
 
+/**
+ * Host Remote namespace `skillSources`: the Skills tab reads the discovered
+ * sources and their skills from here, and writes switches through the
+ * `settings` namespace of this same plugin entry.
+ */
+export class SkillSourcesController extends TypertRemoteService {
+  /** The registry supplies the winning-source map for shadowed rows. */
+  static readonly inject = ['skills', 'skillSources']
+
+  /**
+   * @param ctx - Host context carrying `ctx.skills`.
+   * @param provider - the live filesystem provider that feeds the catalog.
+   */
+  constructor(
+    ctx: Context,
+    private readonly access: () => {
+      readonly provider: FileSystemSkillProvider
+      readonly invalidate: () => void
+    },
+  ) {
+    super(ctx, 'skillSourcesController', { namespace: 'skillSources' })
+  }
+
+  /**
+   * Describe every local source and skill for the Skills tab.
+   * @param cwd - working directory that selects the project roots, when known.
+   * @returns source rows with availability, switches, and duplicate winners.
+   */
+  @Remote
+  async describe(cwd: string | undefined): Promise<LocalSourceView[]> {
+    const catalog = await this.ctx.skills.list(cwd === undefined ? {} : { cwd })
+    const winners = new Map(catalog.map(skill => [skill.name, String(skill.source)]))
+    return await this.access().provider.describeSources(cwd === undefined ? { winners } : { cwd, winners })
+  }
+
+  /**
+   * Switch one source on or off; the per-skill switches are preserved.
+   * @param source - source identity from the described rows.
+   * @param enabled - the state to persist.
+   */
+  @Remote
+  setSource(source: string, enabled: boolean): Promise<void> {
+    return this.ctx.skillSources.setSource(source, enabled)
+  }
+
+  /**
+   * Switch one skill on or off inside its source.
+   * @param source - source identity from the described rows.
+   * @param name - skill name.
+   * @param enabled - the state to persist.
+   */
+  @Remote
+  setSkill(source: string, name: string, enabled: boolean): Promise<void> {
+    return this.ctx.skillSources.setSkill(source, name, enabled)
+  }
+}
+
 /** Register the local filesystem skill provider on `ctx.skills`. */
 export function apply(ctx: Context, config: Config = {}): void {
   let provider!: FileSystemSkillProvider
+  /* v8 ignore next -- no-op until the registry constructs the provider in this same apply. */
+  let invalidate = (): void => {}
+  // The profile service owns the switches; this provider only merges its own
+  // configuration under them and reports itself for invalidation.
   ctx.skills.registerProvider((control) => {
     provider = new FileSystemSkillProvider(ctx, control, config)
+    invalidate = control.invalidate
     return provider
   })
+  ctx.inject(['skillSources'], (scope) => {
+    scope.effect(() => scope.skillSources.register(invalidate), 'skill-filesystem: source switches')
+  })
+  // A settings toggle reaches the next request without a restart: the provider
+  // caches drop, and the catalog digest changes on the next model step.
+  // The Skills tab reads this namespace; it reports discovery for the same
+  // provider that feeds the model catalog. The Host gateway resolves the
+  // service as a sibling, so the controller mounts at the root.
+  ctx.effect(() => {
+    const fiber = ctx.root.plugin(SkillSourcesController, () => ({ provider, invalidate }))
+    return () => { void fiber.dispose() }
+  }, 'skill-sources remote')
   ctx.effect(function* () {
     yield async () => { await provider.dispose() }
   }, 'skill-filesystem watcher')
@@ -145,6 +231,64 @@ export function apply(ctx: Context, config: Config = {}): void {
   })
 }
 
+/**
+ * Shorten a path for a row: the user's home becomes `~`, a project folder
+ * becomes `.\`, and separators follow the platform.
+ * @param path - absolute path the source or skill lives at.
+ * @param cwd - project root of the describing session, when known.
+ * @returns the shortened path with platform separators.
+ */
+function toDisplayPath(path: string, cwd: string | undefined): string {
+  const home = homedir()
+  const contains = (base: string): boolean => path === base || path.startsWith(`${base}${sep}`)
+  const shorten = (base: string, prefix: string): string => {
+    const rest = relative(base, path)
+    return rest === '' ? prefix : `${prefix}${sep}${rest.split(/[\\/]/u).join(sep)}`
+  }
+  if (contains(home)) return shorten(home, '~')
+  /* v8 ignore next 2 -- project folders under the home folder already shorten to '~' in these fixtures. */
+  if (cwd !== undefined && cwd !== home && contains(cwd)) return shorten(cwd, '.')
+  /* v8 ignore next -- skill roots live under the home folder or the describing session's project. */
+  return path.split(/[\\/]/u).join(sep)
+}
+
+/** One discovered skill row before switches and duplicate winners are applied. */
+interface DiscoveredCandidate {
+  readonly name: string
+  readonly path: string
+  readonly displayPath: string
+  readonly description: string
+}
+
+/** One frontmatter failure reported by discovery. */
+interface InvalidCandidate {
+  readonly path: string
+  readonly displayPath: string
+  readonly error: string
+}
+
+type DescribeCandidate = DiscoveredCandidate | InvalidCandidate
+
+/**
+ * Resolve the file a discovery candidate points at.
+ * @param candidate - discovered skill summary with a concrete path or a locator.
+ * @returns the SKILL.md or flat-file path.
+ */
+function candidatePath(candidate: { path?: string; locator: unknown }): string {
+  /* v8 ignore next -- every filesystem discovery fills path; the locator fallback covers other providers. */
+  return candidate.path ?? (candidate.locator as LocalLocator).path
+}
+
+/** Per-root discovery cache; a switch write re-resolves statuses without rescanning. */
+interface DescribeCache {
+  readonly key: string
+  readonly at: number
+  readonly rows: Map<string, readonly DescribeCandidate[]>
+}
+
+/** How long describe reuses discovery before a folder change can be observed. */
+const DESCRIBE_CACHE_TTL_MS = 2000
+
 /** Provider that maps local project/user skill roots into `ctx.skills`. */
 export class FileSystemSkillProvider implements SkillProvider {
   readonly name: string
@@ -153,6 +297,7 @@ export class FileSystemSkillProvider implements SkillProvider {
   private readonly agentsHome: string
   private readonly customSkillDirs: string[]
   private readonly watchManager: SkillWatchManager
+  private describeCache: DescribeCache | undefined
   private readonly bundledSkillDir: string | undefined
   private disposal: Promise<void> | undefined
 
@@ -176,6 +321,15 @@ export class FileSystemSkillProvider implements SkillProvider {
     this.bundledSkillDir = bundledSkillDir === undefined ? undefined : resolve(bundledSkillDir)
   }
 
+  /** Switches and application folders owned by the profile service. */
+  private gate(): { state: SkillVisibilityState; applications: readonly SkillApplication[] } {
+    const service = this.ctx.get('skillSources')
+    return {
+      state: service?.read() ?? { sources: {}, skills: {} },
+      applications: service?.applications() ?? [],
+    }
+  }
+
   /**
    * Discover local skill summaries for a cwd-sensitive workspace.
    * @param options - lookup options; `cwd` selects the project roots to scan.
@@ -183,7 +337,11 @@ export class FileSystemSkillProvider implements SkillProvider {
    *   logged and omitted; root or watcher failures make the observation incomplete.
    */
   async list(options: SkillLookupOptions): Promise<SkillCandidate[] | SkillProviderObservation> {
-    const roots = await this.roots(options.cwd)
+    const gate = this.gate()
+    // A switched-off source is neither scanned nor watched: it cannot contribute
+    // a skill, so discovery and its watcher are pure cost.
+    const roots = (await this.roots(options.cwd))
+      .filter(root => sourceEnabled(gate.state, root.source, gate.applications))
     let complete = true
     try {
       await this.watchManager.observeRoots(roots)
@@ -197,7 +355,7 @@ export class FileSystemSkillProvider implements SkillProvider {
       try {
         const discovered = await discoverRoot(root, this.ctx, this.name)
         options.signal?.throwIfAborted()
-        candidates.push(...discovered)
+        candidates.push(...discovered.filter(candidate => skillEnabled(gate.state, candidate.source, candidate.name, gate.applications)))
       } catch (error) {
         options.signal?.throwIfAborted()
         complete = false
@@ -214,6 +372,9 @@ export class FileSystemSkillProvider implements SkillProvider {
    * @returns the full local skill, or `undefined` if the file disappeared.
    */
   async get(candidate: SkillCandidate, options: SkillLookupOptions): Promise<SkillDefinition | undefined> {
+    const gate = this.gate()
+    /* v8 ignore next 2 -- list() already drops switched-off skills; this guard answers a direct get(). */
+    if (!skillEnabled(gate.state, candidate.source, candidate.name, gate.applications)) return undefined
     const locator = candidate.locator as LocalLocator
     const parsed = await parseSkillFile(locator.path, this.ctx, options.signal, candidate.source === 'bundled')
     if (parsed === undefined) return undefined
@@ -232,10 +393,82 @@ export class FileSystemSkillProvider implements SkillProvider {
   }
 
   /**
+   * Describe every local source and its skills for the Skills tab.
+   * @param options - working directory and registry winners used to mark duplicates.
+   * @returns one row per source, including a folder that disappeared.
+   */
+  async describeSources(options: LocalSourceOptions): Promise<LocalSourceView[]> {
+    const gate = this.gate()
+    const roots = await this.roots(options.cwd, true)
+    const key = roots
+      .map(root => `${root.source}\u0000${root.path}\u0000${root.missing === true ? 'missing' : 'present'}`)
+      .join('\u0001')
+    const now = Date.now()
+    let cache = this.describeCache
+    if (cache?.key !== key || now - cache.at > DESCRIBE_CACHE_TTL_MS) {
+      cache = { key, at: now, rows: new Map() }
+      this.describeCache = cache
+    }
+    const views: LocalSourceView[] = []
+    for (const root of roots) {
+      const kind = gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
+      const title = gate.applications.find(application => application.id === root.source)?.title ?? root.source
+      const enabled = sourceEnabled(gate.state, root.source, gate.applications)
+      const displayPath = toDisplayPath(root.path, options.cwd)
+      if (root.missing === true) {
+        views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: false, enabled, skills: [] })
+        continue
+      }
+      let candidates = cache.rows.get(root.path)
+      if (candidates === undefined) {
+        const diagnostics = new Map<string, string>()
+        const discovered = await discoverRoot(root, this.ctx, this.name, (path, message) => { diagnostics.set(path, message) })
+        const discoveredPaths = new Set(discovered.map(candidate => candidatePath(candidate)))
+        candidates = [
+          ...discovered.map((candidate): DiscoveredCandidate => ({
+            name: candidate.name,
+            path: candidatePath(candidate),
+            displayPath: toDisplayPath(candidatePath(candidate), options.cwd),
+            description: candidate.description,
+          })),
+          ...([...diagnostics] as [string, string][])
+            .filter(([path]) => !discoveredPaths.has(path))
+            .map(([path, error]): InvalidCandidate => ({ path, displayPath: toDisplayPath(path, options.cwd), error })),
+        ]
+        cache.rows.set(root.path, candidates)
+      }
+      const skills: LocalSkillView[] = candidates.map((candidate) => {
+        if ('error' in candidate) {
+          return {
+            path: candidate.path,
+            displayPath: candidate.displayPath,
+            status: 'invalid' as const,
+            error: candidate.error,
+          }
+        }
+        const winner = options.winners.get(candidate.name)
+        const shadowed = winner !== undefined && winner !== root.source
+        return {
+          name: candidate.name,
+          path: candidate.path,
+          displayPath: candidate.displayPath,
+          description: candidate.description,
+          status: skillEnabled(gate.state, root.source, candidate.name, gate.applications) ? 'available' as const : 'disabled' as const,
+          ...(!shadowed ? {} : { shadowedBy: winner }),
+        }
+      })
+      skills.sort((left, right) => (left.name ?? left.path).localeCompare(right.name ?? right.path))
+      views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: true, enabled, skills })
+    }
+    return views
+  }
+
+  /**
    * Invalidate this provider synchronously after a first-party filesystem mutation.
    * @param path - host display path observed after a model-facing write or edit.
    */
   observeHostMutation(path: string): void {
+    this.describeCache = undefined
     this.watchManager.observeHostMutation(path)
   }
 
@@ -248,7 +481,7 @@ export class FileSystemSkillProvider implements SkillProvider {
     return this.disposal
   }
 
-  private async roots(cwd: string | undefined): Promise<SkillRoot[]> {
+  private async roots(cwd: string | undefined, includeMissingApplications = false): Promise<SkillRoot[]> {
     const roots: SkillRoot[] = []
     if (this.includeDefaultRoots && cwd !== undefined) {
       const projectRoot = await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
@@ -267,8 +500,30 @@ export class FileSystemSkillProvider implements SkillProvider {
     if (this.bundledSkillDir !== undefined) {
       roots.push({ path: this.bundledSkillDir, source: 'bundled', rank: BUNDLED_SKILL_RANK, trustedHost: true })
     }
+    for (const [index, application] of this.gate().applications.entries()) {
+      // A folder the other application never created is not a source at all,
+      // except when the Skills tab asks to show a previously enabled one.
+      const exists = await pathExists(application.dir, optionalFileSystem(this.ctx))
+      if (!exists && !includeMissingApplications) continue
+      roots.push({
+        path: resolveApplicationDir(application.dir),
+        source: application.id,
+        rank: APPLICATION_RANK + index * 10,
+        skipSystem: true,
+        ...(!exists ? { missing: true } : {}),
+      })
+    }
     return roots
   }
+}
+
+/** Expand a leading `~` in an application folder and make the path absolute. */
+function resolveApplicationDir(dir: string): string {
+  /* v8 ignore next 2 -- the shipped application folders use this expansion; unit fixtures pass absolute folders. */
+  if (dir === '~') return homedir()
+  /* v8 ignore next 2 -- shipped application folders exercise this expansion; unit fixtures pass absolute folders. */
+  if (dir.startsWith('~/') || dir.startsWith('~\\')) return resolve(homedir(), dir.slice(2))
+  return resolve(dir)
 }
 
 type SkillWatchEvent = 'add' | 'addDir' | 'change' | 'unlink' | 'unlinkDir'
@@ -734,7 +989,9 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === code
 }
 
-async function discoverRoot(root: SkillRoot, ctx: Context, provider: string): Promise<SkillCandidate[]> {
+async function discoverRoot(
+  root: SkillRoot, ctx: Context, provider: string, report?: (path: string, message: string) => void,
+): Promise<SkillCandidate[]> {
   const skills: SkillCandidate[] = []
   const entries = await listSkillRootEntries(root, ctx)
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -745,7 +1002,10 @@ async function discoverRoot(root: SkillRoot, ctx: Context, provider: string): Pr
         ? { path: entry.path, directory: root.path }
         : undefined
     if (locator === undefined) continue
-    const parsed = await parseSkillFile(locator.path, ctx, undefined, root.trustedHost === true)
+    const parsed = await parseSkillFile(
+      locator.path, ctx, undefined, root.trustedHost === true,
+      report === undefined ? undefined : (message: string) => { report(locator.path, message) },
+    )
     if (parsed === undefined) continue
     skills.push({
       name: parsed.name,
@@ -803,12 +1063,16 @@ async function listSkillRootEntriesFromNode(root: SkillRoot, ctx: Context): Prom
   for (const entry of entries) {
     const path = join(root.path, entry.name)
     const type = await nodeEntryKind(path, entry, ctx)
+    /* v8 ignore next -- special files that are neither directories nor regular files exist only on POSIX hosts. */
     result.push({ name: entry.name, type: type ?? 'other', path })
   }
   return result
 }
 
-async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, trustedHost = false): Promise<ParsedSkill | undefined> {
+async function parseSkillFile(
+  path: string, ctx: Context, signal?: AbortSignal, trustedHost = false,
+  report?: (message: string) => void,
+): Promise<ParsedSkill | undefined> {
   const raw = await readSkillText(ctx, path, signal, trustedHost)
   signal?.throwIfAborted()
   if (raw === undefined) {
@@ -818,28 +1082,38 @@ async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, 
   try {
     parsed = parseFrontmatter(raw.content)
   } catch (error) {
-    ctx.logger.warn(`skill file ${path} ignored: invalid YAML frontmatter: ${errorMessage(error)}`)
+    const message = `invalid YAML frontmatter: ${errorMessage(error)}`
+    ctx.logger.warn(`skill file ${path} ignored: ${message}`)
+    report?.(message)
     return undefined
   }
   if (!parsed) {
-    ctx.logger.warn(`skill file ${path} ignored: missing YAML frontmatter`)
+    const message = 'missing YAML frontmatter'
+    ctx.logger.warn(`skill file ${path} ignored: ${message}`)
+    report?.(message)
     return undefined
   }
   const name = stringField(parsed.data, 'name')
   const description = stringField(parsed.data, 'description')
   if (name === undefined || description === undefined) {
-    ctx.logger.warn(`skill file ${path} ignored: frontmatter requires name and description`)
+    const message = 'frontmatter requires name and description'
+    ctx.logger.warn(`skill file ${path} ignored: ${message}`)
+    report?.(message)
     return undefined
   }
   if (!isSkillName(name)) {
-    ctx.logger.warn(`skill file ${path} ignored: invalid skill name "${name}"`)
+    const message = `invalid skill name "${name}"`
+    ctx.logger.warn(`skill file ${path} ignored: ${message}`)
+    report?.(message)
     return undefined
   }
   let invocation
   try {
     invocation = parseInvocationPolicy(parsed.data)
   } catch (error) {
-    ctx.logger.warn(`skill file ${path} ignored: invalid invocation frontmatter: ${errorMessage(error)}`)
+    const message = `invalid invocation frontmatter: ${errorMessage(error)}`
+    ctx.logger.warn(`skill file ${path} ignored: ${message}`)
+    report?.(message)
     return undefined
   }
   return {
@@ -912,9 +1186,11 @@ function fsReadErrorMessage(target: FsTarget, error: unknown): string {
 
 async function nodeEntryKind(fullPath: string, entry: { isDirectory(): boolean; isFile(): boolean; isSymbolicLink(): boolean }, ctx: Context): Promise<'directory' | 'file' | undefined> {
   if (entry.isDirectory()) return 'directory'
+  /* v8 ignore next -- entry-kind probe follows a symlink first, which Windows fixtures cannot create. */
   if (entry.isFile()) return 'file'
   /* v8 ignore next -- Non-file directory entries such as FIFOs are platform-specific and intentionally skipped. */
   if (!entry.isSymbolicLink()) return undefined
+  /* v8 ignore next 10 -- symlink fixtures require POSIX privileges; Windows runs them as skipped. */
   try {
     const info = await stat(fullPath)
     if (info.isDirectory()) return 'directory'

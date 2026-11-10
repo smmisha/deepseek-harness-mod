@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-09-chat-harness-tabs-embedded-site.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-09-chat-harness-tabs-embedded-site.md
+/agent-note-chat-and-harness-tabs-with-the-embedded-deepseek-chat:
+  en: 8f0c2577348d4f2c
+  zh: a708dd83d4afdc3d
+/agent-note-chat-and-harness-tabs-with-the-embedded-deepseek-chat/problem:
+  en: 6c39fd7e25e26e9a
+  zh: f9d0b13ed4eacf78
+/agent-note-chat-and-harness-tabs-with-the-embedded-deepseek-chat/decision:
+  en: ce22e5afb81ac573
+  zh: 2915c94dd560272a
+/agent-note-chat-and-harness-tabs-with-the-embedded-deepseek-chat/alternatives-considered:
+  en: 730b38a1def0c086
+  zh: e3f1fd88d59978d8
+/agent-note-chat-and-harness-tabs-with-the-embedded-deepseek-chat/consequences:
+  en: bbfc478fc7c4b1d0
+  zh: 4f18c6705edf7705
