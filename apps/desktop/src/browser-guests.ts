@@ -146,13 +146,14 @@ export class DesktopBrowserGuests {
     const existing = [...this.leases.entries()].find(([, lease]) => lease.kind === 'chat' && lease.owner === owner)
     if (existing !== undefined) {
       const lease = existing[1] as ChatLease
-      if (lease.guest === undefined) {
+      if (!lease.attached && lease.guest === undefined) {
         // Not attached yet: the same lease still owns the partition.
         lease.policy = { allowedOrigins: config.allowedOrigins }
         return { lease: existing[0] as DesktopChatLeaseId, partition: CHAT_PARTITION }
       }
-      // A guest that crashed or is being replaced still holds its lease; retire it
-      // so the attachment check accepts the fresh one.
+      // An attached lease whose guest never arrived (a crash before `dom-ready`) or
+      // is being replaced still holds the attachment slot; retire it so the
+      // attachment check accepts the fresh one.
       this.retireLease(existing[0], lease)
     }
     const browserSession = session.fromPartition(CHAT_PARTITION)

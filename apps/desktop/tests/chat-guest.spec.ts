@@ -40,8 +40,8 @@ vi.mock('electron', () => ({
 
 const { CHAT_PARTITION, DesktopBrowserGuests, chatNavigationAllowed, parseChatConfig } = await import('../src/browser-guests.ts')
 
-const OWNER = (): Electron.WebContents => {
-  const owner = Object.create(null) as Electron.WebContents
+const OWNER = (): Electron.WebContents & EventEmitter => {
+  const owner = new EventEmitter() as Electron.WebContents & EventEmitter
   Object.assign(owner, { id: 7, send: vi.fn(), isDestroyed: () => false })
   return owner
 }
@@ -131,6 +131,21 @@ describe('DesktopBrowserGuests chat kind', () => {
     expect(CHAT_PARTITION.startsWith('persist:')).toBe(true)
     const second = guests.acquireChat(owner, config)
     expect(second.lease).toBe(first.lease)
+  })
+
+  it('retires a lease that attached but never produced a guest', () => {
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const config = { url: 'https://chat.deepseek.com/', allowedOrigins: ['https://chat.deepseek.com'] }
+    const first = guests.acquireChat(owner, config)
+    // The renderer may crash between attaching the webview and `dom-ready`.
+    owner.emit('will-attach-webview', { preventDefault: () => undefined }, {}, {
+      src: `about:blank#${first.lease}`, partition: CHAT_PARTITION,
+    })
+    const second = guests.acquireChat(owner, config)
+    expect(second.lease).not.toBe(first.lease)
+    expect(second.partition).toBe(CHAT_PARTITION)
   })
 
   it('forces the hardened preferences and the chat throttling policy on attachment', () => {
