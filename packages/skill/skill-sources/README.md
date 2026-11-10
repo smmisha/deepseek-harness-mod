@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-One small Host plugin owns the switches behind the Skills tab. Its volatile Config fields live in the profile settings document, so the choice survives restarts and belongs to the reader's profile; every mounted `skill-filesystem` instance reads the same service and re-publishes the catalog after a write. A source switch hides all of its skills without erasing their individual switches, and a retired `skill-sources.json` document from an earlier build is migrated into settings once.
+One small Host plugin owns the switches behind the Skills tab. Its volatile Config fields live in the profile settings document, so the choice survives restarts and belongs to the reader's profile; Every mounted `skill-filesystem` instance reads the same service and re-publishes the catalog after a write. A source switch hides all of its skills without erasing their individual switches.
 
 ## Table of Contents
 
@@ -40,7 +40,7 @@ The switches are ordinary volatile Config fields, so they are edited from the pr
 | `sources` | `{}` | Source switches by source id; absent keeps the source's default (harness folders on, other applications off) |
 | `skills` | `{}` | Per-skill switches by source id and skill name; absent means enabled |
 
-`skill-filesystem` reads them through the `skillSources` service and registers itself for invalidation, so the next model step publishes a replacement skill catalog and `/skill` follows the same state. On first start with a profile that still has the retired `$DSH_HOME/storages/skill-sources.json` document, its switches are written into this entry and the file is renamed with a `.migrated` suffix; an entry that already holds values is never overwritten.
+`skill-filesystem` reads them through the `skillSources` service and registers itself for invalidation, so the next model step publishes a replacement skill catalog and `/skill` follows the same state.
 
 ## Understand the implementation
 
@@ -70,7 +70,6 @@ None; it only stores switches that other packages consult before rendering the c
 <a id="known-limitations-and-deferred-work"></a>
 
 - Switches are stored per profile entry: a second profile keeps its own choices, and copying a profile copies them.
-- The migration runs only when the entry has no switches yet; a half-migrated profile is not repaired automatically.
 - Only providers that register through the service react to a write; a provider mounted without it keeps the switches it read at startup.
 - Writes are unconditional (no revision fence): two simultaneous toggles can overwrite each other.
 
