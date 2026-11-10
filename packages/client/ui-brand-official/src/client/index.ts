@@ -18,7 +18,10 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.hero.frame',
     id: 'pixel-whale',
   }, PixelWhale))
-  if (process.env.DSH_CLIENT_BUILD_PROFILE !== 'official') return
+  // Both release and local builds keep the official sidebar lockup: the
+  // local-build label is a build diagnostic, not a product identity.
+  const profile = process.env.DSH_CLIENT_BUILD_PROFILE
+  if (profile !== 'official' && profile !== 'local') return
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, OfficialBrandMark)
