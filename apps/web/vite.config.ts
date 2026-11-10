@@ -175,9 +175,15 @@ export default defineConfig({
     productWebBundleIsolation(src('../..'), src('.')),
   ],
   build: {
+    // Windows' esbuild service intermittently fails to delete the temporary
+    // plugin files it writes under %TEMP% ("remove ...\esbuild-<hash>: Access
+    // is denied"), which aborts the transpile pass. Terser refuses none of the
+    // chunk shapes and the esnext target keeps that pass out of the pipeline,
+    // so Windows builds minify with terser instead.
+    minify: process.platform === 'win32' ? 'terser' : 'esbuild',
     // The worker bootstrap holds its page at top-level await; Vite's default
     // `modules` target (es2020-era) rejects that syntax.
-    target: 'es2022',
+    target: process.platform === 'win32' ? 'esnext' : 'es2022',
     sourcemap: true,
     rollupOptions: {
       input: {
