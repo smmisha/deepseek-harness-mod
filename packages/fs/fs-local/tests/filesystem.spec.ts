@@ -17,6 +17,19 @@ import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
 import { FsVersion } from '@deepseek-ai/dsh-fs'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const probe = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(probe, 'target'), join(probe, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(probe, { recursive: true, force: true })
+  }
+})()
+
 let dir: string
 let ctx: Context
 let fs: LocalFileSystem
@@ -224,7 +237,7 @@ describe('lstat', () => {
     }
   })
 
-  it('reports path metadata without following the final symlink component', async () => {
+  it.skipIf(!symlinkFilesAvailable)('reports path metadata without following the final symlink component', async () => {
     await writeFile(join(dir, 'real.txt'), 'hello')
     await symlink(join(dir, 'real.txt'), join(dir, 'link.txt'))
 
@@ -405,7 +418,7 @@ describe('readByteRange', () => {
 })
 
 describe('listDir', () => {
-  it('lists files and directories in stable name order with resolved child targets', async () => {
+  it.skipIf(!symlinkFilesAvailable)('lists files and directories in stable name order with resolved child targets', async () => {
     await mkdir(join(dir, 'skills', 'dir-skill'), { recursive: true })
     await writeFile(join(dir, 'skills', 'zeta.md'), 'zeta')
     await writeFile(join(dir, 'skills', 'alpha.md'), 'alpha')
@@ -474,7 +487,7 @@ describe('writeText', () => {
     expect(await readFile(path, 'utf8')).toBe('competitor')
   })
 
-  it('reports a createIfAbsent race with the unresolved display path', async () => {
+  it.skipIf(!symlinkFilesAvailable)('reports a createIfAbsent race with the unresolved display path', async () => {
     const realDirectory = join(dir, 'real-workspace')
     const linkedDirectory = join(dir, 'linked-workspace')
     await mkdir(realDirectory)
@@ -499,7 +512,7 @@ describe('writeText', () => {
     expect((await stat(path)).isDirectory()).toBe(true)
   })
 
-  it('createIfAbsent rejects and preserves a dangling symbolic link', async () => {
+  it.skipIf(!symlinkFilesAvailable)('createIfAbsent rejects and preserves a dangling symbolic link', async () => {
     const path = join(dir, 'dangling')
     await symlink(join(dir, 'missing-target'), path)
     const target = await fs.resolve('dangling')
@@ -848,7 +861,7 @@ describe('editText', () => {
 })
 
 describe('symlink targetKey identity', () => {
-  it('two paths to the same file via a symlink share one version and write the real target', async () => {
+  it.skipIf(!symlinkFilesAvailable)('two paths to the same file via a symlink share one version and write the real target', async () => {
     await writeFile(join(dir, 'real.txt'), 'hello')
     await symlink(join(dir, 'real.txt'), join(dir, 'link.txt'))
     const viaReal = await fs.resolve('real.txt')
@@ -860,7 +873,7 @@ describe('symlink targetKey identity', () => {
     expect(await readFile(join(dir, 'real.txt'), 'utf8')).toBe('bye') // link preserved
   })
 
-  it('a stale change is detected across both paths', async () => {
+  it.skipIf(!symlinkFilesAvailable)('a stale change is detected across both paths', async () => {
     await writeFile(join(dir, 'real.txt'), 'hello')
     await symlink(join(dir, 'real.txt'), join(dir, 'link.txt'))
     const viaReal = await fs.resolve('real.txt')

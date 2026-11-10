@@ -808,7 +808,7 @@ describe('header-validated membership projection', () => {
     expect(again.registry.get(workspace.id)!.sessionIds).toEqual(['first', 'second'])
   })
 
-  it('preserves an owned session when its symlink target disappears without bootstrapping missing paths', async () => {
+  it.skipIf(!symlinkFilesAvailable)('preserves an owned session when its symlink target disappears without bootstrapping missing paths', async () => {
     const target = await makeDir('removed-symlink-target')
     const alias = join(base, 'removed-symlink-alias')
     await symlink(target, alias, 'junction')

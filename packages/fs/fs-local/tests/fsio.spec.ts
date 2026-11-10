@@ -137,7 +137,7 @@ describe('resolveLocalTarget', () => {
     expect(missing.targetKey).toBe(join(await realpath(dir), 'missing', 'created.txt'))
   })
 
-  it.skipIf(process.platform === 'win32')('resolves parent traversal after a symlink in the provider filesystem', async () => {
+  it.skipIf(process.platform === 'win32' || !symlinkFilesAvailable)('resolves parent traversal after a symlink in the provider filesystem', async () => {
     const physical = join(dir, 'physical')
     await mkdir(join(physical, 'nested'), { recursive: true })
     await mkdir(join(dir, 'lexical'))
@@ -228,7 +228,7 @@ describe('probeNoFollow', () => {
 })
 
 describe('listDirectory', () => {
-  it.skipIf(process.platform === 'win32')('preserves physical parent traversal in displayed child paths', async () => {
+  it.skipIf(process.platform === 'win32' || !symlinkFilesAvailable)('preserves physical parent traversal in displayed child paths', async () => {
     const lexical = join(dir, 'lexical')
     const physical = join(dir, 'physical')
     await mkdir(lexical)
