@@ -3472,7 +3472,7 @@ export interface SkillApplication {
 /** One source switch stored in this profile's settings. */
 export interface SkillSourceSwitch {
   /** Whether the source contributes skills; absent keeps the source's own default. */
-  readonly enabled: boolean
+  readonly enabled?: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill-sources -->
