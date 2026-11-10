@@ -3,18 +3,20 @@
  *
  * Two guest kinds share one attachment check: the right-Sidebar browser keeps a
  * process-local partition per workspace, while the Chat tab keeps one persistent
- * partition and a navigation allowlist. The Chat tab also hosts its sign-in
- * providers in embedded windows on that partition, so the site's Google and
- * Apple flows finish inside the application; every other window is opened
- * outside. Every attachment still has to name a main-issued lease, match its
- * partition, and come from the application window; the kind only decides the
- * session policy and where disallowed pages go.
+ * partition and a navigation allowlist. Provider sign-ins the embedded browser
+ * cannot finish are handed to a controlled Chrome/Edge profile, and the
+ * resulting DeepSeek cookies are copied into the chat partition. Every
+ * attachment still has to name a main-issued lease, match its partition, and
+ * come from the application window; the kind only decides the session policy
+ * and where disallowed pages go.
  */
 import { randomUUID } from 'node:crypto'
-import { app, Menu, session, shell, type BrowserWindow, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
+import { join } from 'node:path'
+import { app, Menu, session, shell, type BrowserWindow, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import type { DesktopChatConfig, DesktopChatLeaseId, DesktopChatReservation } from '@deepseek-ai/dsh-client-ui-work-mode/types'
 import type { DesktopMessages } from './locale.ts'
+import { collectChatLoginCookies, findChatBrowser, toCookieDetails } from './chat-login-browser.ts'
 import { DESKTOP_IPC } from './ipc.ts'
 
 /** The single persistent partition the Chat tab's guest uses. */
@@ -31,13 +33,12 @@ const CHAT_USER_AGENT = (() => {
   return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`
 })()
 
-/** Provider suffixes whose sign-in windows the embedded Chat may host itself. */
+/** Sign-in provider suffixes whose windows the embedded Chat hands to a real browser. */
 const CHAT_LOGIN_SUFFIXES: readonly string[] = ['.google.com', '.apple.com']
 
 /**
  * Whether a requested window belongs to a sign-in provider the embedded Chat
- * may open on its own partition. Every other window keeps the external-browser
- * policy.
+ * hands to the controlled external browser.
  * @param value - requested window URL.
  * @returns true for a credential-free HTTPS sign-in address.
  */
@@ -136,7 +137,7 @@ export class DesktopBrowserGuests {
   private readonly partitions = new Map<string, string>()
   private readonly leases = new Map<GuestLeaseId, GuestLease>()
   private readonly configuredChatSessions = new Set<Session>()
-  private readonly chatLoginWindows = new Map<GuestLeaseId, Set<BrowserWindow>>()
+  private readonly chatLoginAttempts = new Set<number>()
   private chatOrigins: readonly string[] = []
 
   /** @param hostUrl - current authenticated DSH Host, which guests cannot request. */
@@ -269,7 +270,7 @@ export class DesktopBrowserGuests {
         attachedLease = id
         // The right Sidebar's frame routing owns input for its own guests only.
         if (lease.kind === 'browser') lease.releaseInput = attachInput(guest, id as DesktopBrowserLeaseId)
-        guest.once('destroyed', () => { lease.releaseInput?.(); this.closeChatLoginWindows(id); this.leases.delete(id) })
+        guest.once('destroyed', () => { lease.releaseInput?.(); this.leases.delete(id) })
         if (lease.kind === 'chat') this.attachChatPolicies(window, guest, messages)
       })
       guest.setWindowOpenHandler(({ url, postBody }) => {
@@ -279,13 +280,11 @@ export class DesktopBrowserGuests {
         }
         if (postBody !== undefined) return { action: 'deny' }
         if (lease.kind === 'chat') {
-          // Sign-in providers open as an embedded window on the chat partition so
-          // their cookies reach the guest that is waiting for the result; every
-          // other target keeps the external-browser policy.
-          if (chatLoginAllowed(url)) {
-            return { action: 'allow', overrideBrowserWindowOptions: this.chatLoginWindowOptions() }
-          }
-          if (openableExternally(url)) void shell.openExternal(url)
+          // Sign-in providers are completed in a controlled external browser:
+          // Google refuses embedded browsers, so the result comes back as
+          // cookies and the guest reloads signed in.
+          if (chatLoginAllowed(url)) this.startChatLogin(guest, url)
+          else if (openableExternally(url)) void shell.openExternal(url)
           return { action: 'deny' }
         }
         if (this.allowedNavigation(url)) {
@@ -293,22 +292,6 @@ export class DesktopBrowserGuests {
           owner.send(DESKTOP_IPC.browserOpenRequested, request)
         }
         return { action: 'deny' }
-      })
-      guest.on('did-create-window', (child) => {
-        const id = attachedLease
-        if (id === undefined) {
-          child.destroy()
-          return
-        }
-        child.webContents.setUserAgent(CHAT_USER_AGENT)
-        child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-        const windows = this.chatLoginWindows.get(id) ?? new Set<BrowserWindow>()
-        windows.add(child)
-        this.chatLoginWindows.set(id, windows)
-        child.once('closed', () => {
-          windows.delete(child)
-          if (windows.size === 0) this.chatLoginWindows.delete(id)
-        })
       })
       guest.on('will-frame-navigate', (event) => {
         if (!event.isMainFrame) return
@@ -341,7 +324,6 @@ export class DesktopBrowserGuests {
 
   /** Retire one lease and close the guest it still holds. */
   private retireLease(id: GuestLeaseId, lease: GuestLease): void {
-    this.closeChatLoginWindows(id)
     lease.releaseInput?.()
     this.leases.delete(id)
     const guest = lease.guest
@@ -382,28 +364,38 @@ export class DesktopBrowserGuests {
     })
   }
 
-  /** Embedded sign-in window: same partition and user agent as the chat guest. */
-  private chatLoginWindowOptions(): BrowserWindowConstructorOptions {
-    return {
-      width: 780,
-      height: 820,
-      autoHideMenuBar: true,
-      webPreferences: {
-        partition: CHAT_PARTITION,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        devTools: !app.isPackaged,
-      },
+  /** Hand a provider sign-in to the controlled external browser, then import its cookies. */
+  private startChatLogin(guest: WebContents, url: string): void {
+    const id = guest.id
+    if (this.chatLoginAttempts.has(id)) return
+    const executable = findChatBrowser()
+    if (executable === undefined) {
+      // Without Chrome or Edge the reader's default browser is the only option,
+      // even though its session cannot come back into the guest.
+      if (openableExternally(url)) void shell.openExternal(url)
+      return
     }
-  }
-
-  /** Close every sign-in window a lease still owns. */
-  private closeChatLoginWindows(id: GuestLeaseId): void {
-    const windows = this.chatLoginWindows.get(id)
-    if (windows === undefined) return
-    this.chatLoginWindows.delete(id)
-    for (const window of windows) if (!window.isDestroyed()) window.destroy()
+    this.chatLoginAttempts.add(id)
+    void collectChatLoginCookies({
+      url,
+      executable,
+      profileDir: join(app.getPath('userData'), 'chat-login-browser'),
+    }).then(async (cookies) => {
+      if (cookies === undefined || cookies.length === 0) return
+      const chatSession = session.fromPartition(CHAT_PARTITION)
+      for (const cookie of cookies) {
+        try {
+          await chatSession.cookies.set(toCookieDetails(cookie))
+        } catch (error) {
+          // A browser-only cookie (prefix, partition, or size rule) must not
+          // stop the session cookie from reaching the guest.
+          if (!app.isPackaged) console.warn('[chat-guest] skipped cookie', cookie.name, error)
+        }
+      }
+      if (!guest.isDestroyed()) void guest.loadURL('https://chat.deepseek.com/')
+    }).catch((error: unknown) => {
+      if (!app.isPackaged) console.warn('[chat-guest] browser sign-in failed', error)
+    }).finally(() => { this.chatLoginAttempts.delete(id) })
   }
 
   /** Browser policy for the right Sidebar, chat policy for the Chat tab. */
@@ -412,10 +404,17 @@ export class DesktopBrowserGuests {
     return this.allowedNavigation(value)
   }
 
-  /** Report a blocked chat navigation and hand the target to the reader's browser. */
+  /** Report a blocked chat navigation and hand the target to the sign-in browser or the reader's browser. */
   private reportBlocked(lease: GuestLease | undefined, value: string, owner?: WebContents): void {
     if (lease?.kind !== 'chat') return
     if (!app.isPackaged) console.warn(`[chat-guest] blocked navigation ${value}`)
+    // A provider sign-in needs the controlled browser even when the page did
+    // not open a window for it.
+    const guest = lease.guest
+    if (guest !== undefined && chatLoginAllowed(value)) {
+      this.startChatLogin(guest, value)
+      return
+    }
     // A user-clicked page outside the allowlist belongs to the reader's browser in every build.
     if (owner === undefined) return
     if (openableExternally(value)) void shell.openExternal(value)
