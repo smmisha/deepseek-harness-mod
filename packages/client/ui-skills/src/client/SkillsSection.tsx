@@ -3,7 +3,7 @@
  * switch; a source switch hides all of its skills without forgetting the
  * per-skill switches, which the Host replays when the source returns.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
@@ -76,21 +76,23 @@ export function SkillsSection({ t, useSessions, load, setSource, setSkill }: Ski
   }
 
   // A response for a previous working directory must never replace the current
-  // one: the cleanup marks the in-flight load stale and it drops its result.
+  // one: the effect captures a request number and drops a result that is no
+  // longer the latest request.
+  const latestLoad = useRef(0)
   useEffect(() => {
-    let active = true
+    const request = latestLoad.current + 1
+    latestLoad.current = request
     void (async () => {
       try {
         const next = await load(cwd)
-        if (!active) return
+        if (latestLoad.current !== request) return
         setSources(next)
         setFailure(null)
       } catch (error) {
-        if (!active) return
+        if (latestLoad.current !== request) return
         setFailure(error instanceof Error ? error.message : String(error))
       }
     })()
-    return () => { active = false }
   }, [cwd])
 
   const withBusy = async (key: string, write: () => Promise<string | undefined>): Promise<void> => {

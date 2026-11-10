@@ -163,6 +163,13 @@
   background: var(--dsh-sidebar-wash-dark), var(--dsw-specific-sidebar-fill-solid);
 }
 
+/* The opaque fill above resolves to an elevated rung, so scrollbars inside the
+   column take the elevation pair instead of the base-surface indirection. */
+:global(html:not([data-platform='darwin'])) .sidebarCol {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
 /* macOS Reduce Transparency: the OS flattens the window's vibrancy layer to a
    solid grey, so the thin tint and washes read washed-out over it. Replace
    them with a 90%-opaque fill of the same token in both themes (the dark

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-One small Host plugin owns the switches behind the Skills tab. Its volatile Config fields live in the profile settings document, so the choice survives restarts and belongs to the reader's profile; Every mounted `skill-filesystem` instance reads the same service and re-publishes the catalog after a write. A source switch hides all of its skills without erasing their individual switches.
+One small Host plugin owns the switches behind the Skills tab. Its volatile Config fields live in the profile settings document, so the choice survives restarts and belongs to the reader's profile; every mounted `skill-filesystem` instance reads the same service and re-publishes the catalog after a write. A source switch hides all of its skills without erasing their individual switches.
 
 ## Table of Contents
 
