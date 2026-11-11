@@ -25,14 +25,24 @@ function createProductApi(): DshDesktopProductApi {
     browser: createDesktopBrowserBridge(),
     chat: {
       acquire: config => ipcRenderer.invoke(DESKTOP_IPC.chatAcquire, config) as Promise<DesktopChatReservation>,
-      onLoginWindow(listener) {
+      onLoginState(listener) {
         const handler = (_event: unknown, state: unknown): void => {
-          if (typeof state !== 'object' || state === null || !('open' in state) || typeof state.open !== 'boolean') return
-          listener({ open: state.open })
+          if (typeof state !== 'object' || state === null) return
+          const row = state as Record<string, unknown>
+          if (row.kind === 'idle' || row.kind === 'window' || row.kind === 'browser') {
+            listener({ kind: row.kind })
+            return
+          }
+          if (row.kind === 'failed'
+            && (row.reason === 'browser-missing' || row.reason === 'timeout'
+              || row.reason === 'transfer' || row.reason === 'provider-rejected')) {
+            listener({ kind: 'failed', reason: row.reason })
+          }
         }
-        ipcRenderer.on(DESKTOP_IPC.chatLoginWindow, handler)
-        return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginWindow, handler) }
+        ipcRenderer.on(DESKTOP_IPC.chatLoginState, handler)
+        return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginState, handler) }
       },
+      startBrowserLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginStart) as Promise<void>,
       cancelLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginCancel) as Promise<void>,
     },
     fileDrag: {

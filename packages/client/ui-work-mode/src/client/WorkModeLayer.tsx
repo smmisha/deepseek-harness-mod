@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { WhaleMark } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DesktopChatBridge, DesktopChatConfig } from '../types.ts'
+import type { DesktopChatBridge, DesktopChatConfig, DesktopChatLoginPhase } from '../types.ts'
 import type { ChatGuestHandle, ChatGuestOptions, ChatGuestState } from './desktop-chat.ts'
 import { ModeSwitcher } from './ModeSwitcher.tsx'
 import type { WorkMode } from './store.ts'
@@ -76,7 +76,7 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
   // The site loads on the first Chat visit, not at application start.
   const [started, setStarted] = useState(chat)
   const [guestState, setGuestState] = useState<ChatGuestState>('loading')
-  const [loginOpen, setLoginOpen] = useState(false)
+  const [login, setLogin] = useState<DesktopChatLoginPhase>({ kind: 'idle' })
   const [attempt, setAttempt] = useState(0)
   const host = useRef<HTMLDivElement | null>(null)
   const guest = useRef<ChatGuestHandle | null>(null)
@@ -102,7 +102,7 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
 
   useEffect(() => {
     if (bridge === undefined) return
-    return bridge.onLoginWindow((state) => { setLoginOpen(state.open) })
+    return bridge.onLoginState((state) => { setLogin(state) })
   }, [bridge])
 
   useEffect(() => {
@@ -152,10 +152,25 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
           : started && (
             <>
               <div className={css.guest} ref={host} data-hidden={failed ? '' : undefined} data-work-mode-host="" />
-              {loginOpen && (
+              {login.kind !== 'idle' && (
                 <div className={css.card} data-work-mode-login="">
-                  <p className={css.body}>{t('chat.loginPending')}</p>
+                  <p className={css.body}>
+                    {login.kind === 'window' ? t('chat.loginPending')
+                      : login.kind === 'browser' ? t('chat.browserWaiting')
+                        : t(login.reason === 'provider-rejected' ? 'chat.providerRejected'
+                          : login.reason === 'browser-missing' ? 'chat.browserMissing'
+                            : login.reason === 'timeout' ? 'chat.browserTimeout' : 'chat.browserFailed')}
+                  </p>
                   <div className={css.actions}>
+                    {login.kind === 'failed' && (
+                      <button
+                        type="button"
+                        className={clsx(css.action, css.actionPrimary)}
+                        onClick={() => { void bridge.startBrowserLogin() }}
+                      >
+                        {t('chat.browserLogin')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={css.action}
@@ -193,6 +208,15 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
       </div>
       <div className={css.bar} data-work-mode-bar="">
         <ModeSwitcher mode={mode} onSelect={(next) => { actions.setMode(next) }} t={t} />
+        {chat && bridge !== undefined && (
+          <button
+            type="button"
+            className={css.browserLogin}
+            onClick={() => { void bridge.startBrowserLogin() }}
+          >
+            {t('chat.browserLogin')}
+          </button>
+        )}
       </div>
     </div>
   )

@@ -30,7 +30,7 @@ kind: "package-reference"
 
 guest 只挂载一次，插件存活期间绝不移动或卸载：切到 Harness 只是用 `opacity` 与 `inert` 隐藏覆盖层（而不是 `display: none`，后者会分离 guest 并导致重载），因此已打开的对话、滚动位置、草稿以及正在生成的回答都会跨切换保留。桌面外壳同样让隐藏状态的渲染进程不被节流。站点只在首次打开「对话」标签时加载，而不是在应用启动时。
 
-「对话」标签加载配置中的地址：`url`（默认 `https://chat.deepseek.com/`）、`allowedOrigins`（默认站点自身 origin）、`loginHosts`（默认 `accounts.youtube.com` 与 `appleid.apple.com`）以及 `loginHostSuffixes`（默认 `accounts.google.`）。跳转到已配置提供方主机的主框架导航保留在 guest 内，因此 Google 的重定向链及其返回站点的跳转都在同一页面内完成；Apple 的 `window.open` 弹窗获得对话分区上的真实子窗口，并保留 opener。其他主框架目标在系统浏览器中打开，其他 `window.open` 调用也同样外送。被拒绝的导航与提供方窗口决策会以不含 token 或 Cookie 的形式追加到 Desktop 登录日志（userData 下的 `logs/chat-login.log`）。guest 加载失败或渲染进程崩溃时，标签显示本地化的卡片，带 **重试** 与 **在浏览器中打开**：加载失败在同一 guest 内重试，只有渲染进程崩溃才重建 guest。
+「对话」标签加载配置中的地址：`url`（默认 `https://chat.deepseek.com/`）、`allowedOrigins`（默认站点自身 origin）、`loginHosts`（默认 `accounts.youtube.com` 与 `appleid.apple.com`）以及 `loginHostSuffixes`（默认 `accounts.google.`）。跳转到已配置提供方主机的主框架导航保留在 guest 内，因此 Google 的重定向链及其返回站点的跳转都在同一页面内完成；Apple 的 `window.open` 弹窗获得对话分区上的真实子窗口，并保留 opener。其他主框架目标在系统浏览器中打开，其他 `window.open` 调用也同样外送。对于拒绝内嵌浏览器的提供方，提供 **通过浏览器登录** 操作：Desktop 外壳以专用 Chrome 或 Edge 配置打开对话页，等到站点自身把非空的 `localStorage.userToken` 写入后（而不是等待地址变化），把浏览器 Cookie 以及 `userToken`、`__appKit_userInfo`、`deepseek-device-id:chat` 写入 guest 并重新加载。`browserLoginTimeoutMs` 与 `browserLoginPollMs` 限定等待时间。被拒绝的导航与提供方窗口决策会以不含 token 或 Cookie 的形式追加到 Desktop 登录日志（userData 下的 `logs/chat-login.log`）。guest 加载失败或渲染进程崩溃时，标签显示本地化的卡片，带 **重试** 与 **在浏览器中打开**：加载失败在同一 guest 内重试，只有渲染进程崩溃才重建 guest。
 
 ## 理解实现
 
@@ -64,7 +64,8 @@ guest 只挂载一次，插件存活期间绝不移动或卸载：切到 Harness
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 提供方登录的完成属于站点流程：策略允许 Google 的重定向链与 Apple 的弹窗在 guest 内运行，但提供方是否接受内嵌浏览器不受本插件控制。Desktop 登录日志会记录哪些跳转与窗口被允许。
+- 提供方登录的完成属于站点流程：策略允许 Google 的重定向链与 Apple 的弹窗在 guest 内运行，但提供方是否接受内嵌浏览器不受本插件控制。Desktop 登录日志会记录哪些跳转与窗口被允许，浏览器回退路径负责处理拒绝。
+- 浏览器回退复制站点自身的会话，而不是新签 token。`deepseek-device-id:chat` 与 `userToken` 一起传输，因为站点的 `auth_token/check_device` 会拒绝在另一台设备上创建的会话；缺少它时，复制的登录会在下次检查时被丢弃。token 只由主进程写入对话 origin 的 `localStorage`，从不记录日志，也不传给 harness 渲染进程。
 - 只检查主框架导航；站点的子资源除应用 Host 守卫外不做代理或过滤。
 - 站点自己渲染的错误页（HTTP 5xx 文档）对 guest 来说与普通页面无异；失败卡片只覆盖网络失败、被取消的加载与渲染进程崩溃。
 - Web 构建无法嵌入站点；那里的「对话」标签就是回退页面。

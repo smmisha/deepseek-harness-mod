@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { allowAllAccess, contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
-import type { DesktopChatBridge, DesktopChatConfig, DesktopChatReservation } from '../src/types.ts'
+import type { DesktopChatBridge, DesktopChatConfig, DesktopChatLoginPhase, DesktopChatReservation } from '../src/types.ts'
 import type { ChatGuestHandle, ChatGuestOptions } from '../src/client/desktop-chat.ts'
 import { WorkModeLayer, type WorkModeLayerProps } from '../src/client/WorkModeLayer.tsx'
 import { en } from '../src/client/locales.ts'
@@ -16,6 +16,8 @@ const CONFIG: DesktopChatConfig = {
   allowedOrigins: ['https://chat.deepseek.com'],
   loginHosts: [],
   loginHostSuffixes: [],
+  browserLoginTimeoutMs: 300_000,
+  browserLoginPollMs: 2_000,
 }
 const t = ((key: keyof typeof en) => en[key]) as WorkModeLayerProps['t']
 
@@ -45,7 +47,8 @@ const bridge = (): DesktopChatBridge => ({
     lease: 'chat-lease' as DesktopChatReservation['lease'],
     partition: 'persist:dsh-chat',
   })),
-  onLoginWindow: () => () => {},
+  onLoginState: () => () => {},
+  startBrowserLogin: vi.fn(async () => {}),
   cancelLogin: vi.fn(async () => {}),
 })
 
@@ -93,7 +96,12 @@ describe('WorkModeLayer', () => {
       lease: 'chat-lease' as DesktopChatReservation['lease'],
       partition: 'persist:dsh-chat',
     }))
-    const shell: DesktopChatBridge = { acquire, onLoginWindow: () => () => {}, cancelLogin: async () => {} }
+    const shell: DesktopChatBridge = {
+      acquire,
+      onLoginState: () => () => {},
+      startBrowserLogin: async () => {},
+      cancelLogin: async () => {},
+    }
     const view = render(<WorkModeLayer {...props('harness', { bridge: shell, createGuest: factory.createGuest })} />)
     expect(acquire).not.toHaveBeenCalled()
     view.rerender(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
@@ -213,28 +221,79 @@ describe('WorkModeLayer', () => {
     open.mockRestore()
   })
 
-  it('shows the provider sign-in prompt while its window is open and cancels it', async () => {
-    let listener: ((state: { open: boolean }) => void) | undefined
+  it('renders provider window, browser, and failure states and drives their actions', async () => {
+    let listener: ((state: DesktopChatLoginPhase) => void) | undefined
     const cancelLogin = vi.fn(async () => {})
+    const startBrowserLogin = vi.fn(async () => {})
     const shell: DesktopChatBridge = {
       acquire: vi.fn(async () => ({
         lease: 'chat-lease' as DesktopChatReservation['lease'],
         partition: 'persist:dsh-chat',
       })),
-      onLoginWindow: (next) => { listener = next; return () => {} },
+      onLoginState: (next) => { listener = next; return () => {} },
+      startBrowserLogin,
       cancelLogin,
     }
     const factory = guests()
     render(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
     await waitFor(() => { expect(factory.calls).toHaveLength(1) })
 
-    act(() => { listener?.({ open: true }) })
+    act(() => { listener?.({ kind: 'window' }) })
     expect(screen.getByText(en['chat.loginPending'])).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en['chat.loginCancel'] }))
     expect(cancelLogin).toHaveBeenCalledTimes(1)
 
-    act(() => { listener?.({ open: false }) })
-    expect(screen.queryByText(en['chat.loginPending'])).toBeNull()
+    act(() => { listener?.({ kind: 'browser' }) })
+    expect(screen.getByText(en['chat.browserWaiting'])).toBeTruthy()
+
+    act(() => { listener?.({ kind: 'failed', reason: 'provider-rejected' }) })
+    expect(screen.getByText(en['chat.providerRejected'])).toBeTruthy()
+    const loginButtons = screen.getAllByRole('button', { name: en['chat.browserLogin'] })
+    fireEvent.click(loginButtons[0]!)
+    expect(startBrowserLogin).toHaveBeenCalledTimes(1)
+
+    act(() => { listener?.({ kind: 'idle' }) })
+    expect(screen.queryByText(en['chat.providerRejected'])).toBeNull()
+  })
+
+  it.each([
+    ['browser-missing', 'chat.browserMissing'],
+    ['timeout', 'chat.browserTimeout'],
+    ['transfer', 'chat.browserFailed'],
+  ] as const)('renders the %s fallback failure', async (reason, key) => {
+    let listener: ((state: DesktopChatLoginPhase) => void) | undefined
+    const shell: DesktopChatBridge = {
+      acquire: vi.fn(async () => ({
+        lease: 'chat-lease' as DesktopChatReservation['lease'],
+        partition: 'persist:dsh-chat',
+      })),
+      onLoginState: (next) => { listener = next; return () => {} },
+      startBrowserLogin: vi.fn(async () => {}),
+      cancelLogin: vi.fn(async () => {}),
+    }
+    const factory = guests()
+    render(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
+    await waitFor(() => { expect(factory.calls).toHaveLength(1) })
+    act(() => { listener?.({ kind: 'failed', reason }) })
+    expect(screen.getByText(en[key])).toBeTruthy()
+  })
+
+  it('starts the browser fallback from the Chat bar', async () => {
+    const startBrowserLogin = vi.fn(async () => {})
+    const shell: DesktopChatBridge = {
+      acquire: vi.fn(async () => ({
+        lease: 'chat-lease' as DesktopChatReservation['lease'],
+        partition: 'persist:dsh-chat',
+      })),
+      onLoginState: () => () => {},
+      startBrowserLogin,
+      cancelLogin: vi.fn(async () => {}),
+    }
+    const factory = guests()
+    render(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
+    await waitFor(() => { expect(factory.calls).toHaveLength(1) })
+    fireEvent.click(screen.getByRole('button', { name: en['chat.browserLogin'] }))
+    expect(startBrowserLogin).toHaveBeenCalledTimes(1)
   })
 
   it('switches modes through the capsule', () => {

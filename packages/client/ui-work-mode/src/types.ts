@@ -35,13 +35,21 @@ export interface DesktopChatConfig {
    * regional hosts of one provider.
    */
   readonly loginHostSuffixes: readonly string[]
+  /** Overall deadline of the external-browser fallback, in milliseconds. */
+  readonly browserLoginTimeoutMs: number
+  /** Delay between token checks in the external-browser fallback, in milliseconds. */
+  readonly browserLoginPollMs: number
 }
 
-/** Provider window state the Chat tab renders while Apple sign-in is open. */
-export interface DesktopChatLoginState {
-  /** True while a provider sign-in window is open for this guest. */
-  readonly open: boolean
-}
+/** Provider sign-in state the Chat tab renders. */
+export type DesktopChatLoginPhase =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'window' }
+  | { readonly kind: 'browser' }
+  | {
+    readonly kind: 'failed'
+    readonly reason: 'browser-missing' | 'timeout' | 'transfer' | 'provider-rejected'
+  }
 
 /** Main-process chat guest operations exposed to the application document. */
 export interface DesktopChatBridge {
@@ -52,11 +60,13 @@ export interface DesktopChatBridge {
    */
   acquire(config: DesktopChatConfig): Promise<DesktopChatReservation>
   /**
-   * Observe provider sign-in windows opened for the chat guest.
-   * @param listener - receives the current window state; the returned callback unsubscribes.
+   * Observe provider sign-in state.
+   * @param listener - receives every phase change; the returned callback unsubscribes.
    * @returns unsubscribe callback.
    */
-  onLoginWindow(listener: (state: DesktopChatLoginState) => void): () => void
-  /** Close the provider sign-in window this document still has open. */
+  onLoginState(listener: (state: DesktopChatLoginPhase) => void): () => void
+  /** Start the external-browser fallback for this document. */
+  startBrowserLogin(): Promise<void>
+  /** Close the provider window or cancel the browser attempt this document owns. */
   cancelLogin(): Promise<void>
 }

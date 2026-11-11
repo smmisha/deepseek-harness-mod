@@ -20,6 +20,8 @@ const CONFIG: DesktopChatConfig = {
   allowedOrigins: ['https://chat.deepseek.com'],
   loginHosts: [],
   loginHostSuffixes: [],
+  browserLoginTimeoutMs: 300_000,
+  browserLoginPollMs: 2_000,
 }
 const restores: (() => void)[] = []
 
@@ -34,7 +36,8 @@ function installFakeElement(element: HTMLElement): void {
 }
 const BRIDGE: DesktopChatBridge = {
   acquire: async () => ({ lease: 'lease-1' as DesktopChatLeaseId, partition: 'persist:chat' }),
-  onLoginWindow: () => () => {},
+  onLoginState: () => () => {},
+  startBrowserLogin: async () => {},
   cancelLogin: async () => {},
 }
 

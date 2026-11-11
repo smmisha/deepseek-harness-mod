@@ -1,12 +1,12 @@
 /**
- * External-browser sign-in hand-off for the embedded Chat.
+ * External-browser fallback for provider sign-in that the embedded browser
+ * cannot finish.
  *
- * Google refuses OAuth inside embedded browsers, and Electron cannot read a
- * normal browser profile: cookies are encrypted and the profile is locked while
- * Chrome runs. This module launches a dedicated Chrome/Edge profile with the
- * DevTools protocol enabled, lets the reader finish the provider flow there,
- * and returns the resulting DeepSeek cookies for the app's chat partition. The
- * dedicated profile keeps the provider session, so later hand-offs are quick.
+ * The controlled Chrome/Edge profile keeps the provider session. The app waits
+ * until the site itself reports a token in `localStorage.userToken`, then hands
+ * the browser cookies and the three storage entries the site needs back to the
+ * caller. Nothing is read from the page beyond those entries, and no token is
+ * logged.
  */
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
@@ -24,22 +24,68 @@ export interface BrowserCookie {
   readonly expirationDate?: number | undefined
 }
 
-/** One browser hand-off request. */
+/** Login material collected from the controlled browser. */
+export interface ChatLoginPayload {
+  readonly cookies: readonly BrowserCookie[]
+  /** Raw `localStorage` values by key; absent keys are not transferred. */
+  readonly storage: Readonly<Record<string, string>>
+}
+
+/** Timing for one external-browser login attempt. */
 export interface ChatLoginBrowserRequest {
-  /** Provider URL the reader would otherwise open inside the guest. */
+  /** Chat address the controlled browser opens. */
   readonly url: string
   /** Chrome or Edge executable. */
   readonly executable: string
   /** Dedicated profile directory that keeps the provider session. */
   readonly profileDir: string
-  /** Overall deadline; defaults to five minutes. */
-  readonly timeoutMs?: number
-  /** Poll interval; defaults to two seconds. */
-  readonly pollMs?: number
+  /** Overall attempt deadline. */
+  readonly timeoutMs: number
+  /** Delay between token checks. */
+  readonly pollMs: number
+  /** Returns true once the document cancelled the attempt. */
+  readonly isCancelled?: (() => boolean) | undefined
 }
 
-/** Minimum time a chat page must stay loaded before its cookies are collected. */
-const SETTLE_MS = 2500
+/** `localStorage` entries the chat needs to treat the visitor as signed in. */
+export const CHAT_LOGIN_STORAGE_KEYS = ['userToken', '__appKit_userInfo', 'deepseek-device-id:chat'] as const
+
+/** The controlled browser did not reach a signed-in chat before the deadline. */
+export class ChatLoginTimeoutError extends Error {
+  constructor() {
+    super('chat login browser: timed out before the site stored a user token')
+    this.name = 'ChatLoginTimeoutError'
+  }
+}
+
+/** The controlled browser or its DevTools endpoint could not be started. */
+export class ChatLoginBrowserError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ChatLoginBrowserError'
+  }
+}
+
+/** Polling seam so tests can drive a deterministic DevTools timeline. */
+export interface ChatLoginSession {
+  /** True once the browser process exited. */
+  readonly closed: boolean
+  /** Whether the site stored a non-empty `userToken.value`. */
+  hasUserToken(): Promise<boolean>
+  /** Read the cookies and storage entries to transfer. */
+  readPayload(): Promise<ChatLoginPayload>
+  /** Close the DevTools connection. */
+  close(): void
+}
+
+/** Timing and clock seams for {@link awaitChatLogin}. */
+export interface ChatLoginPollOptions {
+  readonly timeoutMs: number
+  readonly pollMs: number
+  readonly now?: () => number
+  readonly sleep?: (milliseconds: number) => Promise<void>
+  readonly isCancelled?: (() => boolean) | undefined
+}
 
 /**
  * Resolve the Chrome or Edge executable for this platform.
@@ -71,6 +117,23 @@ export function findChatBrowser(
         '/usr/bin/microsoft-edge',
       ]
   return candidates.find(candidate => existsSync(candidate))
+}
+
+/**
+ * Parse the site's `userToken` envelope.
+ * @param raw - raw `localStorage.getItem('userToken')` result.
+ * @returns the non-empty token value, or null for a missing or signed-out envelope.
+ */
+export function userTokenValue(raw: string | null): string | null {
+  if (raw === null) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const value = (parsed as Record<string, unknown>).value
+    return typeof value === 'string' && value.length > 0 ? value : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -116,14 +179,24 @@ interface CdpResponse {
 /** Read one string field from an unknown protocol value. */
 function textField(value: unknown, key: string): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const record = value as Record<string, unknown>
-  const field = record[key]
+  const field = (value as Record<string, unknown>)[key]
   return typeof field === 'string' ? field : undefined
 }
 
 /** Collapse whitespace so log lines stay readable. */
 function short(value: string): string {
   return value.replace(/\s+/gu, ' ').slice(0, 240)
+}
+
+/** Evaluate an expression in the attached page and return its JSON value. */
+async function evaluate(cdp: BrowserCdp, sessionId: string, expression: string): Promise<unknown> {
+  const result = await cdp.send('Runtime.evaluate', {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  }, sessionId)
+  const outcome = result.result as Record<string, unknown> | undefined
+  return outcome?.value
 }
 
 /** Minimal DevTools protocol client over the browser WebSocket. */
@@ -151,11 +224,11 @@ class BrowserCdp {
     const response = await fetch(`http://127.0.0.1:${port}/json/version`)
     const version: unknown = JSON.parse(await response.text())
     const endpoint = textField(version, 'webSocketDebuggerUrl')
-    if (endpoint === undefined) throw new Error('chat login browser: no DevTools endpoint')
+    if (endpoint === undefined) throw new ChatLoginBrowserError('chat login browser: no DevTools endpoint')
     const socket = new WebSocket(endpoint)
     await new Promise<void>((resolve, reject) => {
       socket.addEventListener('open', () => { resolve() }, { once: true })
-      socket.addEventListener('error', () => { reject(new Error('chat login browser: DevTools connection failed')) }, { once: true })
+      socket.addEventListener('error', () => { reject(new ChatLoginBrowserError('chat login browser: DevTools connection failed')) }, { once: true })
     })
     return new BrowserCdp(socket)
   }
@@ -164,16 +237,19 @@ class BrowserCdp {
    * Send one protocol command.
    * @param method - protocol method.
    * @param params - method parameters.
+   * @param sessionId - optional flattened target session.
    * @returns the result object.
    * @throws when the browser reports a protocol error.
    */
-  async send(method: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  async send(method: string, params: Record<string, unknown> = {}, sessionId?: string): Promise<Record<string, unknown>> {
     const id = ++this.nextId
+    const message: Record<string, unknown> = { id, method, params }
+    if (sessionId !== undefined) message.sessionId = sessionId
     const response = await new Promise<CdpResponse>((resolve) => {
       this.pending.set(id, resolve)
-      this.socket.send(JSON.stringify({ id, method, params }))
+      this.socket.send(JSON.stringify(message))
     })
-    if (response.error !== undefined) throw new Error(`chat login browser: ${short(response.error.message ?? method)}`)
+    if (response.error !== undefined) throw new ChatLoginBrowserError(`chat login browser: ${short(response.error.message ?? method)}`)
     return response.result ?? {}
   }
 
@@ -183,20 +259,54 @@ class BrowserCdp {
   }
 }
 
-/**
- * Read the loopback port Chrome wrote after starting with port zero.
- * @param profileDir - dedicated profile directory.
- * @param deadline - time after which the file is considered missing.
- * @returns the debugging port.
- * @throws when Chrome did not expose a port before the deadline.
- */
+/** DevTools-backed session for the controlled browser. */
+class DevToolsChatLoginSession implements ChatLoginSession {
+  constructor(private readonly cdp: BrowserCdp,
+    private readonly sessionId: string, private readonly browser: ChildProcess) {}
+
+  get closed(): boolean {
+    return this.browser.exitCode !== null
+  }
+
+  /** @returns whether the chat stored a non-empty user token. */
+  async hasUserToken(): Promise<boolean> {
+    const raw = await evaluate(this.cdp, this.sessionId,
+      "(() => { try { return localStorage.getItem('userToken') } catch { return null } })()")
+    return userTokenValue(typeof raw === 'string' ? raw : null) !== null
+  }
+
+  /** @returns cookies and the raw storage entries the chat needs. */
+  async readPayload(): Promise<ChatLoginPayload> {
+    const raw = await evaluate(this.cdp, this.sessionId,
+      `(() => { const out = {}; for (const key of ${JSON.stringify(CHAT_LOGIN_STORAGE_KEYS)}) { const value = localStorage.getItem(key); if (value !== null) out[key] = value } return JSON.stringify(out) })()`)
+    const storage = typeof raw === 'string' ? JSON.parse(raw) as Record<string, string> : {}
+    const cookies = await this.cdp.send('Storage.getCookies') as { cookies?: readonly BrowserCookie[] }
+    return { cookies: deepseekCookies(cookies.cookies ?? []), storage }
+  }
+
+  close(): void {
+    this.cdp.close()
+  }
+}
+
+/** Kill the browser and every helper process it started. */
+function stopBrowser(child: ChildProcess): void {
+  if (child.exitCode !== null) return
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], () => {})
+    return
+  }
+  child.kill('SIGTERM')
+}
+
+/** Wait for the loopback port Chrome writes after starting with port zero. */
 function waitForDevToolsPort(profileDir: string, deadline: number): Promise<number> {
   const file = join(profileDir, 'DevToolsActivePort')
   return new Promise((resolve, reject) => {
     const timer = setInterval(() => {
       if (Date.now() > deadline) {
         clearInterval(timer)
-        reject(new Error('chat login browser: the browser did not start in time'))
+        reject(new ChatLoginBrowserError('chat login browser: the browser did not start in time'))
         return
       }
       if (!existsSync(file)) return
@@ -208,25 +318,54 @@ function waitForDevToolsPort(profileDir: string, deadline: number): Promise<numb
   })
 }
 
-/** Stop the browser and every helper process it started. */
-function stopBrowser(child: ChildProcess): void {
-  if (child.exitCode !== null) return
-  if (process.platform === 'win32' && child.pid !== undefined) {
-    execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], () => {})
-    return
+/** Wait for the controlled browser to expose its chat page. */
+async function waitForChatTarget(cdp: BrowserCdp, deadline: number): Promise<{ targetId: string; sessionId: string }> {
+  while (Date.now() < deadline) {
+    const targets = await cdp.send('Target.getTargets') as {
+      targetInfos?: readonly { type?: string; url?: string; targetId?: string }[]
+    }
+    const chat = targets.targetInfos?.find(target => target.type === 'page'
+      && typeof target.url === 'string' && target.url.startsWith('https://chat.deepseek.com'))
+    if (chat?.targetId !== undefined) {
+      const attached = await cdp.send('Target.attachToTarget', { targetId: chat.targetId, flatten: true }) as { sessionId?: string }
+      if (attached.sessionId === undefined) throw new ChatLoginBrowserError('chat login browser: cannot attach to the chat page')
+      return { targetId: chat.targetId, sessionId: attached.sessionId }
+    }
+    await new Promise(resolve => setTimeout(resolve, 250))
   }
-  child.kill('SIGTERM')
+  throw new ChatLoginBrowserError('chat login browser: the browser did not open the chat page')
 }
 
 /**
- * Launch the controlled browser, wait for the reader to reach the chat, and
- * return its DeepSeek cookies.
- * @param request - provider URL, browser executable, profile directory, and timing.
- * @returns the cookies to copy into the chat partition, or undefined when the flow timed out.
+ * Wait until the site stores a user token, the browser closes, or time runs out.
+ * @param session - browser-backed polling seam.
+ * @param options - deadline, poll interval, and optional clock seams.
+ * @returns true when a token appeared, false when the browser was closed by the reader.
+ * @throws ChatLoginTimeoutError when the deadline passes without either outcome.
  */
-export async function collectChatLoginCookies(request: ChatLoginBrowserRequest): Promise<readonly BrowserCookie[] | undefined> {
+export async function awaitChatLogin(session: ChatLoginSession, options: ChatLoginPollOptions): Promise<boolean> {
+  const now = options.now ?? Date.now
+  const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>(resolve => setTimeout(resolve, milliseconds)))
+  const deadline = now() + options.timeoutMs
+  while (now() < deadline) {
+    if (options.isCancelled?.() === true) return false
+    if (session.closed) return false
+    if (await session.hasUserToken()) return true
+    await sleep(options.pollMs)
+  }
+  throw new ChatLoginTimeoutError()
+}
+
+/**
+ * Launch the controlled browser at the chat page and collect the sign-in.
+ * @param request - address, browser, profile, and timing.
+ * @returns the payload after the site stored a token, or undefined when the reader closed the browser.
+ * @throws ChatLoginBrowserError when the browser cannot start.
+ * @throws ChatLoginTimeoutError when the deadline passes.
+ */
+export async function collectChatLogin(request: ChatLoginBrowserRequest): Promise<ChatLoginPayload | undefined> {
   mkdirSync(request.profileDir, { recursive: true })
-  const child = spawn(request.executable, [
+  const browser = spawn(request.executable, [
     `--user-data-dir=${request.profileDir}`,
     '--remote-debugging-port=0',
     '--no-first-run',
@@ -234,31 +373,23 @@ export async function collectChatLoginCookies(request: ChatLoginBrowserRequest):
     '--disable-features=Translate',
     request.url,
   ], { stdio: 'ignore' })
-  const timeoutMs = request.timeoutMs ?? 300_000
-  const pollMs = request.pollMs ?? 2_000
-  const deadline = Date.now() + timeoutMs
-  let connected: BrowserCdp | undefined
+  const deadline = Date.now() + request.timeoutMs
   try {
     const port = await waitForDevToolsPort(request.profileDir, Math.min(deadline, Date.now() + 20_000))
-    connected = await BrowserCdp.connect(port)
-    while (Date.now() < deadline) {
-      const targets = await connected.send('Target.getTargets') as {
-        targetInfos?: readonly { type?: string; url?: string }[]
-      }
-      const chat = targets.targetInfos?.some(target => target.type === 'page'
-        && typeof target.url === 'string'
-        && target.url.startsWith('https://chat.deepseek.com/')
-        && !target.url.startsWith('https://chat.deepseek.com/sign_in'))
-      if (chat === true) {
-        await new Promise(resolve => setTimeout(resolve, SETTLE_MS))
-        const cookies = await connected.send('Storage.getCookies') as { cookies?: readonly BrowserCookie[] }
-        return deepseekCookies(cookies.cookies ?? [])
-      }
-      await new Promise(resolve => setTimeout(resolve, pollMs))
+    const cdp = await BrowserCdp.connect(port)
+    try {
+      const target = await waitForChatTarget(cdp, deadline)
+      const session = new DevToolsChatLoginSession(cdp, target.sessionId, browser)
+      if (!await awaitChatLogin(session, {
+        timeoutMs: Math.max(0, deadline - Date.now()),
+        pollMs: request.pollMs,
+        isCancelled: request.isCancelled,
+      })) return undefined
+      return await session.readPayload()
+    } finally {
+      cdp.close()
     }
-    return undefined
   } finally {
-    connected?.close()
-    stopBrowser(child)
+    stopBrowser(browser)
   }
 }
