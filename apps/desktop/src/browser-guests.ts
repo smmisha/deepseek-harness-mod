@@ -465,7 +465,21 @@ export class DesktopBrowserGuests {
       if (providerRejection(url)) this.reportProviderRejection(owner)
     })
     guest.on('did-finish-load', () => {
-      if (providerRejection(guest.getURL())) this.reportProviderRejection(owner)
+      const url = guest.getURL()
+      if (providerRejection(url)) {
+        this.reportProviderRejection(owner)
+        return
+      }
+      if (!URL.canParse(url) || new URL(url).hostname !== 'accounts.google.com') return
+      // Google's refusal page keeps a neutral address in some flows; its title
+      // is the stable signal ("Не удалось войти в аккаунт" / "Couldn't sign you in").
+      void guest.executeJavaScript('document.title').then((title: unknown) => {
+        const text = typeof title === 'string' ? title : ''
+        logChatLogin(`provider page title=${text.slice(0, 120)}`)
+        if (/Не удалось войти|Couldn.?t sign you in|Couldn.?t sign in/iu.test(text)) {
+          this.reportProviderRejection(owner)
+        }
+      }).catch(() => {})
     })
     guest.on('context-menu', (_event, params) => {
       const items: MenuItemConstructorOptions[] = []
