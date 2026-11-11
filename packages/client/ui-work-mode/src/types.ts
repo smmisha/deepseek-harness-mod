@@ -48,7 +48,7 @@ export type DesktopChatLoginPhase =
   | { readonly kind: 'browser' }
   | {
     readonly kind: 'failed'
-    readonly reason: 'browser-missing' | 'timeout' | 'transfer' | 'provider-rejected'
+    readonly reason: 'browser-missing' | 'browser-in-use' | 'timeout' | 'transfer' | 'provider-rejected'
   }
 
 /** Main-process chat guest operations exposed to the application document. */

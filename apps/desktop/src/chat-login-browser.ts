@@ -9,7 +9,8 @@
  * logged.
  */
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 /** Cookie as Chrome's `Storage.getCookies` returns it. */
@@ -63,6 +64,14 @@ export class ChatLoginBrowserError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ChatLoginBrowserError'
+  }
+}
+
+/** The profile is already used by a running browser, so it cannot be debugged. */
+export class ChatLoginBrowserInUseError extends Error {
+  constructor() {
+    super('chat login browser: the browser profile is already open')
+    this.name = 'ChatLoginBrowserInUseError'
   }
 }
 
@@ -299,11 +308,51 @@ function stopBrowser(child: ChildProcess): void {
   child.kill('SIGTERM')
 }
 
+/**
+ * Resolve the browser's own profile directory so an existing web session can be
+ * reused. Chrome 136+ ignores remote debugging on its default profile unless
+ * `--user-data-dir` is explicit, which is why the caller passes this path.
+ * @param executable - Chrome or Edge executable.
+ * @param platform - target platform.
+ * @param environment - process environment.
+ * @returns the profile directory, or undefined when it does not exist.
+ */
+export function defaultBrowserProfile(
+  executable: string,
+  platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const chrome = executable.toLowerCase().includes('chrome')
+  const candidates = platform === 'darwin'
+    ? [
+      chrome
+        ? join(homedir(), 'Library/Application Support/Google/Chrome')
+        : join(homedir(), 'Library/Application Support/Microsoft Edge'),
+    ]
+    : platform === 'win32'
+      ? [
+        chrome
+          ? join(environment.LOCALAPPDATA ?? '', 'Google\\Chrome\\User Data')
+          : join(environment.LOCALAPPDATA ?? '', 'Microsoft\\Edge\\User Data'),
+      ]
+      : [
+        chrome
+          ? join(homedir(), '.config/google-chrome')
+          : join(homedir(), '.config/microsoft-edge'),
+      ]
+  return candidates.find(candidate => candidate !== '' && existsSync(candidate))
+}
+
 /** Wait for the loopback port Chrome writes after starting with port zero. */
-function waitForDevToolsPort(profileDir: string, deadline: number): Promise<number> {
+function waitForDevToolsPort(profileDir: string, deadline: number, exited: () => boolean): Promise<number> {
   const file = join(profileDir, 'DevToolsActivePort')
   return new Promise((resolve, reject) => {
     const timer = setInterval(() => {
+      if (exited() && !existsSync(file)) {
+        clearInterval(timer)
+        reject(new ChatLoginBrowserInUseError())
+        return
+      }
       if (Date.now() > deadline) {
         clearInterval(timer)
         reject(new ChatLoginBrowserError('chat login browser: the browser did not start in time'))
@@ -365,6 +414,8 @@ export async function awaitChatLogin(session: ChatLoginSession, options: ChatLog
  */
 export async function collectChatLogin(request: ChatLoginBrowserRequest): Promise<ChatLoginPayload | undefined> {
   mkdirSync(request.profileDir, { recursive: true })
+  // A leftover port file from an earlier run would point at a dead endpoint.
+  rmSync(join(request.profileDir, 'DevToolsActivePort'), { force: true })
   const browser = spawn(request.executable, [
     `--user-data-dir=${request.profileDir}`,
     '--remote-debugging-port=0',
@@ -374,8 +425,9 @@ export async function collectChatLogin(request: ChatLoginBrowserRequest): Promis
     request.url,
   ], { stdio: 'ignore' })
   const deadline = Date.now() + request.timeoutMs
+  const exited = (): boolean => browser.exitCode !== null
   try {
-    const port = await waitForDevToolsPort(request.profileDir, Math.min(deadline, Date.now() + 20_000))
+    const port = await waitForDevToolsPort(request.profileDir, Math.min(deadline, Date.now() + 20_000), exited)
     const cdp = await BrowserCdp.connect(port)
     try {
       const target = await waitForChatTarget(cdp, deadline)

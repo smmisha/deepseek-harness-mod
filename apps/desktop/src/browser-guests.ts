@@ -17,8 +17,10 @@ import type { DesktopChatConfig, DesktopChatLeaseId, DesktopChatLoginPhase, Desk
 import type { DesktopMessages } from './locale.ts'
 import {
   ChatLoginBrowserError,
+  ChatLoginBrowserInUseError,
   ChatLoginTimeoutError,
   collectChatLogin,
+  defaultBrowserProfile,
   findChatBrowser,
   toCookieDetails,
   type ChatLoginPayload,
@@ -596,7 +598,8 @@ export class DesktopBrowserGuests {
     const isCancelled = (): boolean => attempt.cancelled
     this.chatLoginAttempts.set(owner.id, attempt)
     this.publishLogin(owner, { kind: 'browser' })
-    logChatLogin('browser login started')
+    const defaultProfile = defaultBrowserProfile(executable)
+    logChatLogin(`browser login started profile=${defaultProfile === undefined ? 'dedicated' : 'default'}`)
     const lease = [...this.leases.values()].find((entry): entry is ChatLease =>
       entry.kind === 'chat' && entry.owner === owner)
     const policy = lease?.policy
@@ -604,7 +607,9 @@ export class DesktopBrowserGuests {
       const payload = await collectChatLogin({
         url: 'https://chat.deepseek.com/',
         executable,
-        profileDir: join(app.getPath('userData'), 'chat-login-browser'),
+        // Reuse the reader's own profile so an existing web session needs no
+        // second sign-in. The dedicated directory is only the fallback.
+        profileDir: defaultProfile ?? join(app.getPath('userData'), 'chat-login-browser'),
         timeoutMs: policy?.browserLoginTimeoutMs ?? DEFAULT_BROWSER_LOGIN_TIMEOUT_MS,
         pollMs: policy?.browserLoginPollMs ?? DEFAULT_BROWSER_LOGIN_POLL_MS,
         isCancelled,
@@ -628,7 +633,8 @@ export class DesktopBrowserGuests {
     } catch (error) {
       if (isCancelled()) return
       const reason = error instanceof ChatLoginTimeoutError ? 'timeout'
-        : error instanceof ChatLoginBrowserError ? 'browser-missing' : 'transfer'
+        : error instanceof ChatLoginBrowserInUseError ? 'browser-in-use'
+          : error instanceof ChatLoginBrowserError ? 'browser-missing' : 'transfer'
       logChatLogin(`browser login failed reason=${reason} error=${error instanceof Error ? error.name : 'unknown'}`)
       this.publishLogin(owner, { kind: 'failed', reason })
     } finally {

@@ -5,7 +5,7 @@
  */
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChatLoginTimeoutError } from '../src/chat-login-browser.ts'
+import { ChatLoginBrowserInUseError, ChatLoginTimeoutError } from '../src/chat-login-browser.ts'
 
 const state = vi.hoisted(() => ({
   sessions: [] as Array<Record<string, unknown>>,
@@ -543,6 +543,19 @@ describe('DesktopBrowserGuests chat sign-in', () => {
 
     await guests.startChatBrowserLogin(owner)
     expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'failed', reason: 'timeout' })
+  })
+
+  it('reports a profile that a running browser already holds', async () => {
+    browserLogin.collect.mockRejectedValue(new ChatLoginBrowserInUseError())
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    attach(owner, lease)
+
+    await guests.startChatBrowserLogin(owner)
+    expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state',
+      { kind: 'failed', reason: 'browser-in-use' })
   })
 
   it('reports a transfer failure when the guest cannot store the sign-in', async () => {

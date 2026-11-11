@@ -34,8 +34,9 @@ function createProductApi(): DshDesktopProductApi {
             return
           }
           if (row.kind === 'failed'
-            && (row.reason === 'browser-missing' || row.reason === 'timeout'
-              || row.reason === 'transfer' || row.reason === 'provider-rejected')) {
+            && (row.reason === 'browser-missing' || row.reason === 'browser-in-use'
+              || row.reason === 'timeout' || row.reason === 'transfer'
+              || row.reason === 'provider-rejected')) {
             listener({ kind: 'failed', reason: row.reason })
           }
         }

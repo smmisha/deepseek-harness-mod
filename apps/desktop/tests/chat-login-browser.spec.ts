@@ -8,6 +8,7 @@ import {
   ChatLoginTimeoutError,
   awaitChatLogin,
   deepseekCookies,
+  defaultBrowserProfile,
   findChatBrowser,
   toCookieDetails,
   userTokenValue,
@@ -145,5 +146,11 @@ describe('toCookieDetails', () => {
 describe('findChatBrowser', () => {
   it('reports no browser when the platform paths do not exist', () => {
     expect(findChatBrowser({}, 'linux')).toBeUndefined()
+  })
+})
+
+describe('defaultBrowserProfile', () => {
+  it('reports no profile for a home directory that has none', () => {
+    expect(defaultBrowserProfile('C:\\chrome.exe', 'win32', { LOCALAPPDATA: 'C:\\missing-profile-root' })).toBeUndefined()
   })
 })

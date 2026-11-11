@@ -159,7 +159,8 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
                       : login.kind === 'browser' ? t('chat.browserWaiting')
                         : t(login.reason === 'provider-rejected' ? 'chat.providerRejected'
                           : login.reason === 'browser-missing' ? 'chat.browserMissing'
-                            : login.reason === 'timeout' ? 'chat.browserTimeout' : 'chat.browserFailed')}
+                            : login.reason === 'browser-in-use' ? 'chat.browserInUse'
+                              : login.reason === 'timeout' ? 'chat.browserTimeout' : 'chat.browserFailed')}
                   </p>
                   <div className={css.actions}>
                     {login.kind === 'failed' && (
