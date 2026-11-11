@@ -377,7 +377,9 @@ export class DesktopBrowserGuests {
     }
     this.chatLoginAttempts.add(id)
     void collectChatLoginCookies({
-      url,
+      // Open the chat page rather than the provider URL: the provider callback
+      // verifies a state cookie issued to the browser that started the flow.
+      url: 'https://chat.deepseek.com/',
       executable,
       profileDir: join(app.getPath('userData'), 'chat-login-browser'),
     }).then(async (cookies) => {

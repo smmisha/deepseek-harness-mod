@@ -347,7 +347,7 @@ describe('DesktopBrowserGuests chat sign-in hand-off', () => {
     expect(opened).toEqual({ action: 'deny' })
     await vi.waitFor(() => { expect(broker.collect).toHaveBeenCalledTimes(1) })
     const request = broker.collect.mock.calls[0]?.[0]
-    expect(request?.url).toContain('accounts.google.com')
+    expect(request?.url).toBe('https://chat.deepseek.com/')
     expect(request?.executable).toContain('chrome.exe')
     const chatSession = state.sessions.find(value => value.partition === CHAT_PARTITION)!
     await vi.waitFor(() => { expect(chatSession.cookiesSet).toHaveBeenCalled() })

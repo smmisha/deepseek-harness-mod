@@ -149,7 +149,7 @@ Electron 拥有 `$DSH_HOME/profiles/desktop`。其 `dependencies` 包含 pnpm �
 
 只有主应用窗口启用 `<webview>`。guest 挂载必须匹配主进程签发的租约和分区；guest 保持 sandbox、context isolation 和 Web security，不启用 Node integration 或 guest preload。Browser IPC 监听只为应用文档创建。[Sidebar Browser](../../packages/client/ui-sidebar-browser/README.zh.md) 说明存储分组和 guest 限制；Host 鉴权仍独立于 URL 过滤而必需。
 
-「对话」标签的 guest 使用同样的挂载方式，但有自己的策略：唯一的持久分区 `persist:dsh-chat` 保存用户的登录状态，主框架导航白名单来自插件配置（默认 `https://chat.deepseek.com`），右键菜单提供标准编辑角色，并且只授予 `clipboard-sanitized-write`，让站点的复制控件可用而不开放剪贴板读取。登录提供方（`*.google.com` 与 `*.apple.com`）的登录交给应用启动的专用 Chrome 或 Edge 配置文件完成：应用以启用 DevTools 协议的方式启动该浏览器，用户在其中完成提供方流程后，应用把得到的 DeepSeek Cookie 复制到对话分区，guest 重新加载后即为登录状态。白名单之外的页面以及其他所有 `window.open` 在打包构建中交给系统浏览器。除该登录交接外，外壳不注入凭据或请求头，不读取页面 DOM、Cookie 或存储，并在开发期间把被拒绝的导航记录为 `[chat-guest] blocked navigation`。隐藏标签时 guest 保持挂载且不被节流，正在生成的回答因此不会中断。[工作模式](../../packages/client/ui-work-mode/README.zh.md) 拥有该标签及其配置。
+「对话」标签的 guest 使用同样的挂载方式，但有自己的策略：唯一的持久分区 `persist:dsh-chat` 保存用户的登录状态，主框架导航白名单来自插件配置（默认 `https://chat.deepseek.com`），右键菜单提供标准编辑角色，并且只授予 `clipboard-sanitized-write`，让站点的复制控件可用而不开放剪贴板读取。登录提供方（`*.google.com` 与 `*.apple.com`）的登录交给应用启动的专用 Chrome 或 Edge 配置文件完成：应用以启用 DevTools 协议的方式启动该浏览器并打开对话页面，用户在其中完成提供方流程后，应用把得到的 DeepSeek Cookie 复制到对话分区，guest 重新加载后即为登录状态。白名单之外的页面以及其他所有 `window.open` 在打包构建中交给系统浏览器。除该登录交接外，外壳不注入凭据或请求头，不读取页面 DOM、Cookie 或存储，并在开发期间把被拒绝的导航记录为 `[chat-guest] blocked navigation`。隐藏标签时 guest 保持挂载且不被节流，正在生成的回答因此不会中断。[工作模式](../../packages/client/ui-work-mode/README.zh.md) 拥有该标签及其配置。
 
 `dsh-app://shell/` 无需联系 Host 即可提供打包的更新文档、脚本和样式。静态请求保留 GET/HEAD、路径范围和 MIME 处理；每个更新文档继续使用隔离 preload 和所属窗口的 IPC 校验。
 
