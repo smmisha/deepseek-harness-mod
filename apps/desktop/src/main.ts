@@ -837,6 +837,10 @@ async function main(): Promise<void> {
     assertProductSender(event)
     return browserGuests.acquireChat(event.sender, config)
   })
+  ipcMain.handle(DESKTOP_IPC.chatLoginCancel, (event) => {
+    assertProductSender(event)
+    browserGuests.cancelChatLogin(event.sender)
+  })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
     if (hostUrl === undefined || hostCookie === undefined || details.webContentsId !== mainWindow?.webContents.id) {

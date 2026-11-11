@@ -15,7 +15,12 @@ function fakeElement() {
   return element
 }
 
-const CONFIG: DesktopChatConfig = { url: 'https://chat.deepseek.com/', allowedOrigins: ['https://chat.deepseek.com'] }
+const CONFIG: DesktopChatConfig = {
+  url: 'https://chat.deepseek.com/',
+  allowedOrigins: ['https://chat.deepseek.com'],
+  loginHosts: [],
+  loginHostSuffixes: [],
+}
 const restores: (() => void)[] = []
 
 /** Install a stand-in for the element the production code creates. */
@@ -29,6 +34,8 @@ function installFakeElement(element: HTMLElement): void {
 }
 const BRIDGE: DesktopChatBridge = {
   acquire: async () => ({ lease: 'lease-1' as DesktopChatLeaseId, partition: 'persist:chat' }),
+  onLoginWindow: () => () => {},
+  cancelLogin: async () => {},
 }
 
 afterEach(() => {

@@ -24,6 +24,23 @@ export interface DesktopChatConfig {
   readonly url: string
   /** HTTPS origins that may stay inside the guest; every other page opens outside. */
   readonly allowedOrigins: readonly string[]
+  /**
+   * Exact provider hostnames the guest may navigate to while signing in, for
+   * example `accounts.youtube.com` or `appleid.apple.com`.
+   */
+  readonly loginHosts: readonly string[]
+  /**
+   * Provider host patterns: a leading-dot suffix (`.google.com`) matches every
+   * subdomain, and a trailing-dot prefix (`accounts.google.`) matches the
+   * regional hosts of one provider.
+   */
+  readonly loginHostSuffixes: readonly string[]
+}
+
+/** Provider window state the Chat tab renders while Apple sign-in is open. */
+export interface DesktopChatLoginState {
+  /** True while a provider sign-in window is open for this guest. */
+  readonly open: boolean
 }
 
 /** Main-process chat guest operations exposed to the application document. */
@@ -34,4 +51,12 @@ export interface DesktopChatBridge {
    * @returns the lease and partition the webview must present on attachment.
    */
   acquire(config: DesktopChatConfig): Promise<DesktopChatReservation>
+  /**
+   * Observe provider sign-in windows opened for the chat guest.
+   * @param listener - receives the current window state; the returned callback unsubscribes.
+   * @returns unsubscribe callback.
+   */
+  onLoginWindow(listener: (state: DesktopChatLoginState) => void): () => void
+  /** Close the provider sign-in window this document still has open. */
+  cancelLogin(): Promise<void>
 }

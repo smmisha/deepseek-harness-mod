@@ -76,6 +76,7 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
   // The site loads on the first Chat visit, not at application start.
   const [started, setStarted] = useState(chat)
   const [guestState, setGuestState] = useState<ChatGuestState>('loading')
+  const [loginOpen, setLoginOpen] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const host = useRef<HTMLDivElement | null>(null)
   const guest = useRef<ChatGuestHandle | null>(null)
@@ -98,6 +99,11 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
     setTopBand(MODE_BAND_HEIGHT)
     return () => { setTopBand(null) }
   }, [setTopBand])
+
+  useEffect(() => {
+    if (bridge === undefined) return
+    return bridge.onLoginWindow((state) => { setLoginOpen(state.open) })
+  }, [bridge])
 
   useEffect(() => {
     if (bridge === undefined || !started) return
@@ -146,6 +152,20 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
           : started && (
             <>
               <div className={css.guest} ref={host} data-hidden={failed ? '' : undefined} data-work-mode-host="" />
+              {loginOpen && (
+                <div className={css.card} data-work-mode-login="">
+                  <p className={css.body}>{t('chat.loginPending')}</p>
+                  <div className={css.actions}>
+                    <button
+                      type="button"
+                      className={css.action}
+                      onClick={() => { void bridge.cancelLogin() }}
+                    >
+                      {t('chat.loginCancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
               {failed && (
                 <div className={css.card} data-work-mode-error="">
                   <p className={css.title}>{t('chat.errorTitle')}</p>

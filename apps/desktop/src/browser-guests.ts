@@ -3,20 +3,18 @@
  *
  * Two guest kinds share one attachment check: the right-Sidebar browser keeps a
  * process-local partition per workspace, while the Chat tab keeps one persistent
- * partition and a navigation allowlist. Provider sign-ins the embedded browser
- * cannot finish are handed to a controlled Chrome/Edge profile, and the
- * resulting DeepSeek cookies are copied into the chat partition. Every
- * attachment still has to name a main-issued lease, match its partition, and
- * come from the application window; the kind only decides the session policy
- * and where disallowed pages go.
+ * partition and a navigation allowlist. Provider sign-in hops are part of the
+ * chat allowlist, and Apple's popup sign-in gets a child window on the same
+ * partition with the opener preserved. Every attachment still has to name a
+ * main-issued lease, match its partition, and come from the application window;
+ * the kind only decides the session policy and where disallowed pages go.
  */
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
-import { app, Menu, session, shell, type BrowserWindow, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
+import { app, Menu, session, shell, type BrowserWindow, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import type { DesktopChatConfig, DesktopChatLeaseId, DesktopChatReservation } from '@deepseek-ai/dsh-client-ui-work-mode/types'
 import type { DesktopMessages } from './locale.ts'
-import { collectChatLoginCookies, findChatBrowser, toCookieDetails } from './chat-login-browser.ts'
+import { logChatLogin } from './chat-login-log.ts'
 import { DESKTOP_IPC } from './ipc.ts'
 
 /** The single persistent partition the Chat tab's guest uses. */
@@ -33,22 +31,11 @@ const CHAT_USER_AGENT = (() => {
   return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`
 })()
 
-/** Sign-in provider suffixes whose windows the embedded Chat hands to a real browser. */
-const CHAT_LOGIN_SUFFIXES: readonly string[] = ['.google.com', '.apple.com']
+/** Upper bound on each configured provider list. */
+const MAX_LOGIN_ENTRIES = 16
 
-/**
- * Whether a requested window belongs to a sign-in provider the embedded Chat
- * hands to the controlled external browser.
- * @param value - requested window URL.
- * @returns true for a credential-free HTTPS sign-in address.
- */
-export function chatLoginAllowed(value: string): boolean {
-  if (!URL.canParse(value)) return false
-  const url = new URL(value)
-  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false
-  return url.hostname === 'google.com' || url.hostname === 'apple.com'
-    || CHAT_LOGIN_SUFFIXES.some(suffix => url.hostname.endsWith(suffix))
-}
+/** Lowercase host name, without scheme, path, port, or wildcard characters. */
+const HOST_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/u
 
 /** Upper bound on a configured navigation allowlist. */
 const MAX_ALLOWED_ORIGINS = 8
@@ -76,17 +63,38 @@ interface ChatLease extends GuestLeaseBase {
 /** Navigation policy the shell enforces for the chat guest. */
 interface ChatPolicy {
   readonly allowedOrigins: readonly string[]
+  readonly loginHosts: readonly string[]
+  readonly loginHostSuffixes: readonly string[]
 }
 
 type GuestLease = BrowserLease | ChatLease
 
 type GuestLeaseId = DesktopBrowserLeaseId | DesktopChatLeaseId
 
+/** Normalize one exact provider host from untrusted input. */
+function readLoginHost(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('desktop chat guest: invalid provider host')
+  const entry = value.trim().toLowerCase()
+  if (!HOST_NAME.test(entry)) throw new Error('desktop chat guest: invalid provider host')
+  return entry
+}
+
+/** Normalize one provider pattern from untrusted input. */
+function readLoginSuffix(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('desktop chat guest: invalid provider suffix')
+  const entry = value.trim().toLowerCase()
+  const body = entry.startsWith('.') ? entry.slice(1) : entry.endsWith('.') ? entry.slice(0, -1) : undefined
+  if (body === undefined || !HOST_NAME.test(body)) {
+    throw new Error('desktop chat guest: a provider suffix must start with "." or end with "."')
+  }
+  return entry
+}
+
 /**
  * Read a chat guest configuration from untrusted IPC input.
  * @param value - renderer-supplied configuration.
- * @returns the https address and the normalized, de-duplicated allowlist.
- * @throws when the address or an origin is not credential-free HTTPS.
+ * @returns the https address, the normalized allowlists, and provider hosts.
+ * @throws when the address, an origin, or a provider pattern is invalid.
  */
 export function parseChatConfig(value: unknown): DesktopChatConfig {
   if (typeof value !== 'object' || value === null) throw new Error('desktop chat guest: invalid configuration')
@@ -109,7 +117,26 @@ export function parseChatConfig(value: unknown): DesktopChatConfig {
     }
     return origin.origin
   })
-  return { url: url.href, allowedOrigins: [...new Set(origins)] }
+  const loginHosts = row.loginHosts === undefined ? [] : (() => {
+    const entry = row.loginHosts
+    if (!Array.isArray(entry) || entry.length > MAX_LOGIN_ENTRIES) {
+      throw new Error(`desktop chat guest: loginHosts must name at most ${String(MAX_LOGIN_ENTRIES)} entries`)
+    }
+    return [...new Set(entry.map(readLoginHost))]
+  })()
+  const loginHostSuffixes = row.loginHostSuffixes === undefined ? [] : (() => {
+    const entry = row.loginHostSuffixes
+    if (!Array.isArray(entry) || entry.length > MAX_LOGIN_ENTRIES) {
+      throw new Error(`desktop chat guest: loginHostSuffixes must name at most ${String(MAX_LOGIN_ENTRIES)} entries`)
+    }
+    return [...new Set(entry.map(readLoginSuffix))]
+  })()
+  return {
+    url: url.href,
+    allowedOrigins: [...new Set(origins)],
+    loginHosts,
+    loginHostSuffixes,
+  }
 }
 
 /**
@@ -125,6 +152,21 @@ export function chatNavigationAllowed(value: string, allowedOrigins: readonly st
     && allowedOrigins.includes(url.origin)
 }
 
+/**
+ * Whether a chat navigation belongs to a sign-in provider hop.
+ * @param value - candidate main-frame URL.
+ * @param policy - the chat guest's provider hosts and patterns.
+ * @returns true for a credential-free HTTPS provider page.
+ */
+export function chatLoginNavigationAllowed(value: string, policy: Pick<ChatPolicy, 'loginHosts' | 'loginHostSuffixes'>): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false
+  const host = url.hostname.toLowerCase()
+  return policy.loginHosts.includes(host)
+    || policy.loginHostSuffixes.some(pattern => pattern.startsWith('.') ? host.endsWith(pattern) : host.startsWith(pattern))
+}
+
 /** A page the shell opens in the system browser instead of embedding it. */
 function openableExternally(value: string): boolean {
   if (!URL.canParse(value)) return false
@@ -137,7 +179,7 @@ export class DesktopBrowserGuests {
   private readonly partitions = new Map<string, string>()
   private readonly leases = new Map<GuestLeaseId, GuestLease>()
   private readonly configuredChatSessions = new Set<Session>()
-  private readonly chatLoginAttempts = new Set<number>()
+  private readonly chatLoginWindows = new Map<number, Set<BrowserWindow>>()
   private chatOrigins: readonly string[] = []
 
   /** @param hostUrl - current authenticated DSH Host, which guests cannot request. */
@@ -174,12 +216,17 @@ export class DesktopBrowserGuests {
   acquireChat(owner: WebContents, value: unknown): DesktopChatReservation {
     const config = parseChatConfig(value)
     this.chatOrigins = config.allowedOrigins
+    logChatLogin(`policy hosts=${config.loginHosts.join(',')} suffixes=${config.loginHostSuffixes.join(',')}`)
     const existing = [...this.leases.entries()].find(([, lease]) => lease.kind === 'chat' && lease.owner === owner)
     if (existing !== undefined) {
       const lease = existing[1] as ChatLease
       if (!lease.attached && lease.guest === undefined) {
         // Not attached yet: the same lease still owns the partition.
-        lease.policy = { allowedOrigins: config.allowedOrigins }
+        lease.policy = {
+          allowedOrigins: config.allowedOrigins,
+          loginHosts: config.loginHosts,
+          loginHostSuffixes: config.loginHostSuffixes,
+        }
         return { lease: existing[0] as DesktopChatLeaseId, partition: CHAT_PARTITION }
       }
       // An attached lease whose guest never arrived (a crash before `dom-ready`) or
@@ -195,7 +242,11 @@ export class DesktopBrowserGuests {
     const lease = randomUUID() as DesktopChatLeaseId
     this.leases.set(lease, {
       owner, kind: 'chat', partition: CHAT_PARTITION, attached: false,
-      policy: { allowedOrigins: config.allowedOrigins },
+      policy: {
+        allowedOrigins: config.allowedOrigins,
+        loginHosts: config.loginHosts,
+        loginHostSuffixes: config.loginHostSuffixes,
+      },
     })
     return { lease, partition: CHAT_PARTITION }
   }
@@ -270,8 +321,18 @@ export class DesktopBrowserGuests {
         attachedLease = id
         // The right Sidebar's frame routing owns input for its own guests only.
         if (lease.kind === 'browser') lease.releaseInput = attachInput(guest, id as DesktopBrowserLeaseId)
-        guest.once('destroyed', () => { lease.releaseInput?.(); this.leases.delete(id) })
-        if (lease.kind === 'chat') this.attachChatPolicies(window, guest, messages)
+        guest.once('destroyed', () => {
+          lease.releaseInput?.()
+          this.closeChatLoginWindows(owner)
+          this.leases.delete(id)
+        })
+        if (lease.kind === 'chat') {
+          logChatLogin('guest attached')
+          guest.on('did-finish-load', () => {
+            if (URL.canParse(guest.getURL())) logChatLogin(`guest loaded host=${new URL(guest.getURL()).hostname}`)
+          })
+          this.attachChatPolicies(window, guest, messages)
+        }
       })
       guest.setWindowOpenHandler(({ url, postBody }) => {
         const lease = attachedLease === undefined ? undefined : this.leases.get(attachedLease)
@@ -280,11 +341,13 @@ export class DesktopBrowserGuests {
         }
         if (postBody !== undefined) return { action: 'deny' }
         if (lease.kind === 'chat') {
-          // Sign-in providers are completed in a controlled external browser:
-          // Google refuses embedded browsers, so the result comes back as
-          // cookies and the guest reloads signed in.
-          if (chatLoginAllowed(url)) this.startChatLogin(guest, url)
-          else if (openableExternally(url)) void shell.openExternal(url)
+          // Apple's popup sign-in needs a real child window on the chat
+          // partition so its web_message reply can reach the opener.
+          if (chatLoginNavigationAllowed(url, lease.policy)) {
+            logChatLogin(`provider window host=${new URL(url).hostname}`)
+            return { action: 'allow', overrideBrowserWindowOptions: this.chatLoginWindowOptions() }
+          }
+          if (openableExternally(url)) void shell.openExternal(url)
           return { action: 'deny' }
         }
         if (this.allowedNavigation(url)) {
@@ -293,17 +356,39 @@ export class DesktopBrowserGuests {
         }
         return { action: 'deny' }
       })
+      guest.on('did-create-window', (child) => {
+        if (attachedLease === undefined) {
+          child.destroy()
+          return
+        }
+        child.webContents.setUserAgent(CHAT_USER_AGENT)
+        child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        child.webContents.on('did-navigate', (_event, url) => {
+          if (URL.canParse(url)) logChatLogin(`provider window navigated host=${new URL(url).hostname}`)
+        })
+        this.trackChatLoginWindow(owner, child)
+      })
       guest.on('will-frame-navigate', (event) => {
         if (!event.isMainFrame) return
         const lease = attachedLease === undefined ? undefined : this.leases.get(attachedLease)
-        if (this.allows(lease, event.url)) return
+        if (this.allows(lease, event.url)) {
+          if (lease?.kind === 'chat' && chatLoginNavigationAllowed(event.url, lease.policy)) {
+            logChatLogin(`allowed navigation host=${new URL(event.url).hostname}`)
+          }
+          return
+        }
         event.preventDefault()
         this.reportBlocked(lease, event.url, owner)
       })
       guest.on('will-redirect', (event, url, _inPlace, mainFrame) => {
         if (!mainFrame) return
         const lease = attachedLease === undefined ? undefined : this.leases.get(attachedLease)
-        if (this.allows(lease, url)) return
+        if (this.allows(lease, url)) {
+          if (lease?.kind === 'chat' && chatLoginNavigationAllowed(url, lease.policy)) {
+            logChatLogin(`allowed redirect host=${new URL(url).hostname}`)
+          }
+          return
+        }
         event.preventDefault()
         this.reportBlocked(lease, url)
       })
@@ -364,59 +449,69 @@ export class DesktopBrowserGuests {
     })
   }
 
-  /** Hand a provider sign-in to the controlled external browser, then import its cookies. */
-  private startChatLogin(guest: WebContents, url: string): void {
-    const id = guest.id
-    if (this.chatLoginAttempts.has(id)) return
-    const executable = findChatBrowser()
-    if (executable === undefined) {
-      // Without Chrome or Edge the reader's default browser is the only option,
-      // even though its session cannot come back into the guest.
-      if (openableExternally(url)) void shell.openExternal(url)
-      return
+  /** Provider popup: same partition, sandbox, and user agent as the chat guest. */
+  private chatLoginWindowOptions(): BrowserWindowConstructorOptions {
+    return {
+      width: 780,
+      height: 820,
+      autoHideMenuBar: true,
+      webPreferences: {
+        partition: CHAT_PARTITION,
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        devTools: !app.isPackaged,
+      },
     }
-    this.chatLoginAttempts.add(id)
-    void collectChatLoginCookies({
-      // Open the chat page rather than the provider URL: the provider callback
-      // verifies a state cookie issued to the browser that started the flow.
-      url: 'https://chat.deepseek.com/',
-      executable,
-      profileDir: join(app.getPath('userData'), 'chat-login-browser'),
-    }).then(async (cookies) => {
-      if (cookies === undefined || cookies.length === 0) return
-      const chatSession = session.fromPartition(CHAT_PARTITION)
-      for (const cookie of cookies) {
-        try {
-          await chatSession.cookies.set(toCookieDetails(cookie))
-        } catch (error) {
-          // A browser-only cookie (prefix, partition, or size rule) must not
-          // stop the session cookie from reaching the guest.
-          if (!app.isPackaged) console.warn('[chat-guest] skipped cookie', cookie.name, error)
-        }
-      }
-      if (!guest.isDestroyed()) void guest.loadURL('https://chat.deepseek.com/')
-    }).catch((error: unknown) => {
-      if (!app.isPackaged) console.warn('[chat-guest] browser sign-in failed', error)
-    }).finally(() => { this.chatLoginAttempts.delete(id) })
+  }
+
+  /** Track one provider window until it closes, and publish the state. */
+  private trackChatLoginWindow(owner: WebContents, child: BrowserWindow): void {
+    const windows = this.chatLoginWindows.get(owner.id) ?? new Set<BrowserWindow>()
+    windows.add(child)
+    this.chatLoginWindows.set(owner.id, windows)
+    logChatLogin('provider window opened')
+    this.publishChatLogin(owner)
+    child.once('closed', () => {
+      windows.delete(child)
+      if (windows.size === 0) this.chatLoginWindows.delete(owner.id)
+      logChatLogin('provider window closed')
+      this.publishChatLogin(owner)
+    })
+  }
+
+  /** Tell the document whether a provider window is open. */
+  private publishChatLogin(owner: WebContents): void {
+    if (owner.isDestroyed()) return
+    owner.send(DESKTOP_IPC.chatLoginWindow, { open: (this.chatLoginWindows.get(owner.id)?.size ?? 0) > 0 })
+  }
+
+  /** Close every provider window the document still owns. */
+  private closeChatLoginWindows(owner: WebContents): void {
+    const windows = this.chatLoginWindows.get(owner.id)
+    if (windows === undefined) return
+    this.chatLoginWindows.delete(owner.id)
+    for (const window of windows) if (!window.isDestroyed()) window.destroy()
+  }
+
+  /** Close the provider window for one document; the renderer's cancel action. */
+  cancelChatLogin(owner: WebContents): void {
+    this.closeChatLoginWindows(owner)
   }
 
   /** Browser policy for the right Sidebar, chat policy for the Chat tab. */
   private allows(lease: GuestLease | undefined, value: string): boolean {
-    if (lease?.kind === 'chat') return chatNavigationAllowed(value, lease.policy.allowedOrigins)
+    if (lease?.kind === 'chat') {
+      return chatNavigationAllowed(value, lease.policy.allowedOrigins)
+        || chatLoginNavigationAllowed(value, lease.policy)
+    }
     return this.allowedNavigation(value)
   }
 
-  /** Report a blocked chat navigation and hand the target to the sign-in browser or the reader's browser. */
+  /** Report a blocked chat navigation and hand the target to the reader's browser. */
   private reportBlocked(lease: GuestLease | undefined, value: string, owner?: WebContents): void {
     if (lease?.kind !== 'chat') return
-    if (!app.isPackaged) console.warn(`[chat-guest] blocked navigation ${value}`)
-    // A provider sign-in needs the controlled browser even when the page did
-    // not open a window for it.
-    const guest = lease.guest
-    if (guest !== undefined && chatLoginAllowed(value)) {
-      this.startChatLogin(guest, value)
-      return
-    }
+    if (URL.canParse(value)) logChatLogin(`blocked host=${new URL(value).hostname}`)
     // A user-clicked page outside the allowlist belongs to the reader's browser in every build.
     if (owner === undefined) return
     if (openableExternally(value)) void shell.openExternal(value)

@@ -11,7 +11,12 @@ import type { WorkMode } from '../src/client/store.ts'
 
 afterEach(cleanup)
 
-const CONFIG: DesktopChatConfig = { url: 'https://chat.deepseek.com/', allowedOrigins: ['https://chat.deepseek.com'] }
+const CONFIG: DesktopChatConfig = {
+  url: 'https://chat.deepseek.com/',
+  allowedOrigins: ['https://chat.deepseek.com'],
+  loginHosts: [],
+  loginHostSuffixes: [],
+}
 const t = ((key: keyof typeof en) => en[key]) as WorkModeLayerProps['t']
 
 function unusedHook(): never {
@@ -40,6 +45,8 @@ const bridge = (): DesktopChatBridge => ({
     lease: 'chat-lease' as DesktopChatReservation['lease'],
     partition: 'persist:dsh-chat',
   })),
+  onLoginWindow: () => () => {},
+  cancelLogin: vi.fn(async () => {}),
 })
 
 function props(
@@ -86,7 +93,7 @@ describe('WorkModeLayer', () => {
       lease: 'chat-lease' as DesktopChatReservation['lease'],
       partition: 'persist:dsh-chat',
     }))
-    const shell: DesktopChatBridge = { acquire }
+    const shell: DesktopChatBridge = { acquire, onLoginWindow: () => () => {}, cancelLogin: async () => {} }
     const view = render(<WorkModeLayer {...props('harness', { bridge: shell, createGuest: factory.createGuest })} />)
     expect(acquire).not.toHaveBeenCalled()
     view.rerender(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
@@ -204,6 +211,30 @@ describe('WorkModeLayer', () => {
     fireEvent.click(screen.getByRole('button', { name: en['chat.openInBrowser'] }))
     expect(open).toHaveBeenCalledTimes(1)
     open.mockRestore()
+  })
+
+  it('shows the provider sign-in prompt while its window is open and cancels it', async () => {
+    let listener: ((state: { open: boolean }) => void) | undefined
+    const cancelLogin = vi.fn(async () => {})
+    const shell: DesktopChatBridge = {
+      acquire: vi.fn(async () => ({
+        lease: 'chat-lease' as DesktopChatReservation['lease'],
+        partition: 'persist:dsh-chat',
+      })),
+      onLoginWindow: (next) => { listener = next; return () => {} },
+      cancelLogin,
+    }
+    const factory = guests()
+    render(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
+    await waitFor(() => { expect(factory.calls).toHaveLength(1) })
+
+    act(() => { listener?.({ open: true }) })
+    expect(screen.getByText(en['chat.loginPending'])).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['chat.loginCancel'] }))
+    expect(cancelLogin).toHaveBeenCalledTimes(1)
+
+    act(() => { listener?.({ open: false }) })
+    expect(screen.queryByText(en['chat.loginPending'])).toBeNull()
   })
 
   it('switches modes through the capsule', () => {

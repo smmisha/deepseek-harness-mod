@@ -28,6 +28,8 @@ export const DESKTOP_IPC = {
   browserRelease: 'dsh-desktop:browser-release',
   browserOpenRequested: 'dsh-desktop:browser-open-requested',
   chatAcquire: 'dsh-desktop:chat-acquire',
+  chatLoginCancel: 'dsh-desktop:chat-login-cancel',
+  chatLoginWindow: 'dsh-desktop:chat-login-window',
   directoryPick: 'dsh-desktop:directory-pick',
   fileDragPrepare: 'dsh-desktop:file-drag-prepare',
   fileDragCancel: 'dsh-desktop:file-drag-cancel',

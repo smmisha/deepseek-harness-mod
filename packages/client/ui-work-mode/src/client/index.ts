@@ -32,12 +32,18 @@ export interface Config {
   url?: string
   /** HTTPS origins allowed to navigate inside the guest; every other page opens outside. */
   allowedOrigins?: string[]
+  /** Exact provider hostnames the guest may visit while signing in. */
+  loginHosts?: string[]
+  /** Provider host patterns: `.suffix` matches subdomains, `prefix.` matches regional hosts. */
+  loginHostSuffixes?: string[]
 }
 
 /** Validated plugin configuration. */
 export const Config: z<Config> = z.object({
   url: z.string().default('https://chat.deepseek.com/'),
   allowedOrigins: z.array(z.string()).default(['https://chat.deepseek.com']),
+  loginHosts: z.array(z.string()).default(['accounts.youtube.com', 'appleid.apple.com']),
+  loginHostSuffixes: z.array(z.string()).default(['accounts.google.']),
 })
 
 /** Services this plugin binds. */

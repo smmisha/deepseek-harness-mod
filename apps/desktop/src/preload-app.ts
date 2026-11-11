@@ -25,6 +25,15 @@ function createProductApi(): DshDesktopProductApi {
     browser: createDesktopBrowserBridge(),
     chat: {
       acquire: config => ipcRenderer.invoke(DESKTOP_IPC.chatAcquire, config) as Promise<DesktopChatReservation>,
+      onLoginWindow(listener) {
+        const handler = (_event: unknown, state: unknown): void => {
+          if (typeof state !== 'object' || state === null || !('open' in state) || typeof state.open !== 'boolean') return
+          listener({ open: state.open })
+        }
+        ipcRenderer.on(DESKTOP_IPC.chatLoginWindow, handler)
+        return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginWindow, handler) }
+      },
+      cancelLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginCancel) as Promise<void>,
     },
     fileDrag: {
       prepare: (source, requestId) => ipcRenderer.invoke(DESKTOP_IPC.fileDragPrepare, source, requestId) as
