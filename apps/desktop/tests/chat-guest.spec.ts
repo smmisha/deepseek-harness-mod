@@ -479,6 +479,25 @@ describe('DesktopBrowserGuests chat sign-in', () => {
     expect(child.destroy).toHaveBeenCalled()
   })
 
+  it('reports Google refusing the embedded browser once per attempt', () => {
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    const attached = attach(owner, lease) as AttachedGuest
+
+    attached.emit('did-navigate', {}, 'https://accounts.google.com/v3/signin/rejected?continue=x')
+    expect(owner.send).toHaveBeenCalledWith('dsh-desktop:chat-login-state',
+      { kind: 'failed', reason: 'provider-rejected' })
+    const reports = owner.send.mock.calls.filter(call => call[0] === 'dsh-desktop:chat-login-state'
+      && (call[1] as { kind?: string }).kind === 'failed')
+    expect(reports).toHaveLength(1)
+
+    attached.emit('did-navigate', {}, 'https://accounts.google.com/v3/signin/rejected?continue=y')
+    expect(owner.send.mock.calls.filter(call => call[0] === 'dsh-desktop:chat-login-state'
+      && (call[1] as { kind?: string }).kind === 'failed')).toHaveLength(1)
+  })
+
   it('imports cookies and storage from the controlled browser and reloads the guest', async () => {
     browserLogin.collect.mockResolvedValue({
       cookies: [{ name: 'ds_session_id', value: 'abc', domain: '.deepseek.com', path: '/', secure: true, httpOnly: true }],

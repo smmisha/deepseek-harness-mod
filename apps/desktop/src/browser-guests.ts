@@ -178,6 +178,14 @@ export function chatNavigationAllowed(value: string, allowedOrigins: readonly st
     && allowedOrigins.includes(url.origin)
 }
 
+/** Whether a provider URL is Google's "unsupported browser" rejection page. */
+function providerRejection(value: string): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  return (url.hostname === 'google.com' || url.hostname.endsWith('.google.com'))
+    && url.pathname.includes('/signin/rejected')
+}
+
 /**
  * Whether a chat navigation belongs to a sign-in provider hop.
  * @param value - candidate main-frame URL.
@@ -406,6 +414,7 @@ export class DesktopBrowserGuests {
         if (this.allows(lease, event.url)) {
           if (lease?.kind === 'chat' && chatLoginNavigationAllowed(event.url, lease.policy)) {
             logChatLogin(`allowed navigation host=${new URL(event.url).hostname}`)
+            if (providerRejection(event.url)) this.reportProviderRejection(owner)
           }
           return
         }
@@ -418,6 +427,7 @@ export class DesktopBrowserGuests {
         if (this.allows(lease, url)) {
           if (lease?.kind === 'chat' && chatLoginNavigationAllowed(url, lease.policy)) {
             logChatLogin(`allowed redirect host=${new URL(url).hostname}`)
+            if (providerRejection(url)) this.reportProviderRejection(owner)
           }
           return
         }
@@ -451,12 +461,11 @@ export class DesktopBrowserGuests {
   private attachChatPolicies(window: BrowserWindow, guest: WebContents, messages: () => DesktopMessages): void {
     const owner = window.webContents
     guest.on('did-navigate', (_event, url) => {
-      if (!URL.canParse(url)) return
-      const parsed = new URL(url)
-      if (parsed.hostname === 'accounts.google.com' && parsed.pathname.includes('/signin/rejected')) {
-        logChatLogin('provider rejected the embedded browser')
-        this.publishLogin(owner, { kind: 'failed', reason: 'provider-rejected' })
-      }
+      if (URL.canParse(url)) logChatLogin(`guest navigated host=${new URL(url).hostname}`)
+      if (providerRejection(url)) this.reportProviderRejection(owner)
+    })
+    guest.on('did-finish-load', () => {
+      if (providerRejection(guest.getURL())) this.reportProviderRejection(owner)
     })
     guest.on('context-menu', (_event, params) => {
       const items: MenuItemConstructorOptions[] = []
@@ -516,6 +525,14 @@ export class DesktopBrowserGuests {
   /** Sign-in phase currently visible for one document. */
   chatLoginPhase(owner: WebContents): DesktopChatLoginPhase {
     return this.chatLoginStates.get(owner.id) ?? { kind: 'idle' }
+  }
+
+  /** Publish Google's embedded-browser refusal once per attempt. */
+  private reportProviderRejection(owner: WebContents): void {
+    const current = this.chatLoginPhase(owner)
+    if (current.kind === 'failed' && current.reason === 'provider-rejected') return
+    logChatLogin('provider rejected the embedded browser')
+    this.publishLogin(owner, { kind: 'failed', reason: 'provider-rejected' })
   }
 
   /** Track one provider window until it closes, and publish the phase. */
