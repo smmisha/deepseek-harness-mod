@@ -10,7 +10,6 @@
  * the kind only decides the session policy and where disallowed pages go.
  */
 import { randomUUID } from 'node:crypto'
-import { execFile, spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { app, Menu, session, shell, type BrowserWindow, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
@@ -18,12 +17,12 @@ import type { DesktopChatConfig, DesktopChatLeaseId, DesktopChatLoginPhase, Desk
 import type { DesktopMessages } from './locale.ts'
 import {
   ChatLoginBrowserError,
-  ChatLoginBrowserInUseError,
   ChatLoginTimeoutError,
+  ChatLoginWindowOpenError,
   collectChatLogin,
-  defaultBrowserProfile,
   findChatBrowser,
   toCookieDetails,
+  userTokenValue,
   type ChatLoginPayload,
 } from './chat-login-browser.ts'
 import { logChatLogin } from './chat-login-log.ts'
@@ -84,6 +83,37 @@ interface ChatPolicy {
 /** Default timing of the external-browser fallback when a profile omits it. */
 const DEFAULT_BROWSER_LOGIN_TIMEOUT_MS = 300_000
 const DEFAULT_BROWSER_LOGIN_POLL_MS = 2_000
+/** Upper bound on one guest navigation while the transferred session settles. */
+const TRANSFER_LOAD_TIMEOUT_MS = 30_000
+
+/** The transferred storage could not be written or verified. */
+class ChatLoginTransferError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ChatLoginTransferError'
+  }
+}
+
+/** The site dropped the transferred token during its own device check. */
+class ChatLoginSiteRejectedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ChatLoginSiteRejectedError'
+  }
+}
+
+/** Whether a URL belongs to the chat origin. */
+function isChatOrigin(value: string): boolean {
+  if (!URL.canParse(value)) return false
+  return new URL(value).origin === 'https://chat.deepseek.com'
+}
+
+/** Whether a guest load failed only because the site aborted it while redirecting. */
+function isAbortedLoad(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as Error & { readonly code?: unknown }).code
+  return code === 'ERR_ABORTED' || error.message.includes('ERR_ABORTED')
+}
 
 type GuestLease = BrowserLease | ChatLease
 
@@ -586,9 +616,8 @@ export class DesktopBrowserGuests {
   /**
    * Start the controlled-browser fallback for one document.
    * @param owner - authenticated application WebContents.
-   * @param closeBrowser - stop a running Chrome/Edge first (the document asked for it).
    */
-  async startChatBrowserLogin(owner: WebContents, closeBrowser = false): Promise<void> {
+  async startChatBrowserLogin(owner: WebContents): Promise<void> {
     if (this.chatLoginAttempts.has(owner.id)) return
     const executable = findChatBrowser()
     if (executable === undefined) {
@@ -596,13 +625,11 @@ export class DesktopBrowserGuests {
       this.publishLogin(owner, { kind: 'failed', reason: 'browser-missing' })
       return
     }
-    if (closeBrowser) await this.stopBrowserProcesses(executable)
     const attempt = { cancelled: false }
     const isCancelled = (): boolean => attempt.cancelled
     this.chatLoginAttempts.set(owner.id, attempt)
     this.publishLogin(owner, { kind: 'browser' })
-    const defaultProfile = defaultBrowserProfile(executable)
-    logChatLogin(`browser login started profile=${defaultProfile === undefined ? 'dedicated' : 'default'}`)
+    logChatLogin('browser login started profile=dedicated')
     const lease = [...this.leases.values()].find((entry): entry is ChatLease =>
       entry.kind === 'chat' && entry.owner === owner)
     const policy = lease?.policy
@@ -610,12 +637,11 @@ export class DesktopBrowserGuests {
       const payload = await collectChatLogin({
         url: 'https://chat.deepseek.com/',
         executable,
-        // Reuse the reader's own profile so an existing web session needs no
-        // second sign-in. The dedicated directory is only the fallback.
-        profileDir: defaultProfile ?? join(app.getPath('userData'), 'chat-login-browser'),
+        profileDir: join(app.getPath('userData'), 'chat-login-browser'),
         timeoutMs: policy?.browserLoginTimeoutMs ?? DEFAULT_BROWSER_LOGIN_TIMEOUT_MS,
         pollMs: policy?.browserLoginPollMs ?? DEFAULT_BROWSER_LOGIN_POLL_MS,
         isCancelled,
+        log: logChatLogin,
       })
       if (isCancelled()) return
       if (payload === undefined) {
@@ -629,46 +655,28 @@ export class DesktopBrowserGuests {
         this.publishLogin(owner, { kind: 'failed', reason: 'transfer' })
         return
       }
-      await this.transferChatLogin(guest, payload)
+      await this.transferChatLogin(guest, payload, policy?.browserLoginPollMs ?? DEFAULT_BROWSER_LOGIN_POLL_MS)
       if (isCancelled()) return
       logChatLogin('browser login imported')
       this.publishLogin(owner, { kind: 'idle' })
     } catch (error) {
       if (isCancelled()) return
-      const reason = error instanceof ChatLoginTimeoutError ? 'timeout'
-        : error instanceof ChatLoginBrowserInUseError ? 'browser-in-use'
-          : error instanceof ChatLoginBrowserError ? 'browser-missing' : 'transfer'
-      logChatLogin(`browser login failed reason=${reason} error=${error instanceof Error ? error.name : 'unknown'}`)
+      const reason = error instanceof ChatLoginWindowOpenError ? 'login-window-open'
+        : error instanceof ChatLoginTimeoutError ? 'timeout'
+          : error instanceof ChatLoginSiteRejectedError ? 'site-rejected'
+            : error instanceof ChatLoginTransferError ? 'transfer'
+              : error instanceof ChatLoginBrowserError ? 'browser-missing'
+                : 'unknown'
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      logChatLogin(`browser login failed reason=${reason} error=${detail}`)
       this.publishLogin(owner, { kind: 'failed', reason })
     } finally {
       this.chatLoginAttempts.delete(owner.id)
-      if (closeBrowser) this.restartBrowser(executable)
-    }
-  }
-
-  /** Stop every running instance of the resolved browser so its profile frees up. */
-  private async stopBrowserProcesses(executable: string): Promise<void> {
-    const name = executable.replaceAll('\\', '/').split('/').pop() ?? 'chrome.exe'
-    logChatLogin(`closing running ${name}`)
-    await new Promise<void>((resolve) => {
-      if (process.platform === 'win32') execFile('taskkill', ['/IM', name, '/F', '/T'], () => { resolve() })
-      else execFile('pkill', ['-f', name], () => { resolve() })
-    })
-    await new Promise(resolve => setTimeout(resolve, 1_500))
-  }
-
-  /** Reopen the browser the document asked to close, restoring its last session. */
-  private restartBrowser(executable: string): void {
-    try {
-      spawn(executable, [], { detached: true, stdio: 'ignore' }).unref()
-      logChatLogin('browser reopened')
-    } catch (error) {
-      logChatLogin(`browser reopen failed error=${error instanceof Error ? error.name : 'unknown'}`)
     }
   }
 
   /** Apply the controlled browser's cookies and storage to the chat guest. */
-  private async transferChatLogin(guest: WebContents, payload: ChatLoginPayload): Promise<void> {
+  private async transferChatLogin(guest: WebContents, payload: ChatLoginPayload, settleMs: number): Promise<void> {
     const chatSession = session.fromPartition(CHAT_PARTITION)
     for (const cookie of payload.cookies) {
       try {
@@ -678,12 +686,67 @@ export class DesktopBrowserGuests {
         void error
       }
     }
-    await guest.loadURL('https://chat.deepseek.com/')
+    if (!isChatOrigin(guest.getURL())) await this.loadChatOrigin(guest)
     const assignments = Object.entries(payload.storage)
       .map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`)
       .join(' ')
-    if (assignments.length > 0) await guest.executeJavaScript(`(() => { ${assignments} })()`)
-    await guest.loadURL('https://chat.deepseek.com/')
+    if (assignments.length > 0) {
+      try {
+        await guest.executeJavaScript(`(() => { ${assignments} })()`)
+      } catch (error) {
+        throw new ChatLoginTransferError(`chat login transfer: storing the session failed (${error instanceof Error ? error.name : 'unknown'})`)
+      }
+    }
+    const stored = await this.readGuestToken(guest)
+    logChatLogin(`guest storage userToken=${stored === null ? 'absent' : 'present'}`)
+    if (stored === null) throw new ChatLoginTransferError('chat login transfer: the guest did not keep the token')
+    await this.reloadChatGuest(guest)
+    await new Promise(resolve => setTimeout(resolve, settleMs))
+    const afterReload = await this.readGuestToken(guest)
+    logChatLogin(`post-reload userToken=${afterReload === null ? 'absent' : 'present'}`)
+    if (afterReload === null) throw new ChatLoginSiteRejectedError('chat login transfer: the site dropped the transferred token')
+  }
+
+  /** Load the chat origin in the guest, ignoring the site's own aborted redirects. */
+  private async loadChatOrigin(guest: WebContents): Promise<void> {
+    const settled = this.waitForGuestSettled(guest)
+    try {
+      await guest.loadURL('https://chat.deepseek.com/')
+    } catch (error) {
+      if (!isAbortedLoad(error)) {
+        throw new ChatLoginTransferError(`chat login transfer: loading the chat failed (${error instanceof Error ? error.name : 'unknown'})`)
+      }
+    }
+    await settled
+  }
+
+  /** Reload the guest with the transferred storage and wait for the settle event. */
+  private async reloadChatGuest(guest: WebContents): Promise<void> {
+    const settled = this.waitForGuestSettled(guest)
+    guest.reload()
+    await settled
+  }
+
+  /** Resolve when the guest reports a completed load, or reject when it never does. */
+  private waitForGuestSettled(guest: WebContents): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        guest.removeListener('did-stop-loading', onStop)
+        reject(new ChatLoginTransferError('chat login transfer: the chat page did not settle'))
+      }, TRANSFER_LOAD_TIMEOUT_MS)
+      const onStop = (): void => {
+        clearTimeout(timer)
+        resolve()
+      }
+      guest.once('did-stop-loading', onStop)
+    })
+  }
+
+  /** Read the guest's own user-token envelope. */
+  private async readGuestToken(guest: WebContents): Promise<string | null> {
+    const raw: unknown = await guest.executeJavaScript(
+      "(() => { try { return localStorage.getItem('userToken') } catch { return null } })()")
+    return userTokenValue(typeof raw === 'string' ? raw : null)
   }
 
   /** Browser policy for the right Sidebar, chat policy for the Chat tab. */

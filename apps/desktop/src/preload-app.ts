@@ -34,17 +34,17 @@ function createProductApi(): DshDesktopProductApi {
             return
           }
           if (row.kind === 'failed'
-            && (row.reason === 'browser-missing' || row.reason === 'browser-in-use'
+            && (row.reason === 'browser-missing' || row.reason === 'login-window-open'
               || row.reason === 'timeout' || row.reason === 'transfer'
-              || row.reason === 'provider-rejected')) {
+              || row.reason === 'site-rejected' || row.reason === 'provider-rejected'
+              || row.reason === 'unknown')) {
             listener({ kind: 'failed', reason: row.reason })
           }
         }
         ipcRenderer.on(DESKTOP_IPC.chatLoginState, handler)
         return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginState, handler) }
       },
-      startBrowserLogin: options => ipcRenderer.invoke(DESKTOP_IPC.chatLoginStart,
-        options?.closeBrowser === true) as Promise<void>,
+      startBrowserLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginStart) as Promise<void>,
       cancelLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginCancel) as Promise<void>,
     },
     fileDrag: {

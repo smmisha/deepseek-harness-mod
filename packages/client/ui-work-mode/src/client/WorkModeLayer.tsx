@@ -159,20 +159,20 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
                       : login.kind === 'browser' ? t('chat.browserWaiting')
                         : t(login.reason === 'provider-rejected' ? 'chat.providerRejected'
                           : login.reason === 'browser-missing' ? 'chat.browserMissing'
-                            : login.reason === 'browser-in-use' ? 'chat.browserInUse'
-                              : login.reason === 'timeout' ? 'chat.browserTimeout' : 'chat.browserFailed')}
+                            : login.reason === 'login-window-open' ? 'chat.loginWindowOpen'
+                              : login.reason === 'timeout' ? 'chat.browserTimeout'
+                                : login.reason === 'transfer' ? 'chat.browserFailed'
+                                  : login.reason === 'site-rejected' ? 'chat.siteRejected'
+                                    : 'chat.unknown')}
                   </p>
                   <div className={css.actions}>
                     {login.kind === 'failed' && (
                       <button
                         type="button"
                         className={clsx(css.action, css.actionPrimary)}
-                        onClick={() => {
-                          void bridge.startBrowserLogin(login.reason === 'browser-in-use'
-                            ? { closeBrowser: true } : undefined)
-                        }}
+                        onClick={() => { void bridge.startBrowserLogin() }}
                       >
-                        {t(login.reason === 'browser-in-use' ? 'chat.browserCloseLogin' : 'chat.browserLogin')}
+                        {t('chat.browserLogin')}
                       </button>
                     )}
                     <button

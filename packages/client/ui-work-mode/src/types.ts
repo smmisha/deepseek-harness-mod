@@ -48,7 +48,14 @@ export type DesktopChatLoginPhase =
   | { readonly kind: 'browser' }
   | {
     readonly kind: 'failed'
-    readonly reason: 'browser-missing' | 'browser-in-use' | 'timeout' | 'transfer' | 'provider-rejected'
+    readonly reason:
+      | 'browser-missing'
+      | 'login-window-open'
+      | 'timeout'
+      | 'transfer'
+      | 'site-rejected'
+      | 'provider-rejected'
+      | 'unknown'
   }
 
 /** Main-process chat guest operations exposed to the application document. */
@@ -66,7 +73,7 @@ export interface DesktopChatBridge {
    */
   onLoginState(listener: (state: DesktopChatLoginPhase) => void): () => void
   /** Start the external-browser fallback for this document. */
-  startBrowserLogin(options?: { readonly closeBrowser?: boolean }): Promise<void>
+  startBrowserLogin(): Promise<void>
   /** Close the provider window or cancel the browser attempt this document owns. */
   cancelLogin(): Promise<void>
 }

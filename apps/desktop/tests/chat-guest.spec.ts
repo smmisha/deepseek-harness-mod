@@ -4,8 +4,9 @@
  * permission the site needs.
  */
 import { EventEmitter } from 'node:events'
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChatLoginBrowserInUseError, ChatLoginTimeoutError } from '../src/chat-login-browser.ts'
+import { ChatLoginTimeoutError, ChatLoginWindowOpenError } from '../src/chat-login-browser.ts'
 
 const state = vi.hoisted(() => ({
   sessions: [] as Array<Record<string, unknown>>,
@@ -67,8 +68,19 @@ const OWNER = (): OwnerDouble => {
 type WindowOpenResult = { action: 'deny' } | { action: 'allow'; overrideBrowserWindowOptions?: unknown }
 type AttachedGuest = EventEmitter & {
   windowOpen?: (details: { url: string; postBody?: unknown }) => WindowOpenResult
-  loadURL?: (url: string) => Promise<void>
-  executeJavaScript?: (script: string) => Promise<unknown>
+  loadURL: (url: string) => Promise<void>
+  executeJavaScript: (script: string) => Promise<unknown>
+  reload: () => void
+  setURL: (url: string) => void
+}
+
+/** Make a guest load settle immediately, as the chat page does. */
+function settleGuest(guest: AttachedGuest): void {
+  guest.loadURL = vi.fn(async () => {
+    guest.setURL?.('https://chat.deepseek.com/')
+    guest.emit('did-stop-loading')
+  })
+  guest.reload = vi.fn(() => { guest.emit('did-stop-loading') })
 }
 
 /** Minimal guest double with the events the policy attaches to. */
@@ -80,6 +92,7 @@ function guest() {
     id: 31,
     loadURL: vi.fn(async () => {}),
     executeJavaScript: vi.fn(async () => undefined),
+    reload: vi.fn(() => { emitter.emit('did-stop-loading') }),
     getURL: () => url,
     setURL: (next: string) => { url = next },
     close: () => { closed = true; emitter.emit('destroyed') },
@@ -363,6 +376,7 @@ describe('DesktopBrowserGuests chat sign-in', () => {
     allowedOrigins: ['https://chat.deepseek.com'],
     loginHosts: ['accounts.youtube.com', 'appleid.apple.com'],
     loginHostSuffixes: ['accounts.google.'],
+    browserLoginPollMs: 250,
   }
 
   it('gives the chat session a desktop Chrome user agent', () => {
@@ -508,16 +522,82 @@ describe('DesktopBrowserGuests chat sign-in', () => {
     guests.bind(windowOf(owner), () => () => {}, MESSAGES)
     const lease = guests.acquireChat(owner, CONFIG).lease
     const attached = attach(owner, lease) as AttachedGuest
+    settleGuest(attached)
+    attached.executeJavaScript = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
 
     await guests.startChatBrowserLogin(owner)
 
     expect(owner.send).toHaveBeenCalledWith('dsh-desktop:chat-login-state', { kind: 'browser' })
     const chatSession = state.sessions.find(value => value.partition === CHAT_PARTITION)!
     expect(chatSession.cookiesSet).toHaveBeenCalledWith(expect.objectContaining({ name: 'ds_session_id' }))
-    expect(attached.loadURL).toHaveBeenCalledTimes(2)
     expect(attached.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('localStorage.setItem'))
     expect(attached.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('token-value'))
+    expect(attached.reload).toHaveBeenCalledTimes(1)
     expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'idle' })
+  })
+
+  it('writes storage immediately when the guest already sits on the chat origin', async () => {
+    browserLogin.collect.mockResolvedValue({ cookies: [], storage: { userToken: 'token-value' } })
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    const attached = attach(owner, lease) as AttachedGuest
+    attached.setURL('https://chat.deepseek.com/sign_in')
+    settleGuest(attached)
+    attached.executeJavaScript = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
+
+    await guests.startChatBrowserLogin(owner)
+
+    expect(attached.loadURL).not.toHaveBeenCalled()
+    expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'idle' })
+  })
+
+  it('treats the site\'s aborted redirect as a completed load', async () => {
+    browserLogin.collect.mockResolvedValue({ cookies: [], storage: { userToken: 'token-value' } })
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    const attached = attach(owner, lease) as AttachedGuest
+    attached.loadURL = vi.fn(async () => {
+      attached.setURL('https://chat.deepseek.com/')
+      attached.emit('did-stop-loading')
+      const error = Object.assign(new Error('ERR_ABORTED'), { code: 'ERR_ABORTED' })
+      throw error
+    })
+    attached.reload = vi.fn(() => { attached.emit('did-stop-loading') })
+    attached.executeJavaScript = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
+
+    await guests.startChatBrowserLogin(owner)
+    expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'idle' })
+  })
+
+  it('reports the site dropping the transferred token after the reload', async () => {
+    browserLogin.collect.mockResolvedValue({ cookies: [], storage: { userToken: 'token-value' } })
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    const attached = attach(owner, lease) as AttachedGuest
+    settleGuest(attached)
+    attached.executeJavaScript = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(JSON.stringify({ value: 'token' }))
+      .mockResolvedValueOnce(JSON.stringify({ value: null }))
+
+    await guests.startChatBrowserLogin(owner)
+    expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state',
+      { kind: 'failed', reason: 'site-rejected' })
   })
 
   it('reports a missing browser without starting it', async () => {
@@ -545,8 +625,8 @@ describe('DesktopBrowserGuests chat sign-in', () => {
     expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'failed', reason: 'timeout' })
   })
 
-  it('reports a profile that a running browser already holds', async () => {
-    browserLogin.collect.mockRejectedValue(new ChatLoginBrowserInUseError())
+  it('reports a leftover sign-in window with its own reason', async () => {
+    browserLogin.collect.mockRejectedValue(new ChatLoginWindowOpenError())
     const owner = OWNER()
     const guests = new DesktopBrowserGuests(() => undefined)
     guests.bind(windowOf(owner), () => () => {}, MESSAGES)
@@ -555,22 +635,39 @@ describe('DesktopBrowserGuests chat sign-in', () => {
 
     await guests.startChatBrowserLogin(owner)
     expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state',
-      { kind: 'failed', reason: 'browser-in-use' })
+      { kind: 'failed', reason: 'login-window-open' })
+  })
+
+  it('reports an unknown failure without calling it a transfer problem', async () => {
+    browserLogin.collect.mockRejectedValue(new Error('boom'))
+    const owner = OWNER()
+    const guests = new DesktopBrowserGuests(() => undefined)
+    guests.bind(windowOf(owner), () => () => {}, MESSAGES)
+    const lease = guests.acquireChat(owner, CONFIG).lease
+    attach(owner, lease)
+
+    await guests.startChatBrowserLogin(owner)
+    expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'failed', reason: 'unknown' })
   })
 
   it('reports a transfer failure when the guest cannot store the sign-in', async () => {
-    browserLogin.collect.mockResolvedValue({
-      cookies: [],
-      storage: { userToken: 'token-value' },
-    })
+    browserLogin.collect.mockResolvedValue({ cookies: [], storage: { userToken: 'token-value' } })
     const owner = OWNER()
     const guests = new DesktopBrowserGuests(() => undefined)
     guests.bind(windowOf(owner), () => () => {}, MESSAGES)
     const lease = guests.acquireChat(owner, CONFIG).lease
     const attached = attach(owner, lease) as AttachedGuest
+    settleGuest(attached)
     attached.executeJavaScript = vi.fn(async () => { throw new Error('renderer gone') })
 
     await guests.startChatBrowserLogin(owner)
     expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'failed', reason: 'transfer' })
+  })
+
+  it('never terminates foreign browser processes', () => {
+    for (const file of ['browser-guests.ts', 'chat-login-browser.ts']) {
+      const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
+      expect(source).not.toMatch(/taskkill|pkill/i)
+    }
   })
 })

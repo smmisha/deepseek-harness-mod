@@ -258,8 +258,11 @@ describe('WorkModeLayer', () => {
 
   it.each([
     ['browser-missing', 'chat.browserMissing'],
+    ['login-window-open', 'chat.loginWindowOpen'],
     ['timeout', 'chat.browserTimeout'],
     ['transfer', 'chat.browserFailed'],
+    ['site-rejected', 'chat.siteRejected'],
+    ['unknown', 'chat.unknown'],
   ] as const)('renders the %s fallback failure', async (reason, key) => {
     let listener: ((state: DesktopChatLoginPhase) => void) | undefined
     const shell: DesktopChatBridge = {
@@ -276,27 +279,6 @@ describe('WorkModeLayer', () => {
     await waitFor(() => { expect(factory.calls).toHaveLength(1) })
     act(() => { listener?.({ kind: 'failed', reason }) })
     expect(screen.getByText(en[key])).toBeTruthy()
-  })
-
-  it('offers close-and-sign-in when the browser profile is busy', async () => {
-    let listener: ((state: DesktopChatLoginPhase) => void) | undefined
-    const startBrowserLogin = vi.fn(async () => {})
-    const shell: DesktopChatBridge = {
-      acquire: vi.fn(async () => ({
-        lease: 'chat-lease' as DesktopChatReservation['lease'],
-        partition: 'persist:dsh-chat',
-      })),
-      onLoginState: (next) => { listener = next; return () => {} },
-      startBrowserLogin,
-      cancelLogin: vi.fn(async () => {}),
-    }
-    const factory = guests()
-    render(<WorkModeLayer {...props('chat', { bridge: shell, createGuest: factory.createGuest })} />)
-    await waitFor(() => { expect(factory.calls).toHaveLength(1) })
-    act(() => { listener?.({ kind: 'failed', reason: 'browser-in-use' }) })
-    expect(screen.getByText(en['chat.browserInUse'])).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['chat.browserCloseLogin'] }))
-    expect(startBrowserLogin).toHaveBeenCalledWith({ closeBrowser: true })
   })
 
   it('starts the browser fallback from the Chat bar', async () => {
