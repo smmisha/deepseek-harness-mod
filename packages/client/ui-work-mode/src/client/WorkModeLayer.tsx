@@ -167,9 +167,12 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
                       <button
                         type="button"
                         className={clsx(css.action, css.actionPrimary)}
-                        onClick={() => { void bridge.startBrowserLogin() }}
+                        onClick={() => {
+                          void bridge.startBrowserLogin(login.reason === 'browser-in-use'
+                            ? { closeBrowser: true } : undefined)
+                        }}
                       >
-                        {t('chat.browserLogin')}
+                        {t(login.reason === 'browser-in-use' ? 'chat.browserCloseLogin' : 'chat.browserLogin')}
                       </button>
                     )}
                     <button

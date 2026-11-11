@@ -66,7 +66,7 @@ export interface DesktopChatBridge {
    */
   onLoginState(listener: (state: DesktopChatLoginPhase) => void): () => void
   /** Start the external-browser fallback for this document. */
-  startBrowserLogin(): Promise<void>
+  startBrowserLogin(options?: { readonly closeBrowser?: boolean }): Promise<void>
   /** Close the provider window or cancel the browser attempt this document owns. */
   cancelLogin(): Promise<void>
 }

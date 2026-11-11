@@ -43,7 +43,8 @@ function createProductApi(): DshDesktopProductApi {
         ipcRenderer.on(DESKTOP_IPC.chatLoginState, handler)
         return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginState, handler) }
       },
-      startBrowserLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginStart) as Promise<void>,
+      startBrowserLogin: options => ipcRenderer.invoke(DESKTOP_IPC.chatLoginStart,
+        options?.closeBrowser === true) as Promise<void>,
       cancelLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginCancel) as Promise<void>,
     },
     fileDrag: {

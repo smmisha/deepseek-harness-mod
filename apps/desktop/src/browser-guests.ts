@@ -10,6 +10,7 @@
  * the kind only decides the session policy and where disallowed pages go.
  */
 import { randomUUID } from 'node:crypto'
+import { execFile, spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { app, Menu, session, shell, type BrowserWindow, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
@@ -585,8 +586,9 @@ export class DesktopBrowserGuests {
   /**
    * Start the controlled-browser fallback for one document.
    * @param owner - authenticated application WebContents.
+   * @param closeBrowser - stop a running Chrome/Edge first (the document asked for it).
    */
-  async startChatBrowserLogin(owner: WebContents): Promise<void> {
+  async startChatBrowserLogin(owner: WebContents, closeBrowser = false): Promise<void> {
     if (this.chatLoginAttempts.has(owner.id)) return
     const executable = findChatBrowser()
     if (executable === undefined) {
@@ -594,6 +596,7 @@ export class DesktopBrowserGuests {
       this.publishLogin(owner, { kind: 'failed', reason: 'browser-missing' })
       return
     }
+    if (closeBrowser) await this.stopBrowserProcesses(executable)
     const attempt = { cancelled: false }
     const isCancelled = (): boolean => attempt.cancelled
     this.chatLoginAttempts.set(owner.id, attempt)
@@ -639,6 +642,28 @@ export class DesktopBrowserGuests {
       this.publishLogin(owner, { kind: 'failed', reason })
     } finally {
       this.chatLoginAttempts.delete(owner.id)
+      if (closeBrowser) this.restartBrowser(executable)
+    }
+  }
+
+  /** Stop every running instance of the resolved browser so its profile frees up. */
+  private async stopBrowserProcesses(executable: string): Promise<void> {
+    const name = executable.replaceAll('\\', '/').split('/').pop() ?? 'chrome.exe'
+    logChatLogin(`closing running ${name}`)
+    await new Promise<void>((resolve) => {
+      if (process.platform === 'win32') execFile('taskkill', ['/IM', name, '/F', '/T'], () => { resolve() })
+      else execFile('pkill', ['-f', name], () => { resolve() })
+    })
+    await new Promise(resolve => setTimeout(resolve, 1_500))
+  }
+
+  /** Reopen the browser the document asked to close, restoring its last session. */
+  private restartBrowser(executable: string): void {
+    try {
+      spawn(executable, [], { detached: true, stdio: 'ignore' }).unref()
+      logChatLogin('browser reopened')
+    } catch (error) {
+      logChatLogin(`browser reopen failed error=${error instanceof Error ? error.name : 'unknown'}`)
     }
   }
 

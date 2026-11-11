@@ -837,9 +837,10 @@ async function main(): Promise<void> {
     assertProductSender(event)
     return browserGuests.acquireChat(event.sender, config)
   })
-  ipcMain.handle(DESKTOP_IPC.chatLoginStart, (event) => {
+  ipcMain.handle(DESKTOP_IPC.chatLoginStart, (event, closeBrowser: unknown) => {
     assertProductSender(event)
-    void browserGuests.startChatBrowserLogin(event.sender).catch((error: unknown) => { console.error(error) })
+    void browserGuests.startChatBrowserLogin(event.sender, closeBrowser === true)
+      .catch((error: unknown) => { console.error(error) })
   })
   ipcMain.handle(DESKTOP_IPC.chatLoginCancel, (event) => {
     assertProductSender(event)
