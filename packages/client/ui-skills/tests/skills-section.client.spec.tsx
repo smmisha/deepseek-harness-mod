@@ -328,6 +328,19 @@ describe('SkillsSection: adding skills', () => {
     await waitFor(() => { expect(addFolder).toHaveBeenCalledWith('D:\\team\\skills') })
     await waitFor(() => { expect(screen.queryByLabelText('Folder path')).toBeNull() })
     expect(load).toHaveBeenCalledTimes(2)
+    // The folder arrives switched off, so the tab names the switch that applies it.
+    expect((await screen.findByRole('status')).textContent).toBe(en.folderAddedHint)
+  })
+
+  it('clears the added-folder notice once the reader switches a source', async () => {
+    const addFolder = vi.fn(async () => 'added' as const)
+    render(<SkillsSection {...props({ addFolder })} />)
+    const input = await openFolderDialog()
+    fireEvent.change(input, { target: { value: 'D:\\team\\skills' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await screen.findByRole('status')
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable source Claude Code' }))
+    await waitFor(() => { expect(screen.queryByRole('status')).toBeNull() })
   })
 
   it('submits with Enter and explains every refusal in the dialog', async () => {

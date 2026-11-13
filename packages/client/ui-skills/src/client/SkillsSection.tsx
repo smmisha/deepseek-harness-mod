@@ -263,6 +263,7 @@ export function SkillsSection({
   const [folderDialog, setFolderDialog] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [writeFailure, setWriteFailure] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<readonly string[]>([])
   const [limits, setLimits] = useState<Readonly<Record<string, number>>>({})
@@ -299,6 +300,7 @@ export function SkillsSection({
   }, [cwd])
 
   const withBusy = async (key: string, write: () => Promise<string | undefined>): Promise<void> => {
+    setNotice(null)
     setBusy(previous => [...previous, key])
     try {
       const error = await write()
@@ -341,12 +343,18 @@ export function SkillsSection({
           aria-label={t('search')}
           onChange={(event) => { setQuery(event.target.value) }}
         />
-        <AddSkillsMenu t={t} onAddFolder={() => { setFolderDialog(true) }} createWithAi={createWithAi} />
+        <AddSkillsMenu t={t} onAddFolder={() => { setNotice(null); setFolderDialog(true) }} createWithAi={createWithAi} />
       </div>
       <AddFolderDialog t={t} open={folderDialog} onClose={() => { setFolderDialog(false) }}
-        onAdded={() => { setFolderDialog(false); void refresh() }} addFolder={addFolder} pickFolder={pickFolder} />
+        onAdded={() => {
+          setFolderDialog(false)
+          // The added folder arrives switched off; the notice names the switch that applies it.
+          setNotice(t('folderAddedHint'))
+          void refresh()
+        }} addFolder={addFolder} pickFolder={pickFolder} />
       {failure !== null && <p className={css.error} role="alert">{t('failed', { error: failure })}</p>}
       {writeFailure !== null && <p className={css.error} role="alert">{t('writeFailed', { error: writeFailure })}</p>}
+      {notice !== null && <p className={css.message} role="status">{notice}</p>}
       {rows.length === 0 && <p className={css.message}>{t('noMatches')}</p>}
       {rows.map(({ source, skills }) => {
         const limit = limits[source.id] ?? PAGE_SIZE

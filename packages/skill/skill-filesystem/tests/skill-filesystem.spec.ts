@@ -328,7 +328,8 @@ describe('FileSystemSkillProvider', () => {
     await ctx.plugin(SkillRegistry)
     await ctx.plugin(SkillSources, { applications: [], folders: [{ dir: team }, { dir: gone }] })
     await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
-    // An added folder starts switched on, so its skill reaches the catalog.
+    // A folder stored without a switch record keeps the non-application
+    // default, so its skill reaches the catalog as it always did.
     expect(await ctx.skills.get('team-skill', { cwd: project })).toBeDefined()
     const views = await describeSources(ctx, project)
     expect(views.find(view => view.id === `folder:${team}`)).toMatchObject({
@@ -348,7 +349,11 @@ describe('FileSystemSkillProvider', () => {
     expect(await controller.addFolder(extra)).toBe('added')
     await controller.removeFolder(team)
     expect(updates).toEqual([
-      ['skill-sources', { folders: [{ dir: team }, { dir: gone }, { dir: extra }] }, undefined],
+      ['skill-sources', {
+        folders: [{ dir: team }, { dir: gone }, { dir: extra }],
+        // The tab's new folder is written switched off until the reader turns it on.
+        sources: { [`folder:${extra}`]: { enabled: false } },
+      }, undefined],
       ['skill-sources', { folders: [{ dir: gone }] }, undefined],
     ])
   })

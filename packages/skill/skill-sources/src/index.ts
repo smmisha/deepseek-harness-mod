@@ -15,7 +15,8 @@ import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { SkillSource } from '@deepseek-ai/dsh-skill'
 import {
-  bindVisibility, sameFolder, type SkillApplication, type SkillFolder, type SkillVisibility, type SkillVisibilityState,
+  bindVisibility, folderSourceId, sameFolder, type SkillApplication, type SkillFolder, type SkillVisibility,
+  type SkillVisibilityState,
 } from './visibility.ts'
 
 export type { SkillApplication, SkillFolder, SkillFolderSource, SkillVisibility, SkillVisibilityState } from './visibility.ts'
@@ -79,7 +80,7 @@ export interface SkillSourcesService {
   folders(): readonly SkillFolder[]
   /** One read of the switches, applications, and added folders, answering which sources and skills are visible. */
   visibility(): SkillVisibility
-  /** Add one absolute folder; resolves false when the folder is already listed. */
+  /** Add one absolute folder, switched off until the reader turns its source on. */
   addFolder(dir: string): Promise<boolean>
   /** Remove one added folder; its files and switches stay untouched. */
   removeFolder(dir: string): Promise<void>
@@ -140,6 +141,7 @@ export default class SkillSources extends Service implements SkillSourcesService
 
   /**
    * Add one folder to the end of the list; a folder already listed under any letter case on Windows is kept once.
+   * The new source is recorded switched off: its SKILL.md files reach the model only after the reader turns it on.
    * @param dir - absolute folder; the Remote controller validates it before calling.
    * @returns false when the folder was already listed and nothing was written.
    */
@@ -147,7 +149,12 @@ export default class SkillSources extends Service implements SkillSourcesService
     const folder = resolve(dir)
     const current = this.folders()
     if (current.some(entry => sameFolder(entry.dir, folder))) return false
-    await this.ownerContext.settings.update(SETTINGS_NAMESPACE, { folders: [...current, { dir: folder }] }, undefined)
+    // A folder the reader just added is untrusted input: its skills must not
+    // become agent instructions before the reader switches the source on.
+    await this.ownerContext.settings.update(SETTINGS_NAMESPACE, {
+      folders: [...current, { dir: folder }],
+      sources: { [folderSourceId(folder)]: { enabled: false } },
+    }, undefined)
     this.invalidateAll()
     return true
   }

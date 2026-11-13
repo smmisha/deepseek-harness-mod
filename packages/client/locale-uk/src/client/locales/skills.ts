@@ -28,6 +28,7 @@ export const ukSkills = {
   'chooseAddMethod': 'Виберіть спосіб додавання',
   'addFolder': 'Додати теку',
   'addFolderDescription': 'Виберіть або введіть теку зі скілами; її скіли зʼявляться в цьому списку',
+  'folderAddedHint': 'Теку додано. Увімкніть її джерело, щоб застосувати скіли',
   'createWithAi': 'Створити за допомогою ШІ',
   'createWithAiDescription': 'Відкрити новий чат, де агент напише скіл за вашим описом',
   'createWithAiUnavailable': 'З цієї сторінки не можна відкрити новий чат',

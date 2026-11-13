@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolve } from 'node:path'
-import SkillSources, { type SkillApplication } from '../src/index.ts'
+import SkillSources, { type Config, type SkillApplication } from '../src/index.ts'
 import { bindVisibility, folderSourceId, sameFolder, skillEnabled, sourceEnabled } from '../src/visibility.ts'
 
 const APPS: readonly SkillApplication[] = [
@@ -21,6 +21,50 @@ async function setup(config: {
   ctx.provide('settings', { update })
   await ctx.plugin(SkillSources, config)
   return { ctx, update }
+}
+
+/** Mutable state behind the volatile Config getters of one test service. */
+interface LiveSwitches {
+  sources: Record<string, { enabled?: boolean }>
+  skills: Record<string, Record<string, boolean>>
+  folders: { dir: string }[]
+}
+
+/** One settings patch, as the service writes it. */
+interface SettingsPatch {
+  readonly folders?: readonly { readonly dir: string }[]
+  readonly sources?: Readonly<Record<string, { readonly enabled?: boolean }>>
+  readonly skills?: Readonly<Record<string, Readonly<Record<string, boolean>>>>
+}
+
+/**
+ * Settings stub whose patches land in the volatile Config getters, so the
+ * service reads back the switch it wrote the way the real settings service feeds it.
+ * @param initial - stored switches and folders the service starts from.
+ * @returns the live state, the recording update stub, and the Config for one direct instance.
+ */
+function liveSettings(initial: LiveSwitches = { sources: {}, skills: {}, folders: [] }) {
+  const live: LiveSwitches = {
+    sources: { ...initial.sources },
+    skills: { ...initial.skills },
+    folders: initial.folders.map(folder => ({ dir: folder.dir })),
+  }
+  const update = vi.fn(async (_ns: string, patch: SettingsPatch) => {
+    if (patch.folders !== undefined) live.folders = patch.folders.map(folder => ({ dir: folder.dir }))
+    for (const [source, entry] of Object.entries(patch.sources ?? {})) {
+      live.sources[source] = { ...(live.sources[source] ?? {}), ...entry }
+    }
+    for (const [source, names] of Object.entries(patch.skills ?? {})) {
+      live.skills[source] = { ...(live.skills[source] ?? {}), ...names }
+    }
+  })
+  const config: Config = {
+    applications: [...APPS],
+    folders: { get: () => live.folders },
+    sources: { get: () => live.sources },
+    skills: { get: () => live.skills },
+  }
+  return { live, update, config }
 }
 
 describe('skill-sources configuration', () => {
@@ -54,10 +98,20 @@ describe('visibility rules', () => {
     expect(sameFolder('/team/a', '/team/b')).toBe(false)
   })
 
-  it('binds added folders as sources that start switched on', () => {
+  it('binds added folders as sources whose switch comes from the stored state', () => {
     const visibility = bindVisibility({ sources: {}, skills: {} }, APPS, [{ dir: 'D:\\team' }])
     expect(visibility.folders).toEqual([{ id: folderSourceId('D:\\team'), dir: 'D:\\team' }])
+    // A folder stored without a switch record keeps the non-application default it always had.
     expect(visibility.sourceEnabled(folderSourceId('D:\\team'))).toBe(true)
+    // `addFolder` records the switch, so a folder added now starts off.
+    const recorded = bindVisibility({
+      sources: { [folderSourceId('D:\\team')]: { enabled: false } }, skills: {},
+    }, APPS, [{ dir: 'D:\\team' }])
+    expect(recorded.sourceEnabled(folderSourceId('D:\\team'))).toBe(false)
+    const switchedOn = bindVisibility({
+      sources: { [folderSourceId('D:\\team')]: { enabled: true } }, skills: {},
+    }, APPS, [{ dir: 'D:\\team' }])
+    expect(switchedOn.sourceEnabled(folderSourceId('D:\\team'))).toBe(true)
     expect(bindVisibility({ sources: {}, skills: {} }, APPS).folders).toEqual([])
   })
 
@@ -129,7 +183,10 @@ describe('SkillSources service', () => {
     await expect(ctx.skillSources.addFolder(team)).resolves.toBe(false)
     const extra = resolve('extra-skills')
     await expect(ctx.skillSources.addFolder(extra)).resolves.toBe(true)
-    expect(update).toHaveBeenLastCalledWith('skill-sources', { folders: [{ dir: team }, { dir: extra }] }, undefined)
+    expect(update).toHaveBeenLastCalledWith('skill-sources', {
+      folders: [{ dir: team }, { dir: extra }],
+      sources: { [folderSourceId(extra)]: { enabled: false } },
+    }, undefined)
     await ctx.skillSources.removeFolder(extra)
     expect(update).toHaveBeenCalledTimes(1)
     await ctx.skillSources.removeFolder(team)
@@ -149,5 +206,47 @@ describe('SkillSources service', () => {
     expect(visibility.skillEnabled('claude-code', 'review')).toBe(false)
     expect(visibility.skillEnabled('claude-code', 'other')).toBe(true)
     expect(visibility.sourceEnabled('user-dsh')).toBe(true)
+  })
+
+  it('adds a folder switched off so its skills wait for the reader', async () => {
+    const { update, config } = liveSettings()
+    const ctx = new Context()
+    ctx.provide('settings', { update })
+    const service = new SkillSources(ctx, config)
+    const team = resolve('untrusted-skills')
+    const source = folderSourceId(team)
+
+    await expect(service.addFolder(team)).resolves.toBe(true)
+    expect(update).toHaveBeenCalledWith('skill-sources', {
+      folders: [{ dir: team }],
+      sources: { [source]: { enabled: false } },
+    }, undefined)
+    const visibility = service.visibility()
+    expect(visibility.folders).toEqual([{ id: source, dir: team }])
+    expect(visibility.sourceEnabled(source)).toBe(false)
+    expect(visibility.skillEnabled(source, 'injected')).toBe(false)
+
+    // The reader's own switch is the only way the folder reaches the model catalog.
+    await service.setSource(source, true)
+    expect(service.visibility().sourceEnabled(source)).toBe(true)
+  })
+
+  it('keeps the switches of the folders already listed', async () => {
+    const kept = resolve('kept-skills')
+    const added = resolve('added-skills')
+    const { live, update, config } = liveSettings({
+      sources: { [folderSourceId(kept)]: { enabled: true } }, skills: {}, folders: [{ dir: kept }],
+    })
+    const ctx = new Context()
+    ctx.provide('settings', { update })
+    const service = new SkillSources(ctx, config)
+
+    await expect(service.addFolder(added)).resolves.toBe(true)
+    expect(live.sources).toEqual({
+      [folderSourceId(kept)]: { enabled: true },
+      [folderSourceId(added)]: { enabled: false },
+    })
+    expect(service.visibility().sourceEnabled(folderSourceId(kept))).toBe(true)
+    expect(service.visibility().sourceEnabled(folderSourceId(added))).toBe(false)
   })
 })
