@@ -897,4 +897,3 @@ describe('DesktopBrowserGuests edge policies', () => {
     expect(decidesCancellation(browserSession, 'http://127.0.0.1:9999/x')).toBe(false)
   })
 })
-
