@@ -1,6 +1,6 @@
 import { SHIPPED_LOCALE_IDS } from '../../../scripts/shipped-locales.ts'
 import { describe, expect, it } from 'vitest'
-import { en, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale, ja, zh, es, fr, de, ru, pt } from '../src/locale.ts'
+import { en, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale, ja, zh, es, fr, de, ru, pt, uk } from '../src/locale.ts'
 
 describe('desktop locale dictionaries', () => {
   it('uses the same concise Chinese configuration error in the toast and details', () => {
@@ -21,6 +21,8 @@ describe('desktop locale dictionaries', () => {
   it.each([
     ['es', 'es-MX', es], ['fr', 'fr-CA', fr], ['de', 'de-DE', de],
     ['ru', 'ru-RU', ru], ['pt', 'pt-BR', pt],
+    // The additional Ukrainian Client pack selects `uk`; the shell menus follow it.
+    ['uk', 'uk-UA', uk],
   ] as const)('resolves %s, preserves placeholders, and honors saved preferences', (id, tag, messages) => {
     expect(resolveDesktopLocale(tag.toUpperCase())).toEqual({ id, messages })
     expect(resolveDesktopStartupLocale(id, ['zh-CN']).id).toBe(id)
