@@ -15,7 +15,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import { skillEnabled, sourceEnabled, type SkillApplication, type SkillVisibilityState } from '@deepseek-ai/dsh-skill-sources'
+import type { SkillVisibility } from '@deepseek-ai/dsh-skill-sources'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
 export type { LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
@@ -36,6 +36,13 @@ import {
   type SkillProviderObservation,
   type SkillSource,
 } from '@deepseek-ai/dsh-skill'
+
+/** Visibility when no skill-sources service is mounted: no application folders, every source and skill on. */
+const ALL_VISIBLE: SkillVisibility = {
+  applications: [],
+  sourceEnabled: () => true,
+  skillEnabled: () => true,
+}
 
 const PROJECT_DSH_RANK = 100
 const PROJECT_AGENTS_RANK = 200
@@ -319,13 +326,9 @@ export class FileSystemSkillProvider implements SkillProvider {
     this.bundledSkillDir = bundledSkillDir === undefined ? undefined : resolve(bundledSkillDir)
   }
 
-  /** Switches and application folders owned by the profile service. */
-  private gate(): { state: SkillVisibilityState; applications: readonly SkillApplication[] } {
-    const service = this.ctx.get('skillSources')
-    return {
-      state: service?.read() ?? { sources: {}, skills: {} },
-      applications: service?.applications() ?? [],
-    }
+  /** Switches and application folders owned by the profile service; without it every source and skill is visible. */
+  private gate(): SkillVisibility {
+    return this.ctx.get('skillSources')?.visibility() ?? ALL_VISIBLE
   }
 
   /**
@@ -339,7 +342,7 @@ export class FileSystemSkillProvider implements SkillProvider {
     // A switched-off source is neither scanned nor watched: it cannot contribute
     // a skill, so discovery and its watcher are pure cost.
     const roots = (await this.roots(options.cwd))
-      .filter(root => sourceEnabled(gate.state, root.source, gate.applications))
+      .filter(root => gate.sourceEnabled(root.source))
     let complete = true
     try {
       await this.watchManager.observeRoots(roots)
@@ -353,7 +356,7 @@ export class FileSystemSkillProvider implements SkillProvider {
       try {
         const discovered = await discoverRoot(root, this.ctx, this.name)
         options.signal?.throwIfAborted()
-        candidates.push(...discovered.filter(candidate => skillEnabled(gate.state, candidate.source, candidate.name, gate.applications)))
+        candidates.push(...discovered.filter(candidate => gate.skillEnabled(candidate.source, candidate.name)))
       } catch (error) {
         options.signal?.throwIfAborted()
         complete = false
@@ -372,7 +375,7 @@ export class FileSystemSkillProvider implements SkillProvider {
   async get(candidate: SkillCandidate, options: SkillLookupOptions): Promise<SkillDefinition | undefined> {
     const gate = this.gate()
     /* v8 ignore next 2 -- list() already drops switched-off skills; this guard answers a direct get(). */
-    if (!skillEnabled(gate.state, candidate.source, candidate.name, gate.applications)) return undefined
+    if (!gate.skillEnabled(candidate.source, candidate.name)) return undefined
     const locator = candidate.locator as LocalLocator
     const parsed = await parseSkillFile(locator.path, this.ctx, options.signal, candidate.source === 'bundled')
     if (parsed === undefined) return undefined
@@ -452,7 +455,7 @@ export class FileSystemSkillProvider implements SkillProvider {
     for (const { root, candidates } of entries) {
       const kind = gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
       const title = gate.applications.find(application => application.id === root.source)?.title ?? root.source
-      const enabled = sourceEnabled(gate.state, root.source, gate.applications)
+      const enabled = gate.sourceEnabled(root.source)
       const displayPath = toDisplayPath(root.path, options.cwd)
       if (root.missing === true) {
         views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: false, enabled, skills: [] })
@@ -477,7 +480,7 @@ export class FileSystemSkillProvider implements SkillProvider {
           path: candidate.path,
           displayPath: candidate.displayPath,
           description: candidate.description,
-          status: skillEnabled(gate.state, root.source, candidate.name, gate.applications) ? 'available' as const : 'disabled' as const,
+          status: gate.skillEnabled(root.source, candidate.name) ? 'available' as const : 'disabled' as const,
           ...(winner === undefined ? {} : { shadowedBy: winner }),
         }
       })

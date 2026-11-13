@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-skill-filesystem",
   "description": "Local filesystem skill provider for the DeepSeek Harness",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },
@@ -39,10 +39,14 @@
     "lib/index.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
     "lib/typert.host.js",
     "lib/typert.host.d.ts",
     "lib/typert.remote-client.js",
-    "lib/typert.remote-client.d.ts"
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
   ],
   "license": "MIT",
   "peerDependencies": {
@@ -56,7 +60,7 @@
     "chokidar": "5.0.0",
     "@deepseek-ai/schemastery": "workspace:~",
     "yaml": "^2.4.2",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

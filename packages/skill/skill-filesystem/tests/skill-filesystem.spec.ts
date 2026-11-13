@@ -334,15 +334,17 @@ describe('FileSystemSkillProvider', () => {
     await writeSkill(claude, 'dup-skill', 'Claude copy')
     await writeSkill(claude, 'unique-skill', 'Only in Claude')
     await writeSkill(codex, 'dup-skill', 'Codex copy')
+    const applications = [
+      { id: 'claude-code', dir: claude, title: 'Claude Code' },
+      { id: 'codex', dir: codex, title: 'Codex' },
+    ]
     const fakeSources: SkillSourcesService = {
       read: () => ({
         sources: { 'claude-code': { enabled: true }, codex: { enabled: true } },
         skills: {},
       }),
-      applications: () => [
-        { id: 'claude-code', dir: claude, title: 'Claude Code' },
-        { id: 'codex', dir: codex, title: 'Codex' },
-      ],
+      applications: () => applications,
+      visibility: () => ({ applications, sourceEnabled: () => true, skillEnabled: () => true }),
       setSource: async () => undefined,
       setSkill: async () => undefined,
       register: () => () => {},

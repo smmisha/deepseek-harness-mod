@@ -13,19 +13,12 @@ import { Service, type Context, type Volatile } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { SkillSource } from '@deepseek-ai/dsh-skill'
+import { bindVisibility, type SkillApplication, type SkillVisibility, type SkillVisibilityState } from './visibility.ts'
+
+export type { SkillApplication, SkillVisibility, SkillVisibilityState } from './visibility.ts'
 
 /** Profile entry id whose volatile Config holds the switches. */
 const SETTINGS_NAMESPACE = 'skill-sources'
-
-/** Folders of another application whose skills may be shown. */
-export interface SkillApplication {
-  /** Source identity reported for its skills. */
-  readonly id: string
-  /** Folder scanned for skill bundles; `~` expands to the user's home. */
-  readonly dir: string
-  /** Reader-facing name, shown by the Skills tab. */
-  readonly title: string
-}
 
 /** One source switch stored in this profile's settings. */
 export interface SkillSourceSwitch {
@@ -53,8 +46,8 @@ const DEFAULT_APPLICATIONS: readonly SkillApplication[] = [
   { id: 'opencode', dir: '~/.config/opencode/skills', title: 'OpenCode' },
 ]
 
-/** Validated plugin configuration. */
-export const Config = z.object({
+/** Validated plugin configuration; the Loader reads it from `SkillSources.Config`. */
+const ConfigSchema = z.object({
   applications: z.array(z.object({
     id: z.string().min(1),
     dir: z.string().min(1),
@@ -66,43 +59,8 @@ export const Config = z.object({
   skills: z.dict(z.dict(z.boolean())).default({}).volatile(),
 })
 
-/** Visibility state shared with local providers. */
-export interface SkillVisibilityState {
-  /** Source switches keyed by source id. */
-  readonly sources: Readonly<Record<string, { readonly enabled?: boolean }>>
-  /** Per-skill switches keyed by source id, then skill name. */
-  readonly skills: Readonly<Record<string, Readonly<Record<string, boolean>>>>
-}
-
 /** State used when no provider configured anything. */
 const EMPTY_STATE: SkillVisibilityState = { sources: {}, skills: {} }
-
-/**
- * Whether a source's skills reach the model catalog and the user's `/` commands.
- * @param state - persisted switches.
- * @param source - discovery source identity.
- * @param applications - configured other-application folders; each starts off.
- * @returns the explicit switch, or the source's default.
- */
-export function sourceEnabled(
-  state: SkillVisibilityState, source: string, applications: readonly SkillApplication[],
-): boolean {
-  return state.sources[source]?.enabled ?? !applications.some(application => application.id === source)
-}
-
-/**
- * Whether one skill is visible; a switched-off source hides every skill in it.
- * @param state - persisted switches.
- * @param source - discovery source identity.
- * @param name - skill name.
- * @param applications - configured other-application folders; each starts off.
- * @returns true when the source and the skill are both on.
- */
-export function skillEnabled(
-  state: SkillVisibilityState, source: string, name: string, applications: readonly SkillApplication[],
-): boolean {
-  return sourceEnabled(state, source, applications) && (state.skills[source]?.[name] ?? true)
-}
 
 /** The one service a provider and the Skills tab both use. */
 export interface SkillSourcesService {
@@ -110,6 +68,8 @@ export interface SkillSourcesService {
   read(): SkillVisibilityState
   /** Configured other-application folders. */
   applications(): readonly SkillApplication[]
+  /** One read of the switches and applications, answering which sources and skills are visible. */
+  visibility(): SkillVisibility
   /** Switch one source; the per-skill switches are preserved. */
   setSource(source: SkillSource, enabled: boolean): Promise<void>
   /** Switch one skill inside its source. */
@@ -125,15 +85,9 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Plugin name used by the Loader row. */
-export const name = 'skill-sources'
-
-/** Plugin services: the settings service owns the persistent switches. */
-export const inject = ['settings']
-
 /** Owns the switches and notifies every mounted local provider after a write. */
 export default class SkillSources extends Service implements SkillSourcesService {
-  static readonly Config = Config
+  static readonly Config = ConfigSchema
 
   /** The settings service owns the persisted switches. */
   static readonly inject = ['settings']
@@ -159,6 +113,11 @@ export default class SkillSources extends Service implements SkillSourcesService
   /** Configured other-application folders. */
   applications(): readonly SkillApplication[] {
     return this.config.applications ?? []
+  }
+
+  /** One read of the switches and applications bound to the visibility rules. */
+  visibility(): SkillVisibility {
+    return bindVisibility(this.read(), this.applications())
   }
 
   /**
