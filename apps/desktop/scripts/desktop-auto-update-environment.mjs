@@ -5,6 +5,22 @@ import { valid } from 'semver'
 /** Environment variable that selects the Desktop update deployment. */
 export const DESKTOP_AUTO_UPDATE_ENV = 'DSH_DESKTOP_AUTO_UPDATE_ENV'
 
+/** Target dotenv setting that turns ordinary and mandatory updates off for a build. */
+export const DESKTOP_UPDATES_ENV = 'DSH_DESKTOP_UPDATES'
+
+/**
+ * Resolve whether the build carries an update feed and a mandatory update policy.
+ * @param {NodeJS.ProcessEnv} env Packaging settings.
+ * @returns {'enabled' | 'disabled'} Validated setting; omitted means enabled.
+ */
+export function resolveDesktopUpdates(env) {
+  const value = env[DESKTOP_UPDATES_ENV]?.trim() || 'enabled'
+  if (value !== 'enabled' && value !== 'disabled') {
+    throw new Error(`desktop auto-update: ${DESKTOP_UPDATES_ENV} must be "enabled" or "disabled"`)
+  }
+  return value
+}
+
 /**
  * Resolve the channel embedded in the installer; omitted local settings retain nightly.
  * @param {NodeJS.ProcessEnv} env Packaging or upload settings.
