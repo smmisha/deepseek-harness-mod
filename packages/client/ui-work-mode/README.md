@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The window's top strip carries a two-segment switch between Chat and Harness. Chat embeds `https://chat.deepseek.com/` in a frame-wide layer and asks the frame for minimal chrome; Harness restores the full shell. The embedded page is the site's own product: the reader signs in there and sees that account's history, and this package never sends it harness Sessions, tokens, or model calls. Desktop mounts an Electron `<webview>` in a persistent partition; other clients show the site's address instead. The last selection is restored on the next launch.
+The window's top strip carries a switch between Chat and Harness: two flat icon buttons, a speech bubble and the DeepSeek whale, named by their tooltips. Chat embeds `https://chat.deepseek.com/` in a frame-wide layer and asks the frame for minimal chrome; Harness restores the full shell. The embedded page is the site's own product: the reader signs in there and sees that account's history, and this package never sends it harness Sessions, tokens, or model calls. Desktop mounts an Electron `<webview>` in a persistent partition; other clients show the site's address instead. The last selection is restored on the next launch.
 
 ## Table of Contents
 
@@ -36,7 +36,7 @@ The Chat tab loads what the profile configures: `url` (default `https://chat.dee
 
 <a id="understand-the-implementation"></a>
 
-`apply` registers the dictionaries, maps the persisted mode onto the frame chrome, and contributes one `shell.overlay` entry, so the switch and the guest live in the frame-wide layer that stays mounted across panel switches. The overlay entry renders the capsule in the window's top strip — the caption band on Desktop, a floating inset elsewhere — and the guest page below it.
+`apply` registers the dictionaries, maps the persisted mode onto the frame chrome, and contributes one `shell.overlay` entry, so the switch and the guest live in the frame-wide layer that stays mounted across panel switches. The overlay entry renders the switch in the window's top strip — the caption band on Desktop, a floating inset elsewhere — and the guest page below it.
 
 On Desktop the guest is a `<webview>` configured with a main-issued lease and the persistent partition `persist:dsh-chat`. `apps/desktop` validates that lease in `will-attach-webview`, forces sandbox, context isolation, no Node, no preload, no nested webview, and no dialogs, and installs the session policy: only `clipboard-sanitized-write` is granted so the site's copy control works without giving it clipboard reads; camera, microphone, screen capture, geolocation, and notifications are denied, downloads are cancelled, and the site host cannot reach the application Host. Provider hops and the Apple child window pass the same main-process policy, and the child window denies its own popups. The shell never injects credentials or headers into the page, never names a User-Agent, and never reads the page's DOM, cookies, or storage.
 

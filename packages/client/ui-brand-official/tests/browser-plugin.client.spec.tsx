@@ -53,6 +53,25 @@ describe('official browser-brand plugin', () => {
     expect(subject.slots.entries('sidebar.brand.mark')).toHaveLength(1)
     expect(subject.slots.entries('sidebar.brand.name')).toHaveLength(1)
     expect(subject.slots.entries('conversation.hero.frame')).toHaveLength(1)
+    const [name] = subject.slots.entries('sidebar.brand.name')
+    expect((name?.inject as (() => unknown) | undefined)?.()).toEqual({ modBuild: true })
+  })
+
+  it('leaves the shell fallbacks in place for a build without a known profile', async () => {
+    vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', '')
+    const subject = await bench()
+    await subject.ctx.plugin({ inject: [...inject], apply }).await()
+    expect(subject.slots.entries('sidebar.brand.mark')).toHaveLength(0)
+    expect(subject.slots.entries('sidebar.brand.name')).toHaveLength(0)
+    expect(subject.slots.entries('conversation.hero.frame')).toHaveLength(1)
+  })
+
+  it('keeps the official release lockup free of the mod label', async () => {
+    vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', 'official')
+    const subject = await bench()
+    await subject.ctx.plugin({ inject: [...inject], apply }).await()
+    const [name] = subject.slots.entries('sidebar.brand.name')
+    expect((name?.inject as (() => unknown) | undefined)?.()).toEqual({ modBuild: false })
   })
 
   it('fills declarations before or after apply and removes every occupant on teardown', async () => {
@@ -102,9 +121,17 @@ describe('official browser-brand plugin', () => {
   })
 
   it('renders the official name independently from both requested mark sizes', () => {
-    const name = render(<OfficialBrandName />)
+    const t = ((key: string) => key === 'brand.mod' ? 'mod' : key) as never
+    const name = render(<OfficialBrandName t={t} modBuild={false} />)
     expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
+    expect(name.container.textContent).toBe('')
     name.unmount()
+
+    // An unofficial build adds the localized mod label after the wordmark.
+    const mod = render(<OfficialBrandName t={t} modBuild />)
+    expect(mod.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
+    expect(mod.container.textContent).toBe('mod')
+    mod.unmount()
 
     const mark = render(<OfficialBrandMark size={34} />)
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('34')

@@ -1,6 +1,6 @@
 /**
  * The frame-wide working-mode surface: the Chat tab's embedded site fills the
- * working area, the capsule rides the window's top strip, and the harness
+ * working area, the mode switch rides the window's top strip, and the harness
  * columns stay mounted behind the hidden page.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -14,7 +14,7 @@ import type { WorkMode } from './store.ts'
 import type { createWorkModeStore } from './store.ts'
 import css from './WorkModeLayer.module.css'
 
-/** Height of the frame strip the capsule rides on where no caption band exists. */
+/** Height of the frame strip the mode switch rides on where no caption band exists. */
 const MODE_BAND_HEIGHT = 40
 
 /** Injected guest face: the configured site and the attachment factory. */
@@ -65,7 +65,7 @@ function WebChatFallback({ config, t }: ModeLayerCopy & { readonly config: Deskt
 }
 
 /**
- * Render the working-mode surface and its capsule.
+ * Render the working-mode surface and its mode switch.
  * @param props - store selection, injected guest face, and the `workMode` locale seat.
  * @returns The lazy guest page, its cards, and the always-visible switch.
  */
@@ -89,7 +89,7 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
   }, [chat, started])
 
   // Without a native caption band the strip reserves its own row through the
-  // frame's top padding, so the capsule never sits over conversation content.
+  // frame's top padding, so the switch never sits over conversation content.
   useEffect(() => {
     // The frame reserves its own strip through the layout interface; the
     // Windows caption band already covers it, so nothing is reserved there.

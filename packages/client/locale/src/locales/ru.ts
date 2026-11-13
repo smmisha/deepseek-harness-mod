@@ -35,6 +35,7 @@ export const ru = {
   'expand': 'Развернуть',
   'back': 'Назад',
   'brand.localBuild': 'Локальная сборка DSH',
+  'brand.mod': 'мод',
   'workspace.defaultName': 'Рабочая область по умолчанию',
   'unknown': 'Неизвестно',
   'none': 'Нет',

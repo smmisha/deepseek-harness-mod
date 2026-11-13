@@ -25,6 +25,11 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, OfficialBrandMark)
-      yield ctx.slots.register({ name: 'sidebar.brand.name' }, OfficialBrandName)
+      // A local build is the mod: it keeps the official lockup and adds the small mod label.
+      yield ctx.slots.register({
+        name: 'sidebar.brand.name',
+        locale: 'common',
+        inject: () => ({ modBuild: profile === 'local' }),
+      }, OfficialBrandName)
     }))
 }

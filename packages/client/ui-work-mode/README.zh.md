@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-窗口顶部条带承载两段切换：「对话」与「Harness」。选择「对话」会在覆盖整帧的层中内嵌 `https://chat.deepseek.com/`，并向框架请求精简外壳；选择「Harness」恢复完整外壳。内嵌页面是站点自己的产品：用户在那里登录并查看该账号的历史，本包从不向它发送 harness 会话、令牌或模型调用。桌面端在持久分区中挂载 Electron `<webview>`，其他客户端则改为显示站点地址。下次启动会恢复上次的选择。
+窗口顶部条带承载「对话」与「Harness」之间的切换：两个扁平图标按钮，对话气泡与 DeepSeek 鲸鱼，由各自的提示文字命名。选择「对话」会在覆盖整帧的层中内嵌 `https://chat.deepseek.com/`，并向框架请求精简外壳；选择「Harness」恢复完整外壳。内嵌页面是站点自己的产品：用户在那里登录并查看该账号的历史，本包从不向它发送 harness 会话、令牌或模型调用。桌面端在持久分区中挂载 Electron `<webview>`，其他客户端则改为显示站点地址。下次启动会恢复上次的选择。
 
 ## 目录
 
@@ -36,7 +36,7 @@ guest 只挂载一次，插件存活期间绝不移动或卸载：切到 Harness
 
 <a id="understand-the-implementation"></a>
 
-`apply` 注册字典、把持久化模式映射到框架外壳，并贡献一个 `shell.overlay` 条目，使切换器与 guest 位于跨面板切换仍然挂载的整帧层中。覆盖层条目在窗口顶部条带渲染胶囊（桌面端是标题栏区域，其他环境以浮层内缩），guest 页面位于其下方。
+`apply` 注册字典、把持久化模式映射到框架外壳，并贡献一个 `shell.overlay` 条目，使切换器与 guest 位于跨面板切换仍然挂载的整帧层中。覆盖层条目在窗口顶部条带渲染切换器（桌面端是标题栏区域，其他环境以浮层内缩），guest 页面位于其下方。
 
 桌面端 guest 是 `<webview>`，使用主进程签发的 lease 和持久分区 `persist:dsh-chat`。`apps/desktop` 在 `will-attach-webview` 校验该 lease，强制 sandbox、上下文隔离、无 Node、无 preload、禁止嵌套 webview 与对话框，并安装会话策略：只授予 `clipboard-sanitized-write`，让站点的复制控件可用而不开放剪贴板读取；摄像头、麦克风、屏幕捕获、定位与通知一律拒绝，下载被取消，站点主机无法访问应用 Host。提供方跳转与 Apple 子窗口经过同一套主进程策略，子窗口还拒绝自身再开弹窗。外壳从不向页面注入凭据或请求头，不指定 User-Agent，也不读取其 DOM、Cookie 或存储。
 

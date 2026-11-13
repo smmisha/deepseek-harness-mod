@@ -270,7 +270,7 @@ describe('WorkModeLayer', () => {
   it('switches modes through the capsule', () => {
     const setMode = vi.fn()
     render(<WorkModeLayer {...props('harness', { setMode })} />)
-    fireEvent.click(screen.getByRole('tab', { name: en['mode.chat'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['mode.chat'] }))
     expect(setMode).toHaveBeenCalledWith('chat')
   })
 })
