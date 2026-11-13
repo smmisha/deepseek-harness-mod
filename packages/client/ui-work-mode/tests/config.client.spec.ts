@@ -9,8 +9,6 @@ describe('resolveWorkModeConfig', () => {
       allowedOrigins: ['https://chat.deepseek.com'],
       loginHosts: ['accounts.youtube.com', 'appleid.apple.com'],
       loginHostSuffixes: ['accounts.google.'],
-      browserLoginTimeoutMs: 300_000,
-      browserLoginPollMs: 2_000,
     })
   })
 
@@ -60,17 +58,5 @@ describe('resolveWorkModeConfig', () => {
       .toThrow('at most 16 provider hosts')
     expect(() => resolveWorkModeConfig({ loginHostSuffixes: Array.from({ length: 17 }, (_value, index) => `.suffix${String(index)}.com`) }))
       .toThrow('at most 16 provider suffixes')
-  })
-
-  it('validates fallback timing bounds and ordering', () => {
-    expect(() => resolveWorkModeConfig({ browserLoginTimeoutMs: 999 })).toThrow('browserLoginTimeoutMs')
-    expect(() => resolveWorkModeConfig({ browserLoginPollMs: 10 })).toThrow('browserLoginPollMs')
-    expect(() => resolveWorkModeConfig({ browserLoginPollMs: 1_000.5 })).toThrow('integer')
-    expect(() => resolveWorkModeConfig({ browserLoginTimeoutMs: 10_000, browserLoginPollMs: 10_000 }))
-      .toThrow('shorter than browserLoginTimeoutMs')
-    expect(resolveWorkModeConfig({ browserLoginTimeoutMs: 60_000, browserLoginPollMs: 500 })).toMatchObject({
-      browserLoginTimeoutMs: 60_000,
-      browserLoginPollMs: 500,
-    })
   })
 })

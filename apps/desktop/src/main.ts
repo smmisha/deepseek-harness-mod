@@ -66,6 +66,8 @@ import { readDesktopLocaleCache, writeDesktopLocaleCache } from './locale-cache.
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
+import { logChatLogin } from './chat-login-log.ts'
+import { removeLegacyChatBrowserProfile } from './chat-profile-legacy.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -379,6 +381,7 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 }
 
 async function main(): Promise<void> {
+  removeLegacyChatBrowserProfile(app.getPath('userData'), logChatLogin)
   const desktopSettings = await readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
@@ -848,14 +851,17 @@ async function main(): Promise<void> {
     assertProductSender(event)
     return browserGuests.acquireChat(event.sender, config)
   })
-  ipcMain.handle(DESKTOP_IPC.chatLoginStart, (event) => {
+  ipcMain.handle(DESKTOP_IPC.chatReturnToSignIn, (event) => {
     assertProductSender(event)
-    void browserGuests.startChatBrowserLogin(event.sender)
-      .catch((error: unknown) => { console.error(error) })
+    return browserGuests.returnToSignIn(event.sender)
   })
-  ipcMain.handle(DESKTOP_IPC.chatLoginCancel, (event) => {
+  ipcMain.handle(DESKTOP_IPC.chatOpenInBrowser, (event) => {
     assertProductSender(event)
-    browserGuests.cancelChatLogin(event.sender)
+    browserGuests.openInBrowser(event.sender)
+  })
+  ipcMain.handle(DESKTOP_IPC.chatClearData, (event) => {
+    assertProductSender(event)
+    return browserGuests.clearChatData(event.sender)
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {

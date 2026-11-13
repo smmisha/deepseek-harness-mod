@@ -60,7 +60,7 @@
   pointer-events: auto;
 }
 
-.browserLogin {
+.sessionAction {
   margin-left: 12px;
   height: 28px;
   padding: 0 12px;
@@ -77,17 +77,17 @@
 }
 
 @media (hover: hover) {
-  .browserLogin:hover {
+  .sessionAction:hover {
     background: var(--dsw-alias-interactive-bg-active);
   }
 }
 
-.browserLogin:focus-visible {
+.sessionAction:focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
-/* The failure card paints above the guest, which stays mounted underneath. */
+/* The cards paint above the guest, which stays mounted underneath. */
 .card {
   position: absolute;
   inset: 0;

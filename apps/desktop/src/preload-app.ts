@@ -29,23 +29,26 @@ function createProductApi(): DshDesktopProductApi {
         const handler = (_event: unknown, state: unknown): void => {
           if (typeof state !== 'object' || state === null) return
           const row = state as Record<string, unknown>
-          if (row.kind === 'idle' || row.kind === 'window' || row.kind === 'browser') {
-            listener({ kind: row.kind })
-            return
-          }
-          if (row.kind === 'failed'
-            && (row.reason === 'browser-missing' || row.reason === 'login-window-open'
-              || row.reason === 'timeout' || row.reason === 'transfer'
-              || row.reason === 'site-rejected' || row.reason === 'provider-rejected'
-              || row.reason === 'unknown')) {
-            listener({ kind: 'failed', reason: row.reason })
-          }
+          if (row.kind === 'idle' || row.kind === 'provider-rejected') listener({ kind: row.kind })
         }
         ipcRenderer.on(DESKTOP_IPC.chatLoginState, handler)
         return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginState, handler) }
       },
-      startBrowserLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginStart) as Promise<void>,
-      cancelLogin: () => ipcRenderer.invoke(DESKTOP_IPC.chatLoginCancel) as Promise<void>,
+      returnToSignIn: () => {
+        void ipcRenderer.invoke(DESKTOP_IPC.chatReturnToSignIn).catch((_error: unknown) => {
+          // Main logs the failure; the tab keeps showing the page it already has.
+        })
+      },
+      openInBrowser: () => {
+        void ipcRenderer.invoke(DESKTOP_IPC.chatOpenInBrowser).catch((_error: unknown) => {
+          // Main logs the failure; the guest is unaffected.
+        })
+      },
+      clearData: () => {
+        void ipcRenderer.invoke(DESKTOP_IPC.chatClearData).catch((_error: unknown) => {
+          // Main logs the failure; storage is cleared or not, and the page stays mounted.
+        })
+      },
     },
     fileDrag: {
       prepare: (source, requestId) => ipcRenderer.invoke(DESKTOP_IPC.fileDragPrepare, source, requestId) as

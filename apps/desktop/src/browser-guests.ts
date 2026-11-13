@@ -8,23 +8,16 @@
  * partition with the opener preserved. Every attachment still has to name a
  * main-issued lease, match its partition, and come from the application window;
  * the kind only decides the session policy and where disallowed pages go.
+ *
+ * The shell never reads, copies, stores, or forwards the reader's credentials,
+ * tokens, cookies, or storage: sign-in happens on the site's own pages, and the
+ * session stays inside the guest's persistent partition.
  */
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
 import { app, Menu, session, shell, type BrowserWindow, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import type { DesktopChatConfig, DesktopChatLeaseId, DesktopChatLoginPhase, DesktopChatReservation } from '@deepseek-ai/dsh-client-ui-work-mode/types'
 import type { DesktopMessages } from './locale.ts'
-import {
-  ChatLoginBrowserError,
-  ChatLoginTimeoutError,
-  ChatLoginWindowOpenError,
-  collectChatLogin,
-  findChatBrowser,
-  toCookieDetails,
-  userTokenValue,
-  type ChatLoginPayload,
-} from './chat-login-browser.ts'
 import { logChatLogin } from './chat-login-log.ts'
 import { DESKTOP_IPC } from './ipc.ts'
 
@@ -34,14 +27,6 @@ export const CHAT_PARTITION = 'persist:dsh-chat'
 /** Chat guest permissions that keep the site's copy control working without letting it read the clipboard. */
 const CHAT_PERMISSIONS: ReadonlySet<string> = new Set(['clipboard-sanitized-write'])
 
-/** Desktop Chrome user agent the Chat page sees instead of Electron's client token. */
-const CHAT_USER_AGENT = (() => {
-  const platform = process.platform === 'darwin'
-    ? 'Macintosh; Intel Mac OS X 10_15_7'
-    : process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64'
-  return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`
-})()
-
 /** Upper bound on each configured provider list. */
 const MAX_LOGIN_ENTRIES = 16
 
@@ -50,6 +35,9 @@ const HOST_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-
 
 /** Upper bound on a configured navigation allowlist. */
 const MAX_ALLOWED_ORIGINS = 8
+
+/** Google's refusal page titles in the languages the site serves. */
+const PROVIDER_REJECTION_TITLE = /Не удалось войти|Couldn.?t sign you in|Couldn.?t sign in/iu
 
 /** Fields every attached guest carries, whichever kind issued it. */
 interface GuestLeaseBase {
@@ -73,39 +61,10 @@ interface ChatLease extends GuestLeaseBase {
 
 /** Navigation policy the shell enforces for the chat guest. */
 interface ChatPolicy {
+  readonly url: string
   readonly allowedOrigins: readonly string[]
   readonly loginHosts: readonly string[]
   readonly loginHostSuffixes: readonly string[]
-  readonly browserLoginTimeoutMs: number
-  readonly browserLoginPollMs: number
-}
-
-/** Default timing of the external-browser fallback when a profile omits it. */
-const DEFAULT_BROWSER_LOGIN_TIMEOUT_MS = 300_000
-const DEFAULT_BROWSER_LOGIN_POLL_MS = 2_000
-/** Upper bound on one guest navigation while the transferred session settles. */
-const TRANSFER_LOAD_TIMEOUT_MS = 30_000
-
-/** The transferred storage could not be written or verified. */
-class ChatLoginTransferError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ChatLoginTransferError'
-  }
-}
-
-/** The site dropped the transferred token during its own device check. */
-class ChatLoginSiteRejectedError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ChatLoginSiteRejectedError'
-  }
-}
-
-/** Whether a URL belongs to the chat origin. */
-function isChatOrigin(value: string): boolean {
-  if (!URL.canParse(value)) return false
-  return new URL(value).origin === 'https://chat.deepseek.com'
 }
 
 /** Whether a guest load failed only because the site aborted it while redirecting. */
@@ -136,15 +95,6 @@ function readLoginSuffix(value: unknown): string {
     throw new Error('desktop chat guest: a provider suffix must start with "." or end with "."')
   }
   return entry
-}
-
-/** Normalize one fallback timing value from untrusted input. */
-function readTiming(value: unknown, fallback: number, min: number, max: number, name: string): number {
-  if (value === undefined) return fallback
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
-    throw new Error(`desktop chat guest: ${name} must be an integer between ${String(min)} and ${String(max)} milliseconds`)
-  }
-  return value
 }
 
 /**
@@ -188,14 +138,7 @@ export function parseChatConfig(value: unknown): DesktopChatConfig {
     }
     return [...new Set(entry.map(readLoginSuffix))]
   })()
-  return {
-    url: url.href,
-    allowedOrigins: [...new Set(origins)],
-    loginHosts,
-    loginHostSuffixes,
-    browserLoginTimeoutMs: readTiming(row.browserLoginTimeoutMs, DEFAULT_BROWSER_LOGIN_TIMEOUT_MS, 10_000, 1_800_000, 'browserLoginTimeoutMs'),
-    browserLoginPollMs: readTiming(row.browserLoginPollMs, DEFAULT_BROWSER_LOGIN_POLL_MS, 250, 10_000, 'browserLoginPollMs'),
-  }
+  return { url: url.href, allowedOrigins: [...new Set(origins)], loginHosts, loginHostSuffixes }
 }
 
 /**
@@ -248,7 +191,6 @@ export class DesktopBrowserGuests {
   private readonly configuredChatSessions = new Set<Session>()
   private readonly chatLoginWindows = new Map<number, Set<BrowserWindow>>()
   private readonly chatLoginStates = new Map<number, DesktopChatLoginPhase>()
-  private readonly chatLoginAttempts = new Map<number, { cancelled: boolean }>()
   private chatOrigins: readonly string[] = []
 
   /** @param hostUrl - current authenticated DSH Host, which guests cannot request. */
@@ -286,18 +228,18 @@ export class DesktopBrowserGuests {
     const config = parseChatConfig(value)
     this.chatOrigins = config.allowedOrigins
     logChatLogin(`policy hosts=${config.loginHosts.join(',')} suffixes=${config.loginHostSuffixes.join(',')}`)
+    const policy: ChatPolicy = {
+      url: config.url,
+      allowedOrigins: config.allowedOrigins,
+      loginHosts: config.loginHosts,
+      loginHostSuffixes: config.loginHostSuffixes,
+    }
     const existing = [...this.leases.entries()].find(([, lease]) => lease.kind === 'chat' && lease.owner === owner)
     if (existing !== undefined) {
       const lease = existing[1] as ChatLease
       if (!lease.attached && lease.guest === undefined) {
         // Not attached yet: the same lease still owns the partition.
-        lease.policy = {
-          allowedOrigins: config.allowedOrigins,
-          loginHosts: config.loginHosts,
-          loginHostSuffixes: config.loginHostSuffixes,
-          browserLoginTimeoutMs: config.browserLoginTimeoutMs,
-          browserLoginPollMs: config.browserLoginPollMs,
-        }
+        lease.policy = policy
         return { lease: existing[0] as DesktopChatLeaseId, partition: CHAT_PARTITION }
       }
       // An attached lease whose guest never arrived (a crash before `dom-ready`) or
@@ -312,14 +254,7 @@ export class DesktopBrowserGuests {
     }
     const lease = randomUUID() as DesktopChatLeaseId
     this.leases.set(lease, {
-      owner, kind: 'chat', partition: CHAT_PARTITION, attached: false,
-      policy: {
-        allowedOrigins: config.allowedOrigins,
-        loginHosts: config.loginHosts,
-        loginHostSuffixes: config.loginHostSuffixes,
-        browserLoginTimeoutMs: config.browserLoginTimeoutMs,
-        browserLoginPollMs: config.browserLoginPollMs,
-      },
+      owner, kind: 'chat', partition: CHAT_PARTITION, attached: false, policy,
     })
     return { lease, partition: CHAT_PARTITION }
   }
@@ -434,7 +369,6 @@ export class DesktopBrowserGuests {
           child.destroy()
           return
         }
-        child.webContents.setUserAgent(CHAT_USER_AGENT)
         child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
         child.webContents.on('did-navigate', (_event, url) => {
           if (URL.canParse(url)) logChatLogin(`provider window navigated host=${new URL(url).hostname}`)
@@ -472,7 +406,11 @@ export class DesktopBrowserGuests {
     })
     const releaseAll = (): void => {
       for (const [id, lease] of this.leases) {
-        if (lease.owner === owner) void this.release(owner, id).catch((error: unknown) => { console.error(error) })
+        if (lease.owner !== owner) continue
+        void this.release(owner, id).catch(
+          /* v8 ignore next -- release rejects only for a lease of another window, which this loop excludes. */
+          (error: unknown) => { console.error(error) },
+        )
       }
     }
     owner.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
@@ -490,7 +428,7 @@ export class DesktopBrowserGuests {
     if (guest !== undefined && !guest.isDestroyed()) guest.close({ waitForBeforeUnload: false })
   }
 
-  /** Navigation guards, context menu, and user-agent policy for one chat guest. */
+  /** Navigation guards, context menu, and provider-refusal detection for one chat guest. */
   private attachChatPolicies(window: BrowserWindow, guest: WebContents, messages: () => DesktopMessages): void {
     const owner = window.webContents
     guest.on('did-navigate', (_event, url) => {
@@ -506,12 +444,11 @@ export class DesktopBrowserGuests {
       if (!URL.canParse(url) || new URL(url).hostname !== 'accounts.google.com') return
       // Google's refusal page keeps a neutral address in some flows; its title
       // is the stable signal ("Не удалось войти в аккаунт" / "Couldn't sign you in").
+      // Only the decision is logged: the title itself is page content.
       void guest.executeJavaScript('document.title').then((title: unknown) => {
-        const text = typeof title === 'string' ? title : ''
-        logChatLogin(`provider page title=${text.slice(0, 120)}`)
-        if (/Не удалось войти|Couldn.?t sign you in|Couldn.?t sign in/iu.test(text)) {
-          this.reportProviderRejection(owner)
-        }
+        const matched = typeof title === 'string' && PROVIDER_REJECTION_TITLE.test(title)
+        logChatLogin(matched ? 'provider page title matched rejection' : 'provider page title without rejection')
+        if (matched) this.reportProviderRejection(owner)
       }).catch(() => {})
     })
     guest.on('context-menu', (_event, params) => {
@@ -546,7 +483,7 @@ export class DesktopBrowserGuests {
     })
   }
 
-  /** Provider popup: same partition, sandbox, and user agent as the chat guest. */
+  /** Provider popup: same partition, sandbox, and isolation as the chat guest. */
   private chatLoginWindowOptions(): BrowserWindowConstructorOptions {
     return {
       width: 780,
@@ -569,31 +506,23 @@ export class DesktopBrowserGuests {
     owner.send(DESKTOP_IPC.chatLoginState, phase)
   }
 
-  /** Sign-in phase currently visible for one document. */
-  chatLoginPhase(owner: WebContents): DesktopChatLoginPhase {
-    return this.chatLoginStates.get(owner.id) ?? { kind: 'idle' }
-  }
-
   /** Publish Google's embedded-browser refusal once per attempt. */
   private reportProviderRejection(owner: WebContents): void {
-    const current = this.chatLoginPhase(owner)
-    if (current.kind === 'failed' && current.reason === 'provider-rejected') return
+    if (this.chatLoginStates.get(owner.id)?.kind === 'provider-rejected') return
     logChatLogin('provider rejected the embedded browser')
-    this.publishLogin(owner, { kind: 'failed', reason: 'provider-rejected' })
+    this.publishLogin(owner, { kind: 'provider-rejected' })
   }
 
-  /** Track one provider window until it closes, and publish the phase. */
+  /** Track one provider window until it closes. */
   private trackChatLoginWindow(owner: WebContents, child: BrowserWindow): void {
     const windows = this.chatLoginWindows.get(owner.id) ?? new Set<BrowserWindow>()
     windows.add(child)
     this.chatLoginWindows.set(owner.id, windows)
     logChatLogin('provider window opened')
-    this.publishLogin(owner, { kind: 'window' })
     child.once('closed', () => {
       windows.delete(child)
       if (windows.size === 0) this.chatLoginWindows.delete(owner.id)
       logChatLogin('provider window closed')
-      if (windows.size === 0 && this.chatLoginPhase(owner).kind === 'window') this.publishLogin(owner, { kind: 'idle' })
     })
   }
 
@@ -605,148 +534,53 @@ export class DesktopBrowserGuests {
     for (const window of windows) if (!window.isDestroyed()) window.destroy()
   }
 
-  /** Close the provider window or stop the browser attempt for one document. */
-  cancelChatLogin(owner: WebContents): void {
-    const attempt = this.chatLoginAttempts.get(owner.id)
-    if (attempt !== undefined) attempt.cancelled = true
-    this.closeChatLoginWindows(owner)
+  /**
+   * Load the configured chat page again and drop the refusal card.
+   * @param owner - authenticated application WebContents.
+   */
+  async returnToSignIn(owner: WebContents): Promise<void> {
+    const lease = this.chatLease(owner)
+    const guest = lease.guest
+    if (guest === undefined || guest.isDestroyed()) throw new Error('desktop chat guest: no attached chat guest')
     this.publishLogin(owner, { kind: 'idle' })
+    logChatLogin(`sign-in page requested host=${new URL(lease.policy.url).hostname}`)
+    try {
+      await guest.loadURL(lease.policy.url)
+    } catch (error) {
+      // The site may redirect while its own document loads; the page still arrives.
+      if (!isAbortedLoad(error)) throw error
+    }
   }
 
   /**
-   * Start the controlled-browser fallback for one document.
+   * Hand the configured chat address to the system browser.
    * @param owner - authenticated application WebContents.
    */
-  async startChatBrowserLogin(owner: WebContents): Promise<void> {
-    if (this.chatLoginAttempts.has(owner.id)) return
-    const executable = findChatBrowser()
-    if (executable === undefined) {
-      logChatLogin('browser login failed reason=browser-missing')
-      this.publishLogin(owner, { kind: 'failed', reason: 'browser-missing' })
-      return
-    }
-    const attempt = { cancelled: false }
-    const isCancelled = (): boolean => attempt.cancelled
-    this.chatLoginAttempts.set(owner.id, attempt)
-    this.publishLogin(owner, { kind: 'browser' })
-    logChatLogin('browser login started profile=dedicated')
-    const lease = [...this.leases.values()].find((entry): entry is ChatLease =>
-      entry.kind === 'chat' && entry.owner === owner)
-    const policy = lease?.policy
-    try {
-      const payload = await collectChatLogin({
-        url: 'https://chat.deepseek.com/',
-        executable,
-        profileDir: join(app.getPath('userData'), 'chat-login-browser'),
-        timeoutMs: policy?.browserLoginTimeoutMs ?? DEFAULT_BROWSER_LOGIN_TIMEOUT_MS,
-        pollMs: policy?.browserLoginPollMs ?? DEFAULT_BROWSER_LOGIN_POLL_MS,
-        isCancelled,
-        log: logChatLogin,
-      })
-      if (isCancelled()) return
-      if (payload === undefined) {
-        logChatLogin('browser login ended: browser closed')
-        this.publishLogin(owner, { kind: 'idle' })
-        return
-      }
-      const guest = lease?.guest
-      if (guest === undefined || guest.isDestroyed()) {
-        logChatLogin('browser login failed reason=transfer (no guest)')
-        this.publishLogin(owner, { kind: 'failed', reason: 'transfer' })
-        return
-      }
-      await this.transferChatLogin(guest, payload, policy?.browserLoginPollMs ?? DEFAULT_BROWSER_LOGIN_POLL_MS)
-      if (isCancelled()) return
-      logChatLogin('browser login imported')
-      this.publishLogin(owner, { kind: 'idle' })
-    } catch (error) {
-      if (isCancelled()) return
-      const reason = error instanceof ChatLoginWindowOpenError ? 'login-window-open'
-        : error instanceof ChatLoginTimeoutError ? 'timeout'
-          : error instanceof ChatLoginSiteRejectedError ? 'site-rejected'
-            : error instanceof ChatLoginTransferError ? 'transfer'
-              : error instanceof ChatLoginBrowserError ? 'browser-missing'
-                : 'unknown'
-      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      logChatLogin(`browser login failed reason=${reason} error=${detail}`)
-      this.publishLogin(owner, { kind: 'failed', reason })
-    } finally {
-      this.chatLoginAttempts.delete(owner.id)
-    }
+  openInBrowser(owner: WebContents): void {
+    const lease = this.chatLease(owner)
+    logChatLogin(`system browser requested host=${new URL(lease.policy.url).hostname}`)
+    void shell.openExternal(lease.policy.url)
   }
 
-  /** Apply the controlled browser's cookies and storage to the chat guest. */
-  private async transferChatLogin(guest: WebContents, payload: ChatLoginPayload, settleMs: number): Promise<void> {
-    const chatSession = session.fromPartition(CHAT_PARTITION)
-    for (const cookie of payload.cookies) {
-      try {
-        await chatSession.cookies.set(toCookieDetails(cookie))
-      } catch (error) {
-        // A browser-only cookie must not stop the session from being restored.
-        void error
-      }
-    }
-    if (!isChatOrigin(guest.getURL())) await this.loadChatOrigin(guest)
-    const assignments = Object.entries(payload.storage)
-      .map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`)
-      .join(' ')
-    if (assignments.length > 0) {
-      try {
-        await guest.executeJavaScript(`(() => { ${assignments} })()`)
-      } catch (error) {
-        throw new ChatLoginTransferError(`chat login transfer: storing the session failed (${error instanceof Error ? error.name : 'unknown'})`)
-      }
-    }
-    const stored = await this.readGuestToken(guest)
-    logChatLogin(`guest storage userToken=${stored === null ? 'absent' : 'present'}`)
-    if (stored === null) throw new ChatLoginTransferError('chat login transfer: the guest did not keep the token')
-    await this.reloadChatGuest(guest)
-    await new Promise(resolve => setTimeout(resolve, settleMs))
-    const afterReload = await this.readGuestToken(guest)
-    logChatLogin(`post-reload userToken=${afterReload === null ? 'absent' : 'present'}`)
-    if (afterReload === null) throw new ChatLoginSiteRejectedError('chat login transfer: the site dropped the transferred token')
-  }
-
-  /** Load the chat origin in the guest, ignoring the site's own aborted redirects. */
-  private async loadChatOrigin(guest: WebContents): Promise<void> {
-    const settled = this.waitForGuestSettled(guest)
-    try {
-      await guest.loadURL('https://chat.deepseek.com/')
-    } catch (error) {
-      if (!isAbortedLoad(error)) {
-        throw new ChatLoginTransferError(`chat login transfer: loading the chat failed (${error instanceof Error ? error.name : 'unknown'})`)
-      }
-    }
-    await settled
-  }
-
-  /** Reload the guest with the transferred storage and wait for the settle event. */
-  private async reloadChatGuest(guest: WebContents): Promise<void> {
-    const settled = this.waitForGuestSettled(guest)
+  /**
+   * Clear the chat partition's storage and reload the guest.
+   * @param owner - authenticated application WebContents.
+   */
+  async clearChatData(owner: WebContents): Promise<void> {
+    const lease = this.chatLease(owner)
+    await session.fromPartition(CHAT_PARTITION).clearStorageData()
+    logChatLogin('chat storage cleared')
+    this.publishLogin(owner, { kind: 'idle' })
+    const guest = lease.guest
+    if (guest === undefined || guest.isDestroyed()) return
     guest.reload()
-    await settled
   }
 
-  /** Resolve when the guest reports a completed load, or reject when it never does. */
-  private waitForGuestSettled(guest: WebContents): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        guest.removeListener('did-stop-loading', onStop)
-        reject(new ChatLoginTransferError('chat login transfer: the chat page did not settle'))
-      }, TRANSFER_LOAD_TIMEOUT_MS)
-      const onStop = (): void => {
-        clearTimeout(timer)
-        resolve()
-      }
-      guest.once('did-stop-loading', onStop)
-    })
-  }
-
-  /** Read the guest's own user-token envelope. */
-  private async readGuestToken(guest: WebContents): Promise<string | null> {
-    const raw: unknown = await guest.executeJavaScript(
-      "(() => { try { return localStorage.getItem('userToken') } catch { return null } })()")
-    return userTokenValue(typeof raw === 'string' ? raw : null)
+  /** The chat lease this document owns; every chat action belongs to one guest. */
+  private chatLease(owner: WebContents): ChatLease {
+    const lease = [...this.leases.values()].find((entry): entry is ChatLease => entry.kind === 'chat' && entry.owner === owner)
+    if (lease === undefined) throw new Error('desktop chat guest: this window owns no chat guest')
+    return lease
   }
 
   /** Browser policy for the right Sidebar, chat policy for the Chat tab. */
@@ -784,7 +618,6 @@ export class DesktopBrowserGuests {
 
   /** The Chat tab keeps its sign-in, and only clipboard access besides. */
   private configureChatSession(browserSession: Session): void {
-    browserSession.setUserAgent(CHAT_USER_AGENT)
     const permitted = (permission: string): boolean => CHAT_PERMISSIONS.has(permission)
     const fromChatOrigin = (origin: string): boolean => {
       if (!URL.canParse(origin)) return false

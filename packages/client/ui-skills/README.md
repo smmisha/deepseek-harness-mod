@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The Plugins page gains a second tab, **Skills**, next to the installed plugins and any market tab. It lists the local skill sources the Host scans — the harness's own project and user folders plus the skill folders of other applications — and lets the reader switch a whole source off, or a single skill inside it. A source switch hides all of its skills without forgetting the per-skill switches. Discovery states come from the Host: a skill shadowed by a higher-priority source, a frontmatter error, and a source whose folder disappeared are visible without opening a file.
+The Plugins page gains a second tab, **Skills**, next to the installed plugins and any market tab. It lists the local skill sources the Host scans — the harness's own project and user folders plus the skill folders of other applications — as groups whose skills render as cards with the switch that owns each one. A source switch hides all of its skills without forgetting the per-skill switches. Discovery states come from the Host: a skill shadowed by a higher-priority source, a frontmatter error, and a source whose folder disappeared are visible without opening a file.
 
 ## Table of Contents
 
@@ -26,7 +26,7 @@ The Plugins page gains a second tab, **Skills**, next to the installed plugins a
 
 <a id="use-this-package"></a>
 
-Open **Plugins** and switch to **Skills**. Each source row shows its name, whether it belongs to the harness or another application, its folder, and `enabled N of M`. Expanding a row lists the discovered skills with name, description, file path, and a switch; a search field filters by name or description. Long sources render fifty skills at a time behind a **Show more** action.
+Open **Plugins** and switch to **Skills**. Each source is a group heading with its name, whether it belongs to the harness or another application, its folder, and `enabled N of M`; its discovered skills render as cards with name, description, file path, and a switch. A search field filters by name or description. Long sources render fifty skills at a time behind a **Show more** action.
 
 Switching a source or a skill calls the Host `skillSources` Remote, which updates the `skill-sources` profile settings entry and invalidates every mounted provider, so the next model request sees the change without a restart and the session log records the changed catalog. A skill switched off is absent from the model catalog and from `/skill`; switching its source back on restores the per-skill choices.
 
@@ -46,7 +46,7 @@ Switching a source or a skill calls the Host `skillSources` Remote, which update
 
 The tab is a `plugins.tab` contribution; it reads its inventory from the `skillSources` Remote namespace published by `dsh-skill-filesystem`, which reports one row per scanned source and one row per discovered skill, including skills that only lost a duplicate name or whose frontmatter did not parse. Writes go through the same namespace: `setSource` and `setSkill` persist into the `skill-sources` profile entry and then invalidate every mounted provider, so the next model step publishes a replacement catalog.
 
-Search, expansion, and pagination are presentation state and live in the component; the inventory is refetched after each write.
+Search and pagination are presentation state and live in the component; the inventory is refetched after each write.
 
 ## Further Exploration
 
@@ -70,7 +70,7 @@ Appending the replacement catalog keeps the earlier prefix; the changed entries 
 
 - A skill body is never read by this tab; descriptions come from frontmatter, and a body-only edit does not change the row.
 - The write is unconditional (no revision fence): two simultaneous toggles overwrite each other.
-- Rows are not virtualized; a source with hundreds of skills pages by fifty entries instead.
+- The list is not virtualized; a source with hundreds of skills pages by fifty entries instead.
 
 <a id="dev-note"></a>
 ### Dev Note
