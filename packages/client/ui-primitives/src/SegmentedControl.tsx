@@ -7,7 +7,7 @@
 // `aria-labelledby`.
 
 import { useEffect, useRef } from 'react'
-import type { CSSProperties, KeyboardEvent } from 'react'
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import css from './SegmentedControl.module.css'
 
@@ -15,8 +15,10 @@ import css from './SegmentedControl.module.css'
 export interface SegmentedControlOption<Value extends string> {
   /** The value the owner receives when this segment is chosen. */
   value: Value
-  /** Localized segment text. */
+  /** Localized segment text; the accessible name of the segment. */
   label: string
+  /** Decorative glyph rendered before the text; hidden from the accessible name. */
+  icon?: ReactNode
   /** Whether the segment refuses selection. */
   disabled?: boolean
   /** Localized hover text, typically why the segment is locked. */
@@ -131,6 +133,7 @@ export function SegmentedControl<Value extends string>({
             onClick={() => { if (!active) onChange(option.value) }}
             onKeyDown={onKeyDown}
           >
+            {option.icon !== undefined && <span className={css.icon} aria-hidden="true">{option.icon}</span>}
             {option.label}
           </button>
         )

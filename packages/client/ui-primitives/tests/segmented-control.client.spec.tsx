@@ -177,4 +177,22 @@ describe('SegmentedControl', () => {
     fireEvent.click(tab('Custom'))
     expect(onSubmit).not.toHaveBeenCalled()
   })
+
+  it('keeps a segment icon decorative so the text stays its accessible name', () => {
+    render(
+      <SegmentedControl
+        id="mode"
+        label="Working mode"
+        value="chat"
+        options={[
+          { value: 'chat', label: 'Chat' },
+          { value: 'code', label: 'Harness', icon: <span data-testid="whale" /> },
+        ]}
+        onChange={() => {}}
+      />,
+    )
+    const harness = tab('Harness')
+    expect(harness.querySelector('[data-testid="whale"]')).not.toBeNull()
+    expect(harness.querySelector('[aria-hidden="true"]')?.contains(harness.querySelector('[data-testid="whale"]'))).toBe(true)
+  })
 })

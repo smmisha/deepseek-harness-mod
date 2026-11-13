@@ -311,3 +311,37 @@ it('exposes channel choices and scoped subscriptions without exposing updater ob
   dispose()
   expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.updatesChannelChanged, handler)
 })
+
+it('exposes chat sign-in actions and only the provider refusal phase', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  electron.ipcRenderer.invoke.mockResolvedValue(undefined)
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshDesktop')?.[1] as DshDesktopProductApi
+  const listener = vi.fn()
+  const off = api.chat.onLoginState(listener)
+  const handler = electron.ipcRenderer.on.mock.calls.find(([channel]) => channel === DESKTOP_IPC.chatLoginState)?.[1] as
+    (event: unknown, state: unknown) => void
+  handler({}, { kind: 'idle' })
+  handler({}, { kind: 'provider-rejected' })
+  handler({}, { kind: 'window' })
+  handler({}, { kind: 'failed', reason: 'provider-rejected' })
+  handler({}, null)
+  expect(listener.mock.calls).toEqual([[{ kind: 'idle' }], [{ kind: 'provider-rejected' }]])
+  off()
+  expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.chatLoginState, handler)
+
+  api.chat.returnToSignIn()
+  api.chat.openInBrowser()
+  expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
+    [DESKTOP_IPC.chatReturnToSignIn],
+    [DESKTOP_IPC.chatOpenInBrowser],
+  ])
+  expect(api.chat).not.toHaveProperty('clearData')
+
+  electron.ipcRenderer.invoke.mockRejectedValue(new Error('main refused'))
+  api.chat.returnToSignIn()
+  api.chat.openInBrowser()
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(electron.ipcRenderer.invoke).toHaveBeenCalledTimes(4)
+})

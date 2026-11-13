@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-13-ukrainian-language-pack.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-13-ukrainian-language-pack.md
+/agent-note-ukrainian-language-pack:
+  en: bb9c8ec0fa7e52cb
+  zh: dd93690412905486
+/agent-note-ukrainian-language-pack/problem:
+  en: d50b7f4739e69ede
+  zh: 59fd4b4515e76955
+/agent-note-ukrainian-language-pack/decision:
+  en: d2c2b8ecd31135dc
+  zh: 00e3937c99b7f16c
+/agent-note-ukrainian-language-pack/alternatives-considered:
+  en: 10b0bcd3d358361f
+  zh: 6b50a0f437a1410f
+/agent-note-ukrainian-language-pack/consequences:
+  en: 39036ecea9c11656
+  zh: 6cdde393ed35f250

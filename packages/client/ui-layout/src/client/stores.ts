@@ -3,7 +3,7 @@
  * The registration supplies a fresh store and binds its actions to ctx.layout.
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
-import type { MainPanelId } from './service.ts'
+import type { ChromeMode, MainPanelId } from './service.ts'
 import {
   clampWidth, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN,
   SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT, SIDEBAR_DRAWER_BREAKPOINT, SIDEBAR_MAX, SIDEBAR_MIN,
@@ -26,6 +26,22 @@ type LayoutInfo = {
   /** Last positive frame measurement; window width bootstraps the first render. */
   viewportWidth: number
   narrowExpanded: boolean
+  /**
+   * Frame chrome: `full` shows the navigation and side panels, `minimal` leaves
+   * the centre column alone. A feature decides which of its own modes maps to
+   * which chrome; the frame only renders the choice.
+   */
+  chrome: ChromeMode
+  /**
+   * Whether a feature's surface covers the frame. Covered columns keep their
+   * occupants mounted but leave painting and the interaction order.
+   */
+  covered: boolean
+  /**
+   * Height of a frame-wide strip a feature reserves above every column, or
+   * null when the platform's own caption band already covers it.
+   */
+  topBand: number | null
   /**
    * Saved right panel width in px, or null before its first opening. Resizing
    * the frame and closing the panel preserve this preference.
@@ -61,6 +77,9 @@ type LayoutActions = {
   setSidebar: (draft: LayoutState, px: number) => void
   toggleSidebar: (draft: LayoutState) => void
   setViewportWidth: (draft: LayoutState, width: number) => void
+  setChrome: (draft: LayoutState, mode: ChromeMode) => void
+  setFrameCovered: (draft: LayoutState, covered: boolean) => void
+  setTopBand: (draft: LayoutState, px: number | null) => void
   setRightbar: (draft: LayoutState, px: number) => void
   openRightbar: (draft: LayoutState, track: boolean, fullscreen: boolean) => void
   closeRightbar: (draft: LayoutState) => void
@@ -83,6 +102,9 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         sidebar: SIDEBAR_DEFAULT,
         viewportWidth: window.innerWidth,
         narrowExpanded: false,
+        chrome: 'full',
+        covered: false,
+        topBand: null,
         rightbar: null,
         rightbarShown: false,
         rightbarTrack: false,
@@ -121,6 +143,15 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
           d.layoutInfo.narrowExpanded = false
         }
         d.layoutInfo.viewportWidth = width
+      },
+      setChrome: (d, mode: ChromeMode) => {
+        d.layoutInfo.chrome = mode
+      },
+      setFrameCovered: (d, covered: boolean) => {
+        d.layoutInfo.covered = covered
+      },
+      setTopBand: (d, px: number | null) => {
+        d.layoutInfo.topBand = px
       },
       setRightbar: (d, px: number) => {
         d.layoutInfo.rightbarInstant = false

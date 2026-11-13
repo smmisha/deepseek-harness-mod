@@ -54,6 +54,7 @@ export type { ConnectionIndicatorState } from './ConnectionIndicator.tsx'
 export { FishLogo, FISH_LOGO_PATH, FISH_LOGO_VIEWBOX } from './FishLogo.tsx'
 export { BrandWordmark } from './BrandWordmark.tsx'
 export type { BrandWordmarkProps } from './BrandWordmark.tsx'
+export { WhaleMark } from './WhaleMark.tsx'
 export {
   PermissionIconAutoReviewMedium, PermissionIconAutoReviewRegular,
   PermissionIconFullAccessMedium, PermissionIconFullAccessRegular,
@@ -116,9 +117,11 @@ export type {
 } from './WebBlock.tsx'
 export { CodeBlock } from './markdown/CodeBlock.tsx'
 export type { CodeBlockProps } from './markdown/CodeBlock.tsx'
+export { FenceCodeBlock, FenceMathBlock } from './markdown/FenceBlocks.tsx'
+export type { FenceCodeBlockProps } from './markdown/FenceBlocks.tsx'
 export { JsonBlock } from './markdown/JsonBlock.tsx'
 export { MarkdownDelegateProvider, useMarkdownDelegate } from './markdown/MarkdownDelegate.tsx'
-export type { MarkdownDelegate, MarkdownDelegateProviderProps, MarkdownExternalLinkHandler } from './markdown/MarkdownDelegate.tsx'
+export type { MarkdownDelegate, MarkdownDelegateProviderProps, MarkdownExternalLinkHandler, MarkdownDelegateFenceInfo } from './markdown/MarkdownDelegate.tsx'
 export { DetailDocument, detailDocumentState, useDetailDocumentLabels } from './DetailDocument.tsx'
 export type { DetailDocumentCopy, DetailDocumentLabels, DetailDocumentRead, DetailDocumentState } from './DetailDocument.tsx'
 export { MarkdownText } from './markdown/MarkdownText.tsx'
@@ -134,7 +137,7 @@ export { ImageLightbox } from './ImageLightbox.tsx'
 export type { ImageLightboxLabels } from './ImageLightbox.tsx'
 
 export { QuotePreview } from './QuotePreview.tsx'
-export type { QuotePreviewProps, QuotePreviewRemoval } from './QuotePreview.tsx'
+export type { QuotePreviewProps, QuotePreviewRemoval, QuoteSummary } from './QuotePreview.tsx'
 export { formatQuoteText } from './markdown/quote-text.ts'
 
 export type { MarkdownMenuTarget } from './markdown/MarkdownDelegate.tsx'

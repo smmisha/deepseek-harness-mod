@@ -16,3 +16,16 @@ export function desktopUpdateChannel(manifest: unknown): DesktopUpdateChannel {
   if (channel !== 'nightly' && channel !== 'stable') throw new Error('desktop update: invalid packaged channel')
   return channel
 }
+
+/**
+ * Read whether packaging turned updates off; such an installation ignores any `app-update.yml` left in its
+ * resources and has no mandatory update policy.
+ * @param manifest Parsed application manifest.
+ * @returns True only for an explicit `dshDesktopUpdates: 'disabled'`; an absent field keeps updates on.
+ */
+export function desktopUpdatesDisabled(manifest: unknown): boolean {
+  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop update: invalid application manifest')
+  if (!('dshDesktopUpdates' in manifest)) return false
+  if (manifest.dshDesktopUpdates !== 'disabled') throw new Error('desktop update: invalid packaged updates setting')
+  return true
+}

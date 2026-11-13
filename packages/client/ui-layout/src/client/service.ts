@@ -15,6 +15,13 @@ import type { createLayoutStore } from './stores.ts'
 /** Identity shared by a sidebar panel entry and its main-slot occupant. */
 export type MainPanelId = Branded<'MainPanelId'>
 
+/**
+ * Frame chrome presentation. `full` renders the navigation column and the side
+ * panels around the centre; `minimal` renders the centre column alone. A feature
+ * maps its own modes onto this choice; the frame does not know the feature.
+ */
+export type ChromeMode = 'full' | 'minimal'
+
 /** Root-scoped navigation state exposed to panel-aware components. */
 export interface PanelInfo {
   /** Selected global panel; null displays the current Conversation. */
@@ -28,6 +35,31 @@ export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
 export interface ILayout {
   /** Selected central panel from the same root store used by `usePanelInfo`. */
   readonly panelInfo: HostObservable<PanelInfo>
+  /** Current frame chrome, from the same root store the frame renders. */
+  readonly chrome: HostObservable<ChromeMode>
+  /** Whether a feature's surface covers the frame, from the same root store. */
+  readonly frameCovered: HostObservable<boolean>
+  /**
+   * Choose the frame chrome.
+   * @param mode - `full` keeps the navigation and side panels; `minimal` renders
+   *   the centre column alone. The sidebar and right panel preferences survive,
+   *   so returning to `full` restores the arrangement the reader left.
+   */
+  setChrome(mode: ChromeMode): void
+  /**
+   * Mark the frame as covered by a full-frame surface, or clear it.
+   * @param covered - true while a feature's own surface covers every column. The
+   *   covered columns stay mounted, so their occupants keep their state, but they
+   *   leave the interaction order until the surface closes.
+   */
+  setFrameCovered(covered: boolean): void
+  /**
+   * Reserve a frame-wide strip above every column, or clear it.
+   * @param px - strip height in CSS pixels, or null when the platform's caption
+   *   band already reserves it. The frame renders the band; features never
+   *   compute the frame's top padding themselves.
+   */
+  setTopBand(px: number | null): void
   /**
    * Select a global central panel without changing the current Session.
    * @param panelId - registered main key, or null to show the Conversation.
@@ -61,12 +93,30 @@ export class LayoutController implements ILayout {
    * @param panels - actions of the instance shared with the root entry.
    * @param hasMainPanel - checks the live main-slot registry for a panel id.
    * @param panelInfo - root store's shared central-panel selection source.
+   * @param chrome - root store's shared frame-chrome source.
+   * @param frameCovered - root store's shared covered-frame source.
    */
   constructor(
     private readonly panels: PanelActions,
     private readonly hasMainPanel: (id: MainPanelId) => boolean,
     readonly panelInfo: HostObservable<PanelInfo>,
+    readonly chrome: HostObservable<ChromeMode>,
+    readonly frameCovered: HostObservable<boolean>,
   ) {}
+
+  /** Choose the frame chrome, keeping every width and panel preference. */
+  setChrome(mode: ChromeMode): void {
+    this.panels.setChrome(mode)
+  }
+
+  /** Mark the frame as covered by a full-frame surface, or clear it. */
+  setFrameCovered(covered: boolean): void {
+    this.panels.setFrameCovered(covered)
+  }
+
+  setTopBand(px: number | null): void {
+    this.panels.setTopBand(px)
+  }
 
   /** Select a global panel or return to the Conversation. */
   selectPanel(panelId: MainPanelId | null): void {

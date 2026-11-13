@@ -16,6 +16,9 @@ describe('createLayoutStore', () => {
         sidebar: 280,
         viewportWidth: 1920,
         narrowExpanded: false,
+        chrome: 'full',
+        covered: false,
+        topBand: null,
         rightbar: null,
         rightbarShown: false,
         rightbarTrack: false,
@@ -25,8 +28,7 @@ describe('createLayoutStore', () => {
     })
   })
 
-  it('creates independent instances without browser persistence', () => {
-    const write = vi.spyOn(Storage.prototype, 'setItem')
+  it('creates independent instances without browser persistence', () => {    const write = vi.spyOn(Storage.prototype, 'setItem')
     const a = createLayoutStore().create()
     const b = createLayoutStore().create()
     a.actions.setSidebar(400)
@@ -306,5 +308,20 @@ describe('drawer navigation', () => {
     actions.toggleSidebar()
     actions.selectPanel(null)
     expect(store.getSnapshot().layoutInfo.narrowExpanded).toBe(true)
+  })
+})
+
+describe('frame chrome', () => {
+  it('switches between the full shell and the centre alone without touching widths', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setSidebar(360)
+    actions.openRightbar(true, false)
+    actions.setChrome('minimal')
+    expect(store.getSnapshot().layoutInfo.chrome).toBe('minimal')
+    actions.setChrome('full')
+    expect(store.getSnapshot().layoutInfo.chrome).toBe('full')
+    // Every preference survives the focused mode.
+    expect(store.getSnapshot().layoutInfo.sidebar).toBe(360)
+    expect(store.getSnapshot().layoutInfo.rightbarShown).toBe(true)
   })
 })

@@ -39,7 +39,7 @@ import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import type { DesktopMessages } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
-import { desktopUpdateChannel } from './update-channel.ts'
+import { desktopUpdateChannel, desktopUpdatesDisabled } from './update-channel.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { prepareDesktopUpdateWindow } from './update-window.ts'
 import { DesktopCommandManager } from './command-management.ts'
@@ -66,6 +66,8 @@ import { readDesktopLocaleCache, writeDesktopLocaleCache } from './locale-cache.
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
+import { logChatLogin } from './chat-login-log.ts'
+import { removeLegacyChatBrowserProfile } from './chat-profile-legacy.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -238,9 +240,10 @@ function developmentHostInspectPort(enabled: boolean): number | undefined {
 /**
  * Opaque chrome fallback matching the built-in sidebar palette (the resolved
  * `--dsw-static-neutral-bluish-900` / `-50` tokens). An approximation for
- * custom themes: Windows swaps in the renderer's measured palette over the
- * windowsAppearance IPC, and macOS shows it only while minimized or hidden.
- * @returns the sidebar fill hex for the active system color scheme.
+ * custom themes: Windows captions use the renderer's measured palette over
+ * windowsAppearance IPC. The Windows workspace base stays opaque and follows
+ * the effective light/dark theme; macOS uses it only while minimized or hidden.
+ * @returns the sidebar fill hex for the effective application color scheme.
  */
 function chromeFallbackFill(): string {
   return nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#f9fafb'
@@ -268,6 +271,7 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     minHeight: 600,
     show,
     ...(process.platform === 'win32' && primary ? {
+      backgroundColor: chromeFallbackFill(),
       titleBarStyle: 'hidden' as const,
       titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT, color: chromeFallbackFill(),
         symbolColor: nativeTheme.shouldUseDarkColors ? '#f9fafb' : '#0f1115' },
@@ -307,6 +311,13 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     // Reloads and navigations re-register the preload listener; resend the
     // current state so a fullscreen reload does not fall back to windowed CSS.
     window.webContents.on('did-finish-load', sendFullscreen)
+  }
+  if (process.platform === 'win32' && primary) {
+    const updateBackground = (): void => {
+      if (!window.isDestroyed()) window.setBackgroundColor(chromeFallbackFill())
+    }
+    nativeTheme.on('updated', updateBackground)
+    window.once('closed', () => { nativeTheme.removeListener('updated', updateBackground) })
   }
   if (process.platform === 'darwin') {
     // Deminiaturize reattaches the NSVisualEffectView material late
@@ -370,6 +381,7 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 }
 
 async function main(): Promise<void> {
+  removeLegacyChatBrowserProfile(app.getPath('userData'), logChatLogin)
   const desktopSettings = await readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
@@ -687,6 +699,8 @@ async function main(): Promise<void> {
 
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
   const packagedChannel = desktopUpdateChannel(manifest)
+  // An installation built with updates disabled ignores an app-update.yml that an earlier installer left behind.
+  const updatesDisabled = app.isPackaged && desktopUpdatesDisabled(manifest)
   const channelSettings = new DesktopUpdateSettings(app.getPath('userData'), packagedChannel)
   const initialChannel = await channelSettings.load()
   channelState = { channel: initialChannel.kind === 'ready' ? initialChannel.channel : null,
@@ -748,7 +762,7 @@ async function main(): Promise<void> {
       }
       return true
     },
-    undefined, undefined, undefined,
+    undefined, updatesDisabled ? () => false : undefined, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
     updateChannel,
   )
@@ -833,6 +847,18 @@ async function main(): Promise<void> {
     assertProductSender(event)
     return browserGuests.release(event.sender, lease)
   })
+  ipcMain.handle(DESKTOP_IPC.chatAcquire, (event, config: unknown) => {
+    assertProductSender(event)
+    return browserGuests.acquireChat(event.sender, config)
+  })
+  ipcMain.handle(DESKTOP_IPC.chatReturnToSignIn, (event) => {
+    assertProductSender(event)
+    return browserGuests.returnToSignIn(event.sender)
+  })
+  ipcMain.handle(DESKTOP_IPC.chatOpenInBrowser, (event) => {
+    assertProductSender(event)
+    browserGuests.openInBrowser(event.sender)
+  })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
     if (hostUrl === undefined || hostCookie === undefined || details.webContentsId !== mainWindow?.webContents.id) {
@@ -870,8 +896,11 @@ async function main(): Promise<void> {
   ipcMain.handle(PLATFORM_IPC.close, (event) => { assertMainApplication(event); platformView.close() })
   // Only the main window may synchronize its palette with the native material.
   ipcMain.on(DESKTOP_IPC.nativeThemeSet, (event, source: unknown) => {
-    if (mainWindow === undefined || event.sender !== mainWindow.webContents) return
-    if (source === 'light' || source === 'dark' || source === 'system') nativeTheme.themeSource = source
+    if (mainWindow === undefined || event.sender !== mainWindow.webContents
+      || event.senderFrame !== mainWindow.webContents.mainFrame
+      || !event.senderFrame.url.startsWith(`${SCHEME}://app/`)) return
+    if (source !== 'light' && source !== 'dark' && source !== 'system') return
+    nativeTheme.themeSource = source
   })
   ipcMain.handle(DESKTOP_IPC.localeBootstrap, async (event) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame
@@ -999,6 +1028,21 @@ async function main(): Promise<void> {
     }
     if (authenticationOperation !== undefined) {
       policyAuth?.focus(); updateDialog.focus()
+    }
+    if (!isMandatory() && (updates.state.phase === 'downloading' || updates.state.phase === 'verifying')) {
+      if (updateDialog.isOpen) {
+        updateDialog.focus()
+        return Promise.resolve()
+      }
+      const options = { type: 'info' as const, title: locale.messages.updateCheckTitle,
+        message: updates.state.phase === 'downloading' ? locale.messages.updateDownloadInProgress : locale.messages.updateVerifying,
+        detail: updates.state.phase === 'downloading' ? locale.messages.updateDownloadDetail : '', buttons: [locale.messages.updateClose], cancelId: 0,
+      }
+      return ordinaryMessageBox(options).then(() => {}).catch(async (error: unknown) => {
+        console.error(error)
+        try { await dialog.showMessageBox(options) }
+        catch (nativeError) { console.error(nativeError) }
+      })
     }
     let failedOperation: 'check' | 'download' | 'install' = 'check'
     promptOperation ??= Promise.resolve().then(async () => {
@@ -1295,7 +1339,8 @@ async function main(): Promise<void> {
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, false, true)
     mainWindow = window
-    browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
+    browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name),
+      () => currentDesktopLocale().messages)
     shortcuts.attach(window)
     window.on('focus', automaticCheck)
     // Closing hides: the page and the Host keep running, and the next show resumes the same document.
@@ -1345,6 +1390,7 @@ async function main(): Promise<void> {
     const window = mainWindow ?? createMainWindow()
     await navigateMain(applicationUrl)
     if (isQuitting() || recovery.active || window.isDestroyed()) return
+    if (process.platform === 'win32') window.setBackgroundColor(chromeFallbackFill())
     if (activate) window.show()
     else window.showInactive()
     enteredWorkspace = true
@@ -1428,6 +1474,7 @@ async function main(): Promise<void> {
     if (quitting || recovery.active) return
     const state = await readWelcomeState()
     if (isQuitting() || backend.state.phase !== 'ready') return
+    nativeTheme.themeSource = state.themePreference
     locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages)
     writeDesktopLocaleCache(app.getPath('userData'), locale.id)
     windowsLanguage = locale.id
@@ -1520,7 +1567,7 @@ async function main(): Promise<void> {
   if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const developmentPolicy = app.isPackaged ? undefined : process.env.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG
   const policyInput: unknown = app.isPackaged
-    ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)
+    ? (!updatesDisabled && 'dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)
     : developmentPolicy === undefined ? undefined : JSON.parse(developmentPolicy) as unknown
   const policyConfig = resolveDesktopPolicyConfig(policyInput, !app.isPackaged)
   if (policyConfig !== undefined) {

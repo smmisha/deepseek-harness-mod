@@ -11,6 +11,7 @@ import { syncNativeTheme } from './preload-theme.ts'
 import { syncWindowsAppearance } from './preload-windows.ts'
 import { installMandatoryUpdateOverlay } from './preload-mandatory-overlay.ts'
 import { createDesktopBrowserBridge } from './preload-browser.ts'
+import type { DesktopChatReservation } from '@deepseek-ai/dsh-client-ui-work-mode/types'
 import type { FileDragHandle } from '@deepseek-ai/dsh-util-file-drag'
 
 function createProductApi(): DshDesktopProductApi {
@@ -22,6 +23,28 @@ function createProductApi(): DshDesktopProductApi {
         Promise<{ bytes: Uint8Array; mediaType: string }>,
     },
     browser: createDesktopBrowserBridge(),
+    chat: {
+      acquire: config => ipcRenderer.invoke(DESKTOP_IPC.chatAcquire, config) as Promise<DesktopChatReservation>,
+      onLoginState(listener) {
+        const handler = (_event: unknown, state: unknown): void => {
+          if (typeof state !== 'object' || state === null) return
+          const row = state as Record<string, unknown>
+          if (row.kind === 'idle' || row.kind === 'provider-rejected') listener({ kind: row.kind })
+        }
+        ipcRenderer.on(DESKTOP_IPC.chatLoginState, handler)
+        return () => { ipcRenderer.off(DESKTOP_IPC.chatLoginState, handler) }
+      },
+      returnToSignIn: () => {
+        void ipcRenderer.invoke(DESKTOP_IPC.chatReturnToSignIn).catch((_error: unknown) => {
+          // Main logs the failure; the tab keeps showing the page it already has.
+        })
+      },
+      openInBrowser: () => {
+        void ipcRenderer.invoke(DESKTOP_IPC.chatOpenInBrowser).catch((_error: unknown) => {
+          // Main logs the failure; the guest is unaffected.
+        })
+      },
+    },
     fileDrag: {
       prepare: (source, requestId) => ipcRenderer.invoke(DESKTOP_IPC.fileDragPrepare, source, requestId) as
         Promise<FileDragHandle | undefined>,

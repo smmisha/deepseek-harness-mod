@@ -19,6 +19,7 @@ import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import AgentRegistry, { agentEvents, type Agent, type PreStepDecision } from '@deepseek-ai/dsh-agent'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
+import SkillSources from '@deepseek-ai/dsh-skill-sources'
 import * as toolSkill from '@deepseek-ai/dsh-tool-skill'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -55,16 +56,28 @@ async function writeSkill(root: string, name: string, description: string, body:
   await writeFile(join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`)
 }
 
-async function setup(home: string, config: toolSkill.Config = {}): Promise<Context> {
+async function setup(
+  home: string,
+  config: toolSkill.Config = {},
+  switches: {
+    applications?: { id: string; dir: string; title: string }[]
+    sources?: Record<string, { enabled: boolean }>
+    skills?: Record<string, Record<string, boolean>>
+  } = {},
+): Promise<Context> {
   const ctx = new Context()
   provideWorkingDirectoryFixture(ctx, home)
+  ctx.provide('settings', { update: async () => undefined })
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(SkillRegistry)
-  await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+  await ctx.plugin(SkillSources, switches)
+  await ctx.plugin(SkillFileSystem, {
+    dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false,
+  })
   await ctx.plugin(toolSkill, config)
   return ctx
 }
@@ -341,6 +354,19 @@ describe('dsh-tool-skill', () => {
     expect(rendered).not.toContain('Secret body')
     expect(rendered).not.toContain('user-only-skill')
     expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: agentForCwd('/workspace') }))).not.toContain('<available_skills>')
+  })
+
+  it('keeps a switched-off local skill out of the session catalog', async () => {
+    const home = await tempDir('tool-switched-off-skill')
+    await writeSkill(join(home, '.dsh', 'skills'), 'visible-skill', 'Visible local skill', 'Visible body.')
+    await writeSkill(join(home, '.dsh', 'skills'), 'hidden-skill', 'Hidden local skill', 'Hidden body.')
+    const ctx = await setup(home, {}, { skills: { 'user-dsh': { 'hidden-skill': false } } })
+
+    const prefix = await composePrefix(ctx, '/workspace')
+    expect(prefix).toHaveLength(1)
+    const rendered = JSON.stringify(prefix[0])
+    expect(rendered).toContain('visible-skill')
+    expect(rendered).not.toContain('hidden-skill')
   })
 
   it('does not inject a catalog when no model-invocable skills are available', async () => {

@@ -6,6 +6,7 @@ import type { DesktopChannelBridge, DesktopChannelState } from '@deepseek-ai/dsh
 import type { DesktopKeyboardApi, DesktopShortcutsApi } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import type { IpcMainInvokeEvent } from 'electron'
 import type { DesktopBrowserBridge } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
+import type { DesktopChatBridge } from '@deepseek-ai/dsh-client-ui-work-mode/types'
 import type { DesktopFileDrag } from '@deepseek-ai/dsh-util-file-drag'
 
 /** IPC channel names kept private to the desktop application bundle. */
@@ -26,6 +27,10 @@ export const DESKTOP_IPC = {
   browserAcquire: 'dsh-desktop:browser-acquire',
   browserRelease: 'dsh-desktop:browser-release',
   browserOpenRequested: 'dsh-desktop:browser-open-requested',
+  chatAcquire: 'dsh-desktop:chat-acquire',
+  chatLoginState: 'dsh-desktop:chat-login-state',
+  chatOpenInBrowser: 'dsh-desktop:chat-open-in-browser',
+  chatReturnToSignIn: 'dsh-desktop:chat-return-to-sign-in',
   directoryPick: 'dsh-desktop:directory-pick',
   fileDragPrepare: 'dsh-desktop:file-drag-prepare',
   fileDragCancel: 'dsh-desktop:file-drag-cancel',
@@ -94,6 +99,8 @@ export interface DshDesktopProductApi {
   readonly fileActions: DesktopFileActions
   readonly protocolVersion: 1
   readonly browser: DesktopBrowserBridge
+  /** The Chat tab's persistent guest in the Desktop shell. */
+  readonly chat: DesktopChatBridge
   readonly fileDrag: DesktopFileDrag
   readonly keyboard: DesktopKeyboardApi
   readonly shortcuts: DesktopShortcutsApi

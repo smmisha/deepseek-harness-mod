@@ -53,3 +53,22 @@ it('accepts a stable prerelease in an unsigned Windows x64 configuration', () =>
   expect(config.extraMetadata).toMatchObject({ version })
   expect(config.publish).toBeNull()
 })
+
+it('omits the update feed and the mandatory policy when a build disables updates', () => {
+  const release = {
+    DSH_DESKTOP_APP_ID: 'com.example.channel-test',
+    DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
+    DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://policy.example.com',
+    DSH_DESKTOP_UNSIGNED: '1',
+  }
+  const enabled = createElectronBuilderConfig(release, 'win32', 'x64')
+  expect(enabled.extraMetadata).toHaveProperty('dshMandatoryUpdatePolicy')
+  expect(enabled.extraMetadata).not.toHaveProperty('dshDesktopUpdates')
+  const disabled = createElectronBuilderConfig({ ...release, DSH_DESKTOP_UPDATES: 'disabled',
+    DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: undefined }, 'win32', 'x64')
+  expect(disabled.extraMetadata).toMatchObject({ dshDesktopUpdates: 'disabled' })
+  expect(disabled.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+  expect(disabled.publish).toBeNull()
+  expect(() => createElectronBuilderConfig({ ...release, DSH_DESKTOP_UPDATES: 'off' }, 'win32', 'x64'))
+    .toThrow(/DSH_DESKTOP_UPDATES/u)
+})

@@ -64,7 +64,8 @@ const installFixture = installDesktopShortcuts as (
 type GuestsFixture = {
   acquire(owner: ContentsFixture, workspace: unknown): DesktopBrowserReservation
   release(owner: ContentsFixture, id: unknown): Promise<void>
-  bind(window: WindowFixture, attachInput: (guest: ContentsFixture, name: DesktopBrowserLeaseId) => () => void): void
+  bind(window: WindowFixture, attachInput: (guest: ContentsFixture, name: DesktopBrowserLeaseId) => () => void,
+    messages: () => unknown): void
 }
 
 function desktopDefaults(binding: ShortcutBinding): ShortcutDefinition['defaults'] {
@@ -203,7 +204,7 @@ it.each([false, true])('blocks approved browser guest input across update overla
     { id: 'sidebar.left.toggle', defaults: desktopDefaults({ code: 'KeyK', modifiers: ['primary'] }) },
   ])
   const guests = new DesktopBrowserGuests(() => undefined) as GuestsFixture
-  guests.bind(f.window, (guest, name) => f.keyboard.attachGuest(f.window, guest, name))
+  guests.bind(f.window, (guest, name) => f.keyboard.attachGuest(f.window, guest, name), () => ({}))
   const reservation = guests.acquire(f.contents, 'session:test')
   const { frame, guest } = browserGuest(reservation)
   const attach = () => {
@@ -717,7 +718,7 @@ it.each(['macos', 'windows', 'linux'] as const)('routes approved %s browser gues
     [{ id: 'browser.new', defaults: desktopDefaults({ code: 'KeyT', modifiers: ['primary'] }) }])
   const guests = new DesktopBrowserGuests(() => undefined) as GuestsFixture
   const attach = vi.fn((guest: ContentsFixture, name: DesktopBrowserLeaseId) => f.keyboard.attachGuest(f.window, guest, name))
-  guests.bind(f.window, attach)
+  guests.bind(f.window, attach, () => ({}))
   const reservation = guests.acquire(f.contents, 'session:test')
   const { frame, guest } = browserGuest(reservation)
   const rejected = { preventDefault: vi.fn() }

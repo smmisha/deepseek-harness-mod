@@ -226,6 +226,17 @@ describe('Desktop local packaging configuration', () => {
     })
   })
 
+  it('loads the updates switch only from the platform file and skips policy and feed checks when it disables updates', async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, '.env.windows'), 'DSH_DESKTOP_APP_ID=com.example.desktop\nDSH_DESKTOP_UPDATES=disabled\n')
+      const loaded = loadDesktopPackageEnvironment('win32', { DSH_DESKTOP_UPDATES: 'enabled' }, directory)
+      expect(loaded).toEqual({ DSH_DESKTOP_APP_ID: 'com.example.desktop', DSH_DESKTOP_UPDATES: 'disabled' })
+      expect(() => { validateDesktopPackageEnvironment(loaded, WINDOWS, { unsigned: true }) }).not.toThrow()
+      expect(() => { validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'com.example.desktop' }, WINDOWS, { unsigned: true }) })
+        .toThrow(/DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN/u)
+    })
+  })
+
   it('requires the local file even when ambient configuration exists and rejects other-platform fields', async () => {
     await withDirectory(async (directory) => {
       expect(() => loadDesktopPackageEnvironment('win32', RELEASE, directory)).toThrow(/copy .*\.env.windows.example/u)

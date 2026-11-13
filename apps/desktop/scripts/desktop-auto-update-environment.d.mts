@@ -1,6 +1,16 @@
 /** Environment variable that selects the Desktop update deployment. */
 export const DESKTOP_AUTO_UPDATE_ENV: 'DSH_DESKTOP_AUTO_UPDATE_ENV'
 
+/** Target dotenv setting that turns ordinary and mandatory updates off for a build. */
+export const DESKTOP_UPDATES_ENV: 'DSH_DESKTOP_UPDATES'
+
+/**
+ * Resolve whether the build carries an update feed and a mandatory update policy.
+ * @param env Packaging settings.
+ * @returns Validated setting; omitted means enabled.
+ */
+export function resolveDesktopUpdates(env: NodeJS.ProcessEnv): 'enabled' | 'disabled'
+
 /** Supported Desktop update deployment. */
 export type DesktopAutoUpdateEnvironment = 'test' | 'production'
 

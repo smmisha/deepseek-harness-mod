@@ -1,0 +1,50 @@
+/* Two flat icon buttons on the title strip: no container fill, border or
+   shadow. The selected mode takes the primary ink and the pressed-state
+   fill; hover uses the lighter hover fill; the other mode stays muted. */
+.switcher {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  /* Only the buttons subtract themselves from the window drag row. */
+  -webkit-app-region: no-drag;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+@media (hover: hover) {
+  .option:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.option[aria-checked='true'] {
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  cursor: default;
+}
+
+.option:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .option {
+    transition: none;
+  }
+}

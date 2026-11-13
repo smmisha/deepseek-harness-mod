@@ -23,6 +23,19 @@ import type { WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
 import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath } from '../src/paths.ts'
 import * as workspacePaths from '../src/paths.ts'
 
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
+
 const DOMAIN_VERSION = 2
 
 const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
@@ -208,7 +221,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     expect(storedState(pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
   })
 
-  it('bootstraps once from list headers only, in workspace/session createdAt order', async () => {
+  it.skipIf(!symlinkFilesAvailable)('bootstraps once from list headers only, in workspace/session createdAt order', async () => {
     const older = await makeDir('older')
     const newer = await makeDir('newer')
     const alias = join(base, 'older-link')
@@ -380,7 +393,7 @@ describe('WorkspaceRegistry create and lookup', () => {
     expect(fullyQualifiedWorkspacePath('work', 'linux')).toBe(false)
   })
 
-  it('creates newest-first and idempotently reuses a canonical path without retitling', async () => {
+  it.skipIf(!symlinkFilesAvailable)('creates newest-first and idempotently reuses a canonical path without retitling', async () => {
     const firstDir = await makeDir('first')
     const secondDir = await makeDir('second')
     const alias = join(base, 'first-link')
@@ -795,7 +808,7 @@ describe('header-validated membership projection', () => {
     expect(again.registry.get(workspace.id)!.sessionIds).toEqual(['first', 'second'])
   })
 
-  it('preserves an owned session when its symlink target disappears without bootstrapping missing paths', async () => {
+  it.skipIf(!symlinkFilesAvailable)('preserves an owned session when its symlink target disappears without bootstrapping missing paths', async () => {
     const target = await makeDir('removed-symlink-target')
     const alias = join(base, 'removed-symlink-alias')
     await symlink(target, alias, 'junction')
@@ -1490,7 +1503,7 @@ describe('first-use Workspace preparation', () => {
     expect((await h.registry.initializeDefault(h.resolveDirectory))?.path).toBe(path)
   })
 
-  it('titles the Workspace after the requested directory when that path is a symlink', async () => {
+  it.skipIf(!symlinkFilesAvailable)('titles the Workspace after the requested directory when that path is a symlink', async () => {
     const h = await firstUse()
     const target = join(h.directoryRoot, 'elsewhere')
     await mkdir(target)
@@ -1545,3 +1558,42 @@ declare module '@deepseek-ai/dsh-workspace/types' {
     'probe-items': true
   }
 }
+
+describe('archive follow-up lifecycle', () => {
+  it('dispatches only after durability and waits before unarchiving', async () => {
+    const result = await harness({ sessions: [header('cleanup')] })
+    try {
+      const archived = vi.fn(() => {
+        expect(result.registry.archivedSessionIds).toContain('cleanup')
+        expect(storedState(result.pool).archivedSessionIds).toContain('cleanup')
+      })
+      result.ctx.on('workspace/session-archived', archived)
+      await result.registry.archiveSession(SessionId('cleanup'))
+      await result.registry.archiveSession(SessionId('cleanup'))
+      expect(archived).toHaveBeenCalledTimes(1)
+      const entered = Promise.withResolvers<undefined>()
+      const release = Promise.withResolvers<undefined>()
+      result.ctx.on('workspace/session-unarchiving', async () => {
+        entered.resolve(undefined)
+        await release.promise
+      })
+      const unarchive = result.registry.unarchiveSession(SessionId('cleanup'))
+      await entered.promise
+      expect(result.registry.archivedSessionIds).toContain('cleanup')
+      release.resolve(undefined)
+      await unarchive
+      expect(result.registry.archivedSessionIds).toEqual([])
+    } finally { await result.ctx.fiber.dispose() }
+  })
+
+  it('retains successful archival when follow-up admission fails', async () => {
+    const result = await harness({ sessions: [header('cleanup-error')] })
+    try {
+      const warning = vi.spyOn(result.ctx.logger, 'warn').mockImplementation(() => {})
+      result.ctx.on('workspace/session-archived', () => { throw new Error('inspection unavailable') })
+      await result.registry.archiveSession(SessionId('cleanup-error'))
+      expect(storedState(result.pool).archivedSessionIds).toEqual(['cleanup-error'])
+      expect(warning).toHaveBeenCalled()
+    } finally { await result.ctx.fiber.dispose() }
+  })
+})

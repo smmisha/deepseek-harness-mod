@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+> **非官方修改版 — `mod-smmisha`。** 本仓库是由 smmisha 维护的 DeepSeek Harness 社区修改版，**并非** DeepSeek 官方发布，与 DeepSeek AI 无关联，也未获其认可。官方上游：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)。
+
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
 它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。

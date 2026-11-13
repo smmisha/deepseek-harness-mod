@@ -1,7 +1,18 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { describe, expect, it, vi } from 'vitest'
 import { LayoutController } from '../src/client/service.ts'
-import type { MainPanelId, PanelActions } from '../src/client/service.ts'
+import type { ChromeMode, MainPanelId, PanelActions } from '../src/client/service.ts'
+
+/** The frame-chrome source the controller reads alongside the panel selection. */
+const chromeSource = () => createSnapshotStore<ChromeMode>('full')
+
+/** The covered-frame source the controller reads beside the chrome source. */
+const frameCoveredSource = () => createSnapshotStore(false)
+
+/** One controller over fresh sources, so each case only states its own stubs. */
+function serviceFor(panels: PanelActions, hasMainPanel: (id: MainPanelId) => boolean = () => true): LayoutController {
+  return new LayoutController(panels, hasMainPanel, createSnapshotStore({ activePanelId: null }), chromeSource(), frameCoveredSource())
+}
 
 function fakePanels(): PanelActions {
   return {
@@ -10,6 +21,9 @@ function fakePanels(): PanelActions {
     setSidebar: vi.fn(),
     toggleSidebar: vi.fn(),
     setViewportWidth: vi.fn(),
+    setChrome: vi.fn(),
+    setFrameCovered: vi.fn(),
+    setTopBand: vi.fn(),
     setRightbar: vi.fn(),
     openRightbar: vi.fn(),
     closeRightbar: vi.fn(),
@@ -19,7 +33,7 @@ function fakePanels(): PanelActions {
 describe('LayoutController', () => {
   it('forwards right column transitions to the constructor-supplied actions', () => {
     const panels = fakePanels()
-    const service = new LayoutController(panels, () => true, createSnapshotStore({ activePanelId: null }))
+    const service = serviceFor(panels)
 
     service.openRightbar(true, false)
     service.openRightbar(true, true)
@@ -36,7 +50,7 @@ describe('LayoutController', () => {
 
   it('can toggle the sidebar immediately after construction', () => {
     const panels = fakePanels()
-    const service = new LayoutController(panels, () => true, createSnapshotStore({ activePanelId: null }))
+    const service = serviceFor(panels)
 
     service.toggleSidebar()
 
@@ -46,7 +60,7 @@ describe('LayoutController', () => {
 
   it('forwards panel selection and returning to the Conversation without changing geometry', () => {
     const panels = fakePanels()
-    const service = new LayoutController(panels, () => true, createSnapshotStore({ activePanelId: null }))
+    const service = serviceFor(panels)
     const panelId = 'panel-a' as MainPanelId
     service.selectPanel(panelId)
     service.selectPanel(panelId)
@@ -62,8 +76,8 @@ describe('LayoutController', () => {
   it('keeps separately constructed controllers bound to their own instances', () => {
     const first = fakePanels()
     const second = fakePanels()
-    const firstService = new LayoutController(first, () => true, createSnapshotStore({ activePanelId: null }))
-    const secondService = new LayoutController(second, () => true, createSnapshotStore({ activePanelId: null }))
+    const firstService = serviceFor(first)
+    const secondService = serviceFor(second)
     firstService.toggleSidebar()
     expect(first.toggleSidebar).toHaveBeenCalledTimes(1)
     expect(second.toggleSidebar).not.toHaveBeenCalled()
@@ -75,7 +89,7 @@ describe('LayoutController', () => {
   it('rejects an absent main entry without changing selection or cancelling pending navigation', () => {
     const panels = fakePanels()
     const present = new Set(['panel-a'])
-    const service = new LayoutController(panels, id => present.has(id), createSnapshotStore({ activePanelId: null }))
+    const service = serviceFor(panels, id => present.has(id))
     service.selectPanel('panel-a' as MainPanelId)
     const navigation = service.beginNavigation()
     present.delete('panel-a')
@@ -86,8 +100,30 @@ describe('LayoutController', () => {
     expect(navigation.aborted).toBe(true)
   })
 
+  it('forwards the frame chrome choice to the shared actions', () => {
+    const panels = fakePanels()
+    const service = serviceFor(panels)
+    service.setChrome('minimal')
+    expect(panels.setChrome).toHaveBeenCalledWith('minimal')
+    service.setChrome('full')
+    expect(panels.setChrome).toHaveBeenNthCalledWith(2, 'full')
+    // Chrome never touches the widths or the selected panel.
+    expect(panels.setSidebar).not.toHaveBeenCalled()
+    expect(panels.selectPanel).not.toHaveBeenCalled()
+  })
+
+  it('forwards the covered-frame flag to the shared actions', () => {
+    const panels = fakePanels()
+    const service = serviceFor(panels)
+    service.setFrameCovered(true)
+    expect(panels.setFrameCovered).toHaveBeenCalledWith(true)
+    service.setFrameCovered(false)
+    expect(panels.setFrameCovered).toHaveBeenNthCalledWith(2, false)
+    expect(panels.setChrome).not.toHaveBeenCalled()
+  })
+
   it('supersedes asynchronous navigation on another request, any valid selection, and disposal', () => {
-    const service = new LayoutController(fakePanels(), () => true, createSnapshotStore({ activePanelId: null }))
+    const service = serviceFor(fakePanels())
     const first = service.beginNavigation()
     const second = service.beginNavigation()
     expect(first.aborted).toBe(true)

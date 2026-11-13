@@ -48,6 +48,11 @@
 
     - id: typert-loader
       name: '@deepseek-ai/dsh-typert-loader'
+      # The skill provider is nested behind the base include; its Remote
+      # namespace is registered explicitly instead of by entry discovery.
+      config:
+        packages:
+          - '@deepseek-ai/dsh-skill-filesystem'
 
     - id: typert-gateway
       name: '@deepseek-ai/dsh-api-gateway'
@@ -118,7 +123,7 @@
       name: '@deepseek-ai/dsh-authorization'
 
     - id: deepseek-account
-      name: '@deepseek-ai/dsh-deepseek-account-platform'
+      name: '@deepseek-ai/dsh-deepseek-account'
       config:
         desktopPlatform: !!js "ctx.get('profileContext')?.name === 'desktop' && ['darwin', 'win32'].includes(process.platform) ? process.platform : null"
 
@@ -312,6 +317,11 @@
     - id: skill
       name: '@deepseek-ai/dsh-skill'
 
+    # Profile-owned skill switches and the application list; the Skills tab
+    # writes the volatile Config fields through the settings service.
+    - id: skill-sources
+      name: '@deepseek-ai/dsh-skill-sources'
+
     - id: skill-filesystem
       name: '@deepseek-ai/dsh-skill-filesystem'
 
@@ -385,6 +395,8 @@
     # separately loaded follow-up tool registers the one global `send_message`.
     - id: tool-subagent-control
       name: '@deepseek-ai/dsh-tool-subagent-control'
+      config:
+        interrupt: false
 
     - id: tool-subagent
       name: '@deepseek-ai/dsh-tool-subagent'

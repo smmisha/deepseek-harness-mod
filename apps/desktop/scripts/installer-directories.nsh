@@ -3,6 +3,7 @@
 Var dshFinalDirectory
 Var dshNewDirectory
 Var dshOldDirectory
+Var dshStageId
 Var dshOldMoved
 Var dshNewMoved
 Var dshDirectoryError
@@ -103,8 +104,10 @@ Var dshRecoveryStopped
     SetErrorLevel 2
     Quit
   ${EndIf}
-  StrCpy $dshNewDirectory "$INSTDIR.new-$0"
-  StrCpy $dshOldDirectory "$INSTDIR.old-$0"
+  ; Eight GUID digits keep staged file paths under MAX_PATH; the braced GUID would add 30 characters to each one.
+  StrCpy $dshStageId $0 8 1
+  StrCpy $dshNewDirectory "$INSTDIR.new-$dshStageId"
+  StrCpy $dshOldDirectory "$INSTDIR.old-$dshStageId"
   StrCpy $dshOldMoved ""
   StrCpy $dshNewMoved ""
   StrCpy $dshDirectoryError 0

@@ -2,10 +2,17 @@
 !define INSTALLER_WINDOW_SIZE 600
 !define INSTALLER_BRAND_Y 174
 !define INSTALLER_BRAND_HEIGHT 196
-!define INSTALLER_BUTTON_X 240
 !define INSTALLER_BUTTON_Y 490
 !define INSTALLER_BUTTON_WIDTH 120
 !define INSTALLER_BUTTON_HEIGHT 44
+; Logical pixels added on each side of a button's measured text; buttons widen for localized labels.
+!define INSTALLER_BUTTON_TEXT_PADDING 16
+!define INSTALLER_CHOOSE_Y 438
+!define INSTALLER_CHOOSE_WIDTH 136
+!define INSTALLER_CHOOSE_HEIGHT 28
+; Path messages wrap to three lines in the space below the install button.
+!define INSTALLER_ERROR_Y 538
+!define INSTALLER_ERROR_HEIGHT 62
 !define INSTALLER_BUTTON_DIAMETER 20
 !define INSTALLER_PROGRESS_X 64
 !define INSTALLER_PROGRESS_Y 482

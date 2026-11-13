@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
-import type { PanelInfo } from './service.ts'
+import type { ChromeMode, PanelInfo } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
 import type { AppFrameInjected } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
@@ -28,7 +28,7 @@ import { ThemePresenter } from './theme-presenter.ts'
 // OwnerShare contracts below are the render-side halves registrants compose
 // against; the frame components and the store factory are package-internal.
 export { LayoutController } from './service.ts'
-export type { ILayout, MainPanelId, PanelInfo } from './service.ts'
+export type { ChromeMode, ILayout, MainPanelId, PanelInfo } from './service.ts'
 
 /** Selector hook over root-scoped panel selection. */
 export type UsePanelInfo = SnapshotSelectorHook<PanelInfo>
@@ -185,8 +185,16 @@ export function apply(ctx: ClientContext): void {
       getSnapshot: () => instance.getSnapshot().panelInfo,
       subscribe: listener => instance.subscribe(listener),
     }
+    const chrome: HostObservable<ChromeMode> = {
+      getSnapshot: () => instance.getSnapshot().layoutInfo.chrome,
+      subscribe: listener => instance.subscribe(listener),
+    }
+    const frameCovered: HostObservable<boolean> = {
+      getSnapshot: () => instance.getSnapshot().layoutInfo.covered,
+      subscribe: listener => instance.subscribe(listener),
+    }
     const layout = new LayoutController(instance.actions, id =>
-      ctx.slots.entries('main').some(entry => entry.options.key === id), panelInfo)
+      ctx.slots.entries('main').some(entry => entry.options.key === id), panelInfo, chrome, frameCovered)
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: layout.panelInfo } })
     const disposeService = ctx.reflect.provide('layout', layout)
     const disposeRegistration = ctx.slots.register({

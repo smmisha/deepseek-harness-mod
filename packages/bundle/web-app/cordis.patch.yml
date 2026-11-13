@@ -140,8 +140,8 @@
     - id: ui-settings-account
       name: '@deepseek-ai/dsh-client-ui-settings-account'
 
-    - id: account-controller
-      name: '@deepseek-ai/dsh-api-account-controller'
+    - id: ui-account-notifications
+      name: '@deepseek-ai/dsh-client-ui-account-notifications'
 
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
@@ -261,6 +261,10 @@
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
 
+    # Ukrainian language pack: uk dictionaries for the shipped web UI.
+    - id: locale-uk
+      name: '@deepseek-ai/dsh-client-locale-uk'
+
     - id: shortcuts
       name: '@deepseek-ai/dsh-client-shortcuts'
 
@@ -288,8 +292,27 @@
       name: '@deepseek-ai/dsh-client-ui-sidebar-right'
 
 
-    - id: office-to-pdf
-      name: '@deepseek-ai/dsh-office-to-pdf'
+    - id: office-kit
+      name: '@deepseek-ai/dsh-office-kit'
+      config:
+        outputDirectory: !!js dshHomePath('office-kit', 'outputs')
+
+    # Every profile uses the packaged Office skills. Desktop supplies their Python
+    # environment through the primary runtime named by DSH_PRIMARY_RUNTIME and
+    # selects `workspace-dependencies`. A Desktop profile launched without a
+    # nonempty value disables workspace-dependencies and, like the other
+    # profiles, selects `user` to direct the model to the user's Python.
+    - id: workspace-dependencies
+      name: '@deepseek-ai/dsh-tool-workspace-dependencies'
+      disabled: !!js "ctx.get('profileContext')?.name !== 'desktop' || !process.env.DSH_PRIMARY_RUNTIME"
+      config:
+        source: !!js process.env.DSH_PRIMARY_RUNTIME
+        root: !!js dshHomePath('dsh-runtimes', 'dsh-primary-runtime')
+
+    - id: skill-office
+      name: '@deepseek-ai/dsh-skill-office'
+      config:
+        pythonEnvironment: !!js "ctx.get('profileContext')?.name === 'desktop' && process.env.DSH_PRIMARY_RUNTIME ? 'workspace-dependencies' : 'user'"
 
     # The right Sidebar's document tab: bounded file reads with selectable
     # Markdown, code, HTML, PDF, Office, and plain-text renderers.
@@ -389,6 +412,15 @@
 
     - id: ui-skill
       name: '@deepseek-ai/dsh-client-ui-skill'
+
+    # Chat/Harness tabs: the Chat tab embeds the DeepSeek chat site in a Desktop
+    # guest; Harness keeps the full product unchanged.
+    - id: ui-work-mode
+      name: '@deepseek-ai/dsh-client-ui-work-mode'
+
+    # Skills tab on the Plugins page: local skill sources with switches.
+    - id: ui-skills
+      name: '@deepseek-ai/dsh-client-ui-skills'
 
     - id: ui-agent-team
       name: '@deepseek-ai/dsh-client-ui-agent-team'

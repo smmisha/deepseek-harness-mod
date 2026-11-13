@@ -1,0 +1,21 @@
+/* The wordmark followed by a tiny signature that reads as an engraving: no
+   tag or border, low-contrast ink cut into the surface with a faint lower
+   highlight, wide tracking, sitting on the wordmark's baseline. */
+.lockup {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+
+.signature {
+  flex: none;
+  margin-bottom: 3px;
+  color: color-mix(in srgb, var(--dsw-alias-label-primary) 34%, transparent);
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 10px;
+  letter-spacing: 0.12em;
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+  user-select: none;
+}

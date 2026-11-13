@@ -39,6 +39,19 @@ import type {
   SessionFormatRestore,
 } from '@deepseek-ai/dsh-session-format'
 
+/** File symlinks need POSIX privileges or Windows Developer Mode; Linux CI executes these fixtures. */
+const symlinkFilesAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-symlink-probe-'))
+  try {
+    await symlink(join(dir, 'target'), join(dir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
+
 const roots: string[] = []
 
 async function tempRoot(): Promise<string> {
@@ -1240,26 +1253,34 @@ describe('JSONL immutable generation publication', () => {
     expect(await readFile(expected, 'utf8')).toBe(line(header(SESSION_FORMAT_VERSION)) + line(event0))
   })
 
-  it.each(['different', 'malformed', 'symlink', 'directory'] as const)(
+  /** Shared body: a colliding target must fail loud and leave the source untouched. */
+  const collisionTarget = async (kind: 'different' | 'malformed' | 'symlink' | 'directory'): Promise<void> => {
+    const root = await tempRoot()
+    const request = options(root)
+    const source = Buffer.from(line(header(0)) + line(event0))
+    await writeFile(request.sourcePath, source)
+    if (kind === 'different') await writeFile(request.currentPath, line(header(SESSION_FORMAT_VERSION)) + line(event1))
+    if (kind === 'malformed') await writeFile(request.currentPath, '{not-json}\n')
+    if (kind === 'symlink') await symlink(request.sourcePath, request.currentPath)
+    if (kind === 'directory') await mkdir(request.currentPath)
+
+    await expect(ensureJsonlGenerationCurrent(request)).rejects.toBeInstanceOf(
+      JsonlGenerationTargetConflictError,
+    )
+
+    expect(await readFile(request.sourcePath)).toEqual(source)
+    expect((await readdir(root)).every(name => !name.includes('.tmp'))).toBe(true)
+  }
+
+  it.each(['different', 'malformed', 'directory'] as const)(
     'fails loud without altering a colliding %s target',
-    async (kind) => {
-      const root = await tempRoot()
-      const request = options(root)
-      const source = Buffer.from(line(header(0)) + line(event0))
-      await writeFile(request.sourcePath, source)
-      if (kind === 'different') await writeFile(request.currentPath, line(header(SESSION_FORMAT_VERSION)) + line(event1))
-      if (kind === 'malformed') await writeFile(request.currentPath, '{not-json}\n')
-      if (kind === 'symlink') await symlink(request.sourcePath, request.currentPath)
-      if (kind === 'directory') await mkdir(request.currentPath)
-
-      await expect(ensureJsonlGenerationCurrent(request)).rejects.toBeInstanceOf(
-        JsonlGenerationTargetConflictError,
-      )
-
-      expect(await readFile(request.sourcePath)).toEqual(source)
-      expect((await readdir(root)).every(name => !name.includes('.tmp'))).toBe(true)
-    },
+    collisionTarget,
   )
+
+  // Only this target needs a symlink; the other three keep running on any host.
+  it.skipIf(!symlinkFilesAvailable)('fails loud without altering a colliding symlink target', async () => {
+    await collisionTarget('symlink')
+  })
 
   it('normalizes a non-Error rejection while reopening an existing target', async () => {
     const root = await tempRoot()

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Хуки Claude Code",
+    "description": "Виконуйте хуки з hooks.json або налаштувань Claude Code у точках перехоплення Harness."
+  }
+}

@@ -1,0 +1,21 @@
+/** Ukrainian dictionary for the `workflowRun` namespace. */
+export const ukWorkflowRun = {
+  'run.title': '{name}',
+  'run.members.one': '{count} учасник',
+  'run.members.other': '{count} учасників',
+  'run.empty': 'Жодного учасника не запущено',
+  'phase.unassigned': 'Без фази',
+  'phase.empty': 'Порожня назва фази',
+  'statusCount.running': 'Виконується {count}',
+  'statusCount.completed': 'Завершено {count}',
+  'statusCount.failed': 'З помилкою {count}',
+  'statusCount.cancelled': 'Скасовано {count}',
+  'statusCount.interrupted': 'Перервано {count}',
+  'member.empty': 'Порожня назва учасника',
+  'member.open': 'Відкрити {name}',
+  'status.running': 'Виконується',
+  'status.completed': 'Завершено',
+  'status.failed': 'Не вдалося',
+  'status.cancelled': 'Скасовано',
+  'status.interrupted': 'Перервано',
+} satisfies Record<string, string>

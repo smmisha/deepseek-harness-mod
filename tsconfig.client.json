@@ -19,6 +19,7 @@
     "apps/desktop/src/keyboard.ts",
     "apps/desktop/src/keybindings.ts",
     "apps/desktop/src/browser-guests.ts",
+    "apps/desktop/src/chat-login-log.ts",
     "apps/desktop/src/ipc.ts",
     "apps/desktop/src/update-overlay.ts",
     "apps/desktop/src/windows-layout.ts",
@@ -75,6 +76,7 @@
     { "path": "./packages/core/tool-executor-native" },
     { "path": "./packages/core/tool-executor-ptc" },
     { "path": "./packages/client/ui-settings-account" },
+    { "path": "./packages/client/ui-account-notifications" },
     // Shared leaf: web e2e boots the real host webserver (fixture + real-host
     // smoke policy). webserver has zero workspace deps and no cordis merge,
     // so it cannot drag host-side Context augmentation into this program.
@@ -122,6 +124,9 @@
     { "path": "./packages/client/ui-workflow-run" },
     { "path": "./packages/client/ui-workspace" },
     { "path": "./packages/client/ui-input-trigger" },
+
+    { "path": "./packages/client/ui-work-mode/tsconfig.client.json" },
+    { "path": "./packages/client/ui-skills/tsconfig.json" },
     { "path": "./packages/client/ui-commands" },
     { "path": "./packages/client/ui-skill" },
     { "path": "./packages/client/ui-reference" },
@@ -164,6 +169,7 @@
     { "path": "./packages/client/ui-plugin-market" },
     { "path": "./packages/client/ui-settings-plugin-inventory" },
     { "path": "./packages/client/locale/tsconfig.client.json" },
+    { "path": "./packages/client/locale-uk" },
     { "path": "./packages/client/ui-renderer" },
     { "path": "./packages/client/ui-session" },
     { "path": "./packages/client/resources" },

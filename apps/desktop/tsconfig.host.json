@@ -27,6 +27,9 @@
       "path": "../../packages/client/ui-sidebar-browser/tsconfig.host.json"
     },
     {
+      "path": "../../packages/client/ui-work-mode/tsconfig.host.json"
+    },
+    {
       "path": "../../packages/client/shortcuts/tsconfig.host.json"
     },
     {

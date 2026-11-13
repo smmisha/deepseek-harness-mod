@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Адаптація моделі Pi AI",
+    "description": "Надає через pi-ai адаптер моделей DeepSeek для DeepSeek Harness як реалізацію для перевірки дизайну dsh-llm-deepseek."
+  }
+}

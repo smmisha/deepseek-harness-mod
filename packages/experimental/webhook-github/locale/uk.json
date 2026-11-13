@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Вебхуки GitHub",
+    "description": "Перевіряйте підписані HTTP-вебхуки GitHub і передавайте їх сервісу Webhook."
+  }
+}

@@ -4,13 +4,36 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cosmokit" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../../vendor/schemastery" },
-    { "path": "../../fs/fs" },
-    { "path": "../../util/home-paths" },
-    { "path": "../skill" }
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/cosmokit"
+    },
+    {
+      "path": "../../../vendor/loader"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../fs/fs"
+    },
+    {
+      "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../skill"
+    },
+    {
+      "path": "../skill-sources"
+    }
   ]
 }

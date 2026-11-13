@@ -1,10 +1,46 @@
-/** Main-process ownership and fixed isolation policy for Sidebar webview guests. */
+/**
+ * Main-process ownership and fixed isolation policy for embedded webview guests.
+ *
+ * Two guest kinds share one attachment check: the right-Sidebar browser keeps a
+ * process-local partition per workspace, while the Chat tab keeps one persistent
+ * partition and a navigation allowlist. Provider sign-in hops are part of the
+ * chat allowlist, and Apple's popup sign-in gets a child window on the same
+ * partition with the opener preserved. Every attachment still has to name a
+ * main-issued lease, match its partition, and come from the application window;
+ * the kind only decides the session policy and where disallowed pages go.
+ *
+ * The shell never reads, copies, stores, or forwards the reader's credentials,
+ * tokens, cookies, or storage: sign-in happens on the site's own pages, and the
+ * session stays inside the guest's persistent partition.
+ */
 import { randomUUID } from 'node:crypto'
-import { app, session, type BrowserWindow, type Session, type WebContents } from 'electron'
+import { app, Menu, session, shell, type BrowserWindow, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
+import type { DesktopChatConfig, DesktopChatLeaseId, DesktopChatLoginPhase, DesktopChatReservation } from '@deepseek-ai/dsh-client-ui-work-mode/types'
+import type { DesktopMessages } from './locale.ts'
+import { logChatLogin } from './chat-login-log.ts'
 import { DESKTOP_IPC } from './ipc.ts'
 
-interface GuestLease {
+/** The single persistent partition the Chat tab's guest uses. */
+export const CHAT_PARTITION = 'persist:dsh-chat'
+
+/** Chat guest permissions that keep the site's copy control working without letting it read the clipboard. */
+const CHAT_PERMISSIONS: ReadonlySet<string> = new Set(['clipboard-sanitized-write'])
+
+/** Upper bound on each configured provider list. */
+const MAX_LOGIN_ENTRIES = 16
+
+/** Lowercase host name, without scheme, path, port, or wildcard characters. */
+const HOST_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/u
+
+/** Upper bound on a configured navigation allowlist. */
+const MAX_ALLOWED_ORIGINS = 8
+
+/** Google's refusal page titles in the languages the site serves. */
+const PROVIDER_REJECTION_TITLE = /Не удалось войти|Couldn.?t sign you in|Couldn.?t sign in/iu
+
+/** Fields every attached guest carries, whichever kind issued it. */
+interface GuestLeaseBase {
   readonly owner: WebContents
   readonly partition: string
   attached: boolean
@@ -12,16 +48,156 @@ interface GuestLease {
   releaseInput?: () => void
 }
 
-/** Owns workspace storage partitions independently from individual tab guests. */
+/** Browser guest in a workspace partition. */
+interface BrowserLease extends GuestLeaseBase {
+  readonly kind: 'browser'
+}
+
+/** Chat guest in the persistent chat partition, with its enforced allowlist. */
+interface ChatLease extends GuestLeaseBase {
+  readonly kind: 'chat'
+  policy: ChatPolicy
+}
+
+/** Navigation policy the shell enforces for the chat guest. */
+interface ChatPolicy {
+  readonly url: string
+  readonly allowedOrigins: readonly string[]
+  readonly loginHosts: readonly string[]
+  readonly loginHostSuffixes: readonly string[]
+}
+
+/** Whether a guest load failed only because the site aborted it while redirecting. */
+function isAbortedLoad(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as Error & { readonly code?: unknown }).code
+  return code === 'ERR_ABORTED' || error.message.includes('ERR_ABORTED')
+}
+
+type GuestLease = BrowserLease | ChatLease
+
+type GuestLeaseId = DesktopBrowserLeaseId | DesktopChatLeaseId
+
+/** Normalize one exact provider host from untrusted input. */
+function readLoginHost(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('desktop chat guest: invalid provider host')
+  const entry = value.trim().toLowerCase()
+  if (!HOST_NAME.test(entry)) throw new Error('desktop chat guest: invalid provider host')
+  return entry
+}
+
+/** Normalize one provider pattern from untrusted input. */
+function readLoginSuffix(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('desktop chat guest: invalid provider suffix')
+  const entry = value.trim().toLowerCase()
+  const body = entry.startsWith('.') ? entry.slice(1) : entry.endsWith('.') ? entry.slice(0, -1) : undefined
+  if (body === undefined || !HOST_NAME.test(body)) {
+    throw new Error('desktop chat guest: a provider suffix must start with "." or end with "."')
+  }
+  return entry
+}
+
+/**
+ * Read a chat guest configuration from untrusted IPC input.
+ * @param value - renderer-supplied configuration.
+ * @returns the https address, the normalized allowlists, and provider hosts.
+ * @throws when the address, an origin, or a provider pattern is invalid.
+ */
+export function parseChatConfig(value: unknown): DesktopChatConfig {
+  if (typeof value !== 'object' || value === null) throw new Error('desktop chat guest: invalid configuration')
+  const row = value as Record<string, unknown>
+  const source = row.url
+  if (typeof source !== 'string') throw new Error('desktop chat guest: a chat URL is required')
+  const url = new URL(source)
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') {
+    throw new Error('desktop chat guest: the chat URL must be credential-free HTTPS')
+  }
+  const listed = row.allowedOrigins
+  if (!Array.isArray(listed) || listed.length === 0 || listed.length > MAX_ALLOWED_ORIGINS) {
+    throw new Error('desktop chat guest: allowedOrigins must name between one and eight origins')
+  }
+  const origins = listed.map((entry): string => {
+    if (typeof entry !== 'string') throw new Error('desktop chat guest: invalid allowed origin')
+    const origin = new URL(entry)
+    if (origin.protocol !== 'https:' || origin.username !== '' || origin.password !== '') {
+      throw new Error('desktop chat guest: allowed origins must be credential-free HTTPS origins')
+    }
+    return origin.origin
+  })
+  const loginHosts = row.loginHosts === undefined ? [] : (() => {
+    const entry = row.loginHosts
+    if (!Array.isArray(entry) || entry.length > MAX_LOGIN_ENTRIES) {
+      throw new Error(`desktop chat guest: loginHosts must name at most ${String(MAX_LOGIN_ENTRIES)} entries`)
+    }
+    return [...new Set(entry.map(readLoginHost))]
+  })()
+  const loginHostSuffixes = row.loginHostSuffixes === undefined ? [] : (() => {
+    const entry = row.loginHostSuffixes
+    if (!Array.isArray(entry) || entry.length > MAX_LOGIN_ENTRIES) {
+      throw new Error(`desktop chat guest: loginHostSuffixes must name at most ${String(MAX_LOGIN_ENTRIES)} entries`)
+    }
+    return [...new Set(entry.map(readLoginSuffix))]
+  })()
+  return { url: url.href, allowedOrigins: [...new Set(origins)], loginHosts, loginHostSuffixes }
+}
+
+/**
+ * Whether the chat guest may stay on a URL.
+ * @param value - candidate main-frame URL.
+ * @param allowedOrigins - normalized allowlist.
+ * @returns true for a credential-free HTTPS page of an allowed origin.
+ */
+export function chatNavigationAllowed(value: string, allowedOrigins: readonly string[]): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  return url.protocol === 'https:' && url.username === '' && url.password === ''
+    && allowedOrigins.includes(url.origin)
+}
+
+/** Whether a provider URL is Google's "unsupported browser" rejection page. */
+function providerRejection(value: string): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  return (url.hostname === 'google.com' || url.hostname.endsWith('.google.com'))
+    && url.pathname.includes('/signin/rejected')
+}
+
+/**
+ * Whether a chat navigation belongs to a sign-in provider hop.
+ * @param value - candidate main-frame URL.
+ * @param policy - the chat guest's provider hosts and patterns.
+ * @returns true for a credential-free HTTPS provider page.
+ */
+export function chatLoginNavigationAllowed(value: string, policy: Pick<ChatPolicy, 'loginHosts' | 'loginHostSuffixes'>): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false
+  const host = url.hostname.toLowerCase()
+  return policy.loginHosts.includes(host)
+    || policy.loginHostSuffixes.some(pattern => pattern.startsWith('.') ? host.endsWith(pattern) : host.startsWith(pattern))
+}
+
+/** A page the shell opens in the system browser instead of embedding it. */
+function openableExternally(value: string): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  return ['http:', 'https:'].includes(url.protocol) && url.username === '' && url.password === ''
+}
+
+/** Owns workspace storage partitions and the persistent chat partition. */
 export class DesktopBrowserGuests {
   private readonly partitions = new Map<string, string>()
-  private readonly leases = new Map<DesktopBrowserLeaseId, GuestLease>()
+  private readonly leases = new Map<GuestLeaseId, GuestLease>()
+  private readonly configuredChatSessions = new Set<Session>()
+  private readonly chatLoginWindows = new Map<number, Set<BrowserWindow>>()
+  private readonly chatLoginStates = new Map<number, DesktopChatLoginPhase>()
+  private chatOrigins: readonly string[] = []
 
   /** @param hostUrl - current authenticated DSH Host, which guests cannot request. */
   constructor(private readonly hostUrl: () => string | undefined) {}
 
   /**
-   * Reserve one guest in a workspace's process-lifetime partition.
+   * Reserve one browser guest in a workspace's process-lifetime partition.
    * @param owner - authenticated primary application WebContents.
    * @param workspace - workspace identity received over IPC.
    * @returns opaque lease and the partition approved for it.
@@ -37,8 +213,50 @@ export class DesktopBrowserGuests {
       this.partitions.set(workspace, partition)
     }
     const lease = randomUUID() as DesktopBrowserLeaseId
-    this.leases.set(lease, { owner, partition, attached: false })
+    this.leases.set(lease, { owner, kind: 'browser', partition, attached: false })
     return { lease, partition }
+  }
+
+  /**
+   * Reserve the Chat tab's guest in its persistent partition.
+   * @param owner - authenticated primary application WebContents.
+   * @param value - untrusted chat configuration received over IPC.
+   * @returns the lease and the fixed persistent partition.
+   * @throws when the configuration is invalid.
+   */
+  acquireChat(owner: WebContents, value: unknown): DesktopChatReservation {
+    const config = parseChatConfig(value)
+    this.chatOrigins = config.allowedOrigins
+    logChatLogin(`policy hosts=${config.loginHosts.join(',')} suffixes=${config.loginHostSuffixes.join(',')}`)
+    const policy: ChatPolicy = {
+      url: config.url,
+      allowedOrigins: config.allowedOrigins,
+      loginHosts: config.loginHosts,
+      loginHostSuffixes: config.loginHostSuffixes,
+    }
+    const existing = [...this.leases.entries()].find(([, lease]) => lease.kind === 'chat' && lease.owner === owner)
+    if (existing !== undefined) {
+      const lease = existing[1] as ChatLease
+      if (!lease.attached && lease.guest === undefined) {
+        // Not attached yet: the same lease still owns the partition.
+        lease.policy = policy
+        return { lease: existing[0] as DesktopChatLeaseId, partition: CHAT_PARTITION }
+      }
+      // An attached lease whose guest never arrived (a crash before `dom-ready`) or
+      // is being replaced still holds the attachment slot; retire it so the
+      // attachment check accepts the fresh one.
+      this.retireLease(existing[0], lease)
+    }
+    const browserSession = session.fromPartition(CHAT_PARTITION)
+    if (!this.configuredChatSessions.has(browserSession)) {
+      this.configuredChatSessions.add(browserSession)
+      this.configureChatSession(browserSession)
+    }
+    const lease = randomUUID() as DesktopChatLeaseId
+    this.leases.set(lease, {
+      owner, kind: 'chat', partition: CHAT_PARTITION, attached: false, policy,
+    })
+    return { lease, partition: CHAT_PARTITION }
   }
 
   /**
@@ -48,7 +266,7 @@ export class DesktopBrowserGuests {
    */
   async release(owner: WebContents, id: unknown): Promise<void> {
     if (typeof id !== 'string') throw new Error('desktop browser: invalid guest lease')
-    const key = id as DesktopBrowserLeaseId
+    const key = id as GuestLeaseId
     const lease = this.leases.get(key)
     if (lease === undefined) return
     if (lease.owner !== owner) throw new Error('desktop browser: guest belongs to another window')
@@ -66,13 +284,15 @@ export class DesktopBrowserGuests {
    * Install attachment checks before the application document can create a webview.
    * @param window - primary application window.
    * @param attachInput - attaches native input after guest ownership is verified and returns its disposer.
+   * @param messages - resolved Desktop messages for the guest context menu.
    */
-  bind(window: BrowserWindow, attachInput: (guest: WebContents, name: DesktopBrowserLeaseId) => () => void): void {
+  bind(window: BrowserWindow, attachInput: (guest: WebContents, name: DesktopBrowserLeaseId) => () => void,
+    messages: () => DesktopMessages): void {
     const owner = window.webContents
     owner.on('will-attach-webview', (event, preferences, params) => {
       const id = typeof params.src === 'string' && params.src.startsWith('about:blank#')
         ? params.src.slice('about:blank#'.length) : ''
-      const lease = this.leases.get(id as DesktopBrowserLeaseId)
+      const lease = this.leases.get(id as GuestLeaseId)
       if (lease === undefined || lease.owner !== owner || lease.attached || params.partition !== lease.partition) {
         event.preventDefault()
         return
@@ -87,17 +307,19 @@ export class DesktopBrowserGuests {
         nodeIntegration: false, nodeIntegrationInWorker: false, nodeIntegrationInSubFrames: false,
         contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false,
         webviewTag: false, plugins: false, navigateOnDragDrop: false, disableDialogs: true,
+        // A hidden Chat tab keeps its stream and timers alive.
+        ...(lease.kind === 'chat' ? { backgroundThrottling: false } : {}),
         devTools: !app.isPackaged,
       })
       params.httpreferrer = ''
     })
     owner.on('did-attach-webview', (_event, guest) => {
-      let attachedLease: DesktopBrowserLeaseId | undefined
+      let attachedLease: GuestLeaseId | undefined
       // The first document is an inert about:blank carrying the approved lease.
       // Bind on the main-process event before the renderer can navigate the ready guest.
       guest.once('dom-ready', () => {
         const url = guest.getURL()
-        const id = (url.startsWith('about:blank#') ? url.slice('about:blank#'.length) : '') as DesktopBrowserLeaseId
+        const id = (url.startsWith('about:blank#') ? url.slice('about:blank#'.length) : '') as GuestLeaseId
         const lease = this.leases.get(id)
         if (lease === undefined || lease.owner !== owner || lease.guest !== undefined) {
           guest.close({ waitForBeforeUnload: false })
@@ -105,30 +327,90 @@ export class DesktopBrowserGuests {
         }
         lease.guest = guest
         attachedLease = id
-        lease.releaseInput = attachInput(guest, id)
-        guest.once('destroyed', () => { lease.releaseInput?.(); this.leases.delete(id) })
+        // The right Sidebar's frame routing owns input for its own guests only.
+        if (lease.kind === 'browser') lease.releaseInput = attachInput(guest, id as DesktopBrowserLeaseId)
+        guest.once('destroyed', () => {
+          lease.releaseInput?.()
+          this.closeChatLoginWindows(owner)
+          this.leases.delete(id)
+        })
+        if (lease.kind === 'chat') {
+          logChatLogin('guest attached')
+          guest.on('did-finish-load', () => {
+            if (URL.canParse(guest.getURL())) logChatLogin(`guest loaded host=${new URL(guest.getURL()).hostname}`)
+          })
+          this.attachChatPolicies(window, guest, messages)
+        }
       })
       guest.setWindowOpenHandler(({ url, postBody }) => {
         const lease = attachedLease === undefined ? undefined : this.leases.get(attachedLease)
-        if (attachedLease !== undefined && lease?.guest === guest && lease.owner === owner && !owner.isDestroyed()
-          && postBody === undefined && this.allowedNavigation(url)) {
-          const request: DesktopBrowserOpenRequest = { lease: attachedLease, url: new URL(url).href }
+        if (attachedLease === undefined || lease?.guest !== guest || lease.owner !== owner || owner.isDestroyed()) {
+          return { action: 'deny' }
+        }
+        if (postBody !== undefined) return { action: 'deny' }
+        if (lease.kind === 'chat') {
+          // Apple's popup sign-in needs a real child window on the chat
+          // partition so its web_message reply can reach the opener.
+          if (chatLoginNavigationAllowed(url, lease.policy)) {
+            logChatLogin(`provider window host=${new URL(url).hostname}`)
+            return { action: 'allow', overrideBrowserWindowOptions: this.chatLoginWindowOptions() }
+          }
+          if (openableExternally(url)) void shell.openExternal(url)
+          return { action: 'deny' }
+        }
+        if (this.allowedNavigation(url)) {
+          const request: DesktopBrowserOpenRequest = { lease: attachedLease as DesktopBrowserLeaseId, url: new URL(url).href }
           owner.send(DESKTOP_IPC.browserOpenRequested, request)
         }
         return { action: 'deny' }
       })
+      guest.on('did-create-window', (child) => {
+        if (attachedLease === undefined) {
+          child.destroy()
+          return
+        }
+        child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        child.webContents.on('did-navigate', (_event, url) => {
+          if (URL.canParse(url)) logChatLogin(`provider window navigated host=${new URL(url).hostname}`)
+        })
+        this.trackChatLoginWindow(owner, child)
+      })
       guest.on('will-frame-navigate', (event) => {
-        if (event.isMainFrame && !this.allowedNavigation(event.url)) event.preventDefault()
+        if (!event.isMainFrame) return
+        const lease = attachedLease === undefined ? undefined : this.leases.get(attachedLease)
+        if (this.allows(lease, event.url)) {
+          if (lease?.kind === 'chat' && chatLoginNavigationAllowed(event.url, lease.policy)) {
+            logChatLogin(`allowed navigation host=${new URL(event.url).hostname}`)
+            if (providerRejection(event.url)) this.reportProviderRejection(owner)
+          }
+          return
+        }
+        event.preventDefault()
+        this.reportBlocked(lease, event.url, owner)
       })
       guest.on('will-redirect', (event, url, _inPlace, mainFrame) => {
-        if (mainFrame && !this.allowedNavigation(url)) event.preventDefault()
+        if (!mainFrame) return
+        const lease = attachedLease === undefined ? undefined : this.leases.get(attachedLease)
+        if (this.allows(lease, url)) {
+          if (lease?.kind === 'chat' && chatLoginNavigationAllowed(url, lease.policy)) {
+            logChatLogin(`allowed redirect host=${new URL(url).hostname}`)
+            if (providerRejection(url)) this.reportProviderRejection(owner)
+          }
+          return
+        }
+        event.preventDefault()
+        this.reportBlocked(lease, url)
       })
       guest.on('will-attach-webview', (event) => { event.preventDefault() })
       guest.on('login', (event, _details, _authInfo, callback) => { event.preventDefault(); callback() })
     })
     const releaseAll = (): void => {
       for (const [id, lease] of this.leases) {
-        if (lease.owner === owner) void this.release(owner, id).catch((error: unknown) => { console.error(error) })
+        if (lease.owner !== owner) continue
+        void this.release(owner, id).catch(
+          /* v8 ignore next -- release rejects only for a lease of another window, which this loop excludes. */
+          (error: unknown) => { console.error(error) },
+        )
       }
     }
     owner.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
@@ -138,9 +420,201 @@ export class DesktopBrowserGuests {
     owner.once('destroyed', releaseAll)
   }
 
+  /** Retire one lease and close the guest it still holds. */
+  private retireLease(id: GuestLeaseId, lease: GuestLease): void {
+    lease.releaseInput?.()
+    this.leases.delete(id)
+    const guest = lease.guest
+    if (guest !== undefined && !guest.isDestroyed()) guest.close({ waitForBeforeUnload: false })
+  }
+
+  /** Navigation guards, context menu, and provider-refusal detection for one chat guest. */
+  private attachChatPolicies(window: BrowserWindow, guest: WebContents, messages: () => DesktopMessages): void {
+    const owner = window.webContents
+    guest.on('did-navigate', (_event, url) => {
+      if (URL.canParse(url)) logChatLogin(`guest navigated host=${new URL(url).hostname}`)
+      if (providerRejection(url)) this.reportProviderRejection(owner)
+    })
+    guest.on('did-finish-load', () => {
+      const url = guest.getURL()
+      if (providerRejection(url)) {
+        this.reportProviderRejection(owner)
+        return
+      }
+      if (!URL.canParse(url) || new URL(url).hostname !== 'accounts.google.com') return
+      // Google's refusal page keeps a neutral address in some flows; its title
+      // is the stable signal ("Не удалось войти в аккаунт" / "Couldn't sign you in").
+      // Only the decision is logged: the title itself is page content.
+      void guest.executeJavaScript('document.title').then((title: unknown) => {
+        const matched = typeof title === 'string' && PROVIDER_REJECTION_TITLE.test(title)
+        logChatLogin(matched ? 'provider page title matched rejection' : 'provider page title without rejection')
+        if (matched) this.reportProviderRejection(owner)
+      }).catch(() => {})
+    })
+    guest.on('context-menu', (_event, params) => {
+      const items: MenuItemConstructorOptions[] = []
+      if (params.isEditable) {
+        items.push(
+          { role: 'undo', enabled: params.editFlags.canUndo },
+          { role: 'redo', enabled: params.editFlags.canRedo },
+          { type: 'separator' },
+          { role: 'cut', enabled: params.editFlags.canCut },
+          { role: 'copy', enabled: params.editFlags.canCopy },
+          { role: 'paste', enabled: params.editFlags.canPaste },
+          { type: 'separator' },
+          { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+        )
+      } else if (params.selectionText.length > 0) {
+        items.push({ role: 'copy', enabled: params.editFlags.canCopy })
+      }
+      if (items.length === 0) return
+      // Empty accelerators suppress Electron's default shortcut labels for native roles.
+      const dictionary = messages()
+      Menu.buildFromTemplate(items.map(item => ({
+        ...item,
+        ...(process.platform === 'win32' && item.role !== undefined && item.role in dictionary
+          ? { label: dictionary[item.role as keyof DesktopMessages] } : {}),
+        accelerator: '',
+      }))).popup({ window })
+    })
+    // A destroyed renderer leaves nothing to show; the renderer reports the failure itself.
+    guest.on('render-process-gone', () => {
+      if (!guest.isDestroyed()) guest.close({ waitForBeforeUnload: false })
+    })
+  }
+
+  /** Provider popup: same partition, sandbox, and isolation as the chat guest. */
+  private chatLoginWindowOptions(): BrowserWindowConstructorOptions {
+    return {
+      width: 780,
+      height: 820,
+      autoHideMenuBar: true,
+      webPreferences: {
+        partition: CHAT_PARTITION,
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        devTools: !app.isPackaged,
+      },
+    }
+  }
+
+  /** Publish one sign-in phase to the document. */
+  private publishLogin(owner: WebContents, phase: DesktopChatLoginPhase): void {
+    this.chatLoginStates.set(owner.id, phase)
+    if (owner.isDestroyed()) return
+    owner.send(DESKTOP_IPC.chatLoginState, phase)
+  }
+
+  /** Publish Google's embedded-browser refusal once per attempt. */
+  private reportProviderRejection(owner: WebContents): void {
+    if (this.chatLoginStates.get(owner.id)?.kind === 'provider-rejected') return
+    logChatLogin('provider rejected the embedded browser')
+    this.publishLogin(owner, { kind: 'provider-rejected' })
+  }
+
+  /** Track one provider window until it closes. */
+  private trackChatLoginWindow(owner: WebContents, child: BrowserWindow): void {
+    const windows = this.chatLoginWindows.get(owner.id) ?? new Set<BrowserWindow>()
+    windows.add(child)
+    this.chatLoginWindows.set(owner.id, windows)
+    logChatLogin('provider window opened')
+    child.once('closed', () => {
+      windows.delete(child)
+      if (windows.size === 0) this.chatLoginWindows.delete(owner.id)
+      logChatLogin('provider window closed')
+    })
+  }
+
+  /** Close every provider window the document still owns. */
+  private closeChatLoginWindows(owner: WebContents): void {
+    const windows = this.chatLoginWindows.get(owner.id)
+    if (windows === undefined) return
+    this.chatLoginWindows.delete(owner.id)
+    for (const window of windows) if (!window.isDestroyed()) window.destroy()
+  }
+
+  /**
+   * Load the configured chat page again and drop the refusal card.
+   * @param owner - authenticated application WebContents.
+   */
+  async returnToSignIn(owner: WebContents): Promise<void> {
+    const lease = this.chatLease(owner)
+    const guest = lease.guest
+    if (guest === undefined || guest.isDestroyed()) throw new Error('desktop chat guest: no attached chat guest')
+    this.publishLogin(owner, { kind: 'idle' })
+    logChatLogin(`sign-in page requested host=${new URL(lease.policy.url).hostname}`)
+    try {
+      await guest.loadURL(lease.policy.url)
+    } catch (error) {
+      // The site may redirect while its own document loads; the page still arrives.
+      if (!isAbortedLoad(error)) throw error
+    }
+  }
+
+  /**
+   * Hand the configured chat address to the system browser.
+   * @param owner - authenticated application WebContents.
+   */
+  openInBrowser(owner: WebContents): void {
+    const lease = this.chatLease(owner)
+    logChatLogin(`system browser requested host=${new URL(lease.policy.url).hostname}`)
+    void shell.openExternal(lease.policy.url)
+  }
+
+  /** The chat lease this document owns; every chat action belongs to one guest. */
+  private chatLease(owner: WebContents): ChatLease {
+    const lease = [...this.leases.values()].find((entry): entry is ChatLease => entry.kind === 'chat' && entry.owner === owner)
+    if (lease === undefined) throw new Error('desktop chat guest: this window owns no chat guest')
+    return lease
+  }
+
+  /** Browser policy for the right Sidebar, chat policy for the Chat tab. */
+  private allows(lease: GuestLease | undefined, value: string): boolean {
+    if (lease?.kind === 'chat') {
+      return chatNavigationAllowed(value, lease.policy.allowedOrigins)
+        || chatLoginNavigationAllowed(value, lease.policy)
+    }
+    return this.allowedNavigation(value)
+  }
+
+  /** Report a blocked chat navigation and hand the target to the reader's browser. */
+  private reportBlocked(lease: GuestLease | undefined, value: string, owner?: WebContents): void {
+    if (lease?.kind !== 'chat') return
+    if (URL.canParse(value)) logChatLogin(`blocked host=${new URL(value).hostname}`)
+    // A user-clicked page outside the allowlist belongs to the reader's browser in every build.
+    if (owner === undefined) return
+    if (openableExternally(value)) void shell.openExternal(value)
+  }
+
   private configureSession(browserSession: Session): void {
     browserSession.setPermissionRequestHandler((_contents, _permission, callback) => { callback(false) })
     browserSession.setPermissionCheckHandler(() => false)
+    browserSession.setDevicePermissionHandler(() => false)
+    browserSession.setDisplayMediaRequestHandler((_request, callback) => { callback({}) })
+    browserSession.on('will-download', (event) => { event.preventDefault() })
+    browserSession.webRequest.onBeforeRequest((details, callback) => {
+      const url = new URL(details.url)
+      const network = ['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)
+      callback({ cancel: network
+        ? url.username !== '' || url.password !== '' || this.isApplicationHost(url)
+        : !['about:', 'data:', 'blob:'].includes(url.protocol) })
+    })
+  }
+
+  /** The Chat tab keeps its sign-in, and only clipboard access besides. */
+  private configureChatSession(browserSession: Session): void {
+    const permitted = (permission: string): boolean => CHAT_PERMISSIONS.has(permission)
+    const fromChatOrigin = (origin: string): boolean => {
+      if (!URL.canParse(origin)) return false
+      return this.chatOrigins.includes(new URL(origin).origin)
+    }
+    browserSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
+      callback(permitted(permission) && fromChatOrigin(details.requestingUrl))
+    })
+    browserSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
+      return permitted(permission) && fromChatOrigin(requestingOrigin)
+    })
     browserSession.setDevicePermissionHandler(() => false)
     browserSession.setDisplayMediaRequestHandler((_request, callback) => { callback({}) })
     browserSession.on('will-download', (event) => { event.preventDefault() })

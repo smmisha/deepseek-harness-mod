@@ -1,0 +1,84 @@
+---
+description: "dsh Web 客户端的「对话 / Harness」标签：对话标签在桌面外壳中内嵌 DeepSeek 聊天站点，Harness 保留完整产品，两者不共享数据。"
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-client-ui-work-mode
+
+[English](README.md) | 中文
+
+## 概述
+
+窗口顶部条带承载「对话」与「Harness」之间的切换：两个扁平图标按钮，对话气泡与 DeepSeek 鲸鱼，由各自的提示文字命名。选择「对话」会在覆盖整帧的层中内嵌 `https://chat.deepseek.com/`，并向框架请求精简外壳；选择「Harness」恢复完整外壳。内嵌页面是站点自己的产品：用户在那里登录并查看该账号的历史，本包从不向它发送 harness 会话、令牌或模型调用。桌面端在持久分区中挂载 Electron `<webview>`，其他客户端则改为显示站点地址。下次启动会恢复上次的选择。
+
+## 目录
+
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与后续工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
+
+-----
+
+## 使用本包
+
+<a id="use-this-package"></a>
+
+只有「对话」模式隐藏外壳：插件调用 `ctx.layout.setChrome('minimal')`，框架只渲染中间一列，覆盖层用 guest 填满这一列。选择「Harness」调用 `setChrome('full')`，先前的侧栏、面板与所选面板原样恢复。选择保存在持久化存储 `dsh.work-mode.v1` 中；首次启动进入 Harness。
+
+guest 只挂载一次，插件存活期间绝不移动或卸载：切到 Harness 只是用 `opacity` 与 `inert` 隐藏覆盖层（而不是 `display: none`，后者会分离 guest 并导致重载），因此已打开的对话、滚动位置、草稿以及正在生成的回答都会跨切换保留。桌面外壳同样让隐藏状态的渲染进程不被节流。站点只在首次打开「对话」标签时加载，而不是在应用启动时。
+
+「对话」标签加载配置中的地址：`url`（默认 `https://chat.deepseek.com/`）、`allowedOrigins`（默认站点自身 origin）、`loginHosts`（默认 `accounts.youtube.com` 与 `appleid.apple.com`）以及 `loginHostSuffixes`（默认 `accounts.google.`）。跳转到已配置提供方主机的主框架导航保留在 guest 内，因此 Google 的重定向链及其返回站点的跳转都在同一页面内完成；Apple 的 `window.open` 弹窗获得对话分区上的真实子窗口，并保留 opener。其他主框架目标在系统浏览器中打开，其他 `window.open` 调用也同样外送。登录使用站点自己的表单——邮箱、手机、密码或验证码——会话只保存在 guest 的持久分区中；插件与外壳从不读取、复制、保存或转发密码、令牌、Cookie 或存储项，也从不为 guest 及其子窗口指定 User-Agent。提供方拒绝登录时显示本地化卡片：标题说明该提供方不允许在内嵌浏览器中登录，正文提示使用邮箱和密码登录，并为通过 Google 或 Apple 创建的账号提示在登录页用「忘记密码？」设置密码；操作是 **返回登录**（guest 重新加载配置的对话页）与 **在浏览器中打开对话**（外壳把对话地址交给系统浏览器，不回传任何数据）。退出登录由站点自身完成，外壳不提供单独的控件。被拒绝的导航与提供方窗口决策会以仅含步骤名与主机名的形式追加到 Desktop 登录日志（userData 下的 `logs/chat-login.log`），不含令牌、Cookie、存储值、页面文本或查询串。guest 加载失败或渲染进程崩溃时，标签显示本地化的卡片，带 **重试** 与 **在浏览器中打开**：加载失败在同一 guest 内重试，只有渲染进程崩溃才重建 guest。
+
+## 理解实现
+
+<a id="understand-the-implementation"></a>
+
+`apply` 注册字典、把持久化模式映射到框架外壳，并贡献一个 `shell.overlay` 条目，使切换器与 guest 位于跨面板切换仍然挂载的整帧层中。覆盖层条目在窗口顶部条带渲染切换器（桌面端是标题栏区域，其他环境以浮层内缩），guest 页面位于其下方。
+
+桌面端 guest 是 `<webview>`，使用主进程签发的 lease 和持久分区 `persist:dsh-chat`。`apps/desktop` 在 `will-attach-webview` 校验该 lease，强制 sandbox、上下文隔离、无 Node、无 preload、禁止嵌套 webview 与对话框，并安装会话策略：只授予 `clipboard-sanitized-write`，让站点的复制控件可用而不开放剪贴板读取；摄像头、麦克风、屏幕捕获、定位与通知一律拒绝，下载被取消，站点主机无法访问应用 Host。提供方跳转与 Apple 子窗口经过同一套主进程策略，子窗口还拒绝自身再开弹窗。外壳从不向页面注入凭据或请求头，不指定 User-Agent，也不读取其 DOM、Cookie 或存储。
+
+没有桌面桥接时，插件渲染 Web 回退页面：站点拒绝在普通框架中嵌入，因此标签提供在新浏览器标签页中打开其地址，而不是假装可以嵌入。
+
+## 延伸阅读
+
+<a id="further-exploration"></a>
+
+- [ui-layout](../ui-layout/README.zh.md) —— 框架、`shell.overlay`，以及切换器驱动的 `ChromeMode`。
+- [ui-sidebar-browser](../ui-sidebar-browser/README.zh.md) —— 本 guest 所沿用的右侧栏浏览器 lease 与 DOM 生命周期。
+- [桌面应用](../../../apps/desktop/README.zh.md) —— guest 校验、持久分区与权限策略。
+
+## 模型体验
+
+<a id="model-experience"></a>
+
+无。本包不注册任何面向模型的输入，也不改变提示词、工具 schema 或请求。
+
+#### KV 缓存影响
+
+无；切换器改变框架外壳，内嵌页面从不进入模型请求。
+
+## 已知限制与后续工作
+
+<a id="known-limitations-and-deferred-work"></a>
+
+- 提供方登录的完成属于站点流程：策略允许 Google 的重定向链与 Apple 的弹窗在 guest 内运行，但提供方是否接受内嵌浏览器不受本插件控制。拒绝会被接受而不是绕过：Desktop 登录日志记录哪些跳转与窗口被允许，标签改为提供站点自己的邮箱与密码表单。
+- 「对话」标签不接触用户输入的凭据：不导出 Cookie 或存储，不注入请求头，也不替换 User-Agent。通过 Google 或 Apple 创建的账号使用站点的「忘记密码？」流程登录，拒绝内嵌的提供方继续拒绝。
+- 只检查主框架导航；站点的子资源除应用 Host 守卫外不做代理或过滤。
+- 站点自己渲染的错误页（HTTP 5xx 文档）对 guest 来说与普通页面无异；失败卡片只覆盖网络失败、被取消的加载与渲染进程崩溃。
+- Web 构建无法嵌入站点；那里的「对话」标签就是回退页面。
+- 聊天页面的下载会被取消；站点的复制与附件流程不需要下载。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>供维护者参考的上下文——点击展开</summary>
+
+无。
+
+</details>
+
+模式属于框架外壳，因此其他功能也可能驱动 `ctx.layout.setChrome`；只有本包负责把「对话 / Harness」产品模式映射到它上面。

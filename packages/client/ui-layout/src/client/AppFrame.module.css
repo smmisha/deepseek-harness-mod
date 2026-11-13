@@ -93,7 +93,7 @@
 
 /* The constant step below the window's top strip (traffic lights, sidebar
    toggle, shell.leading controls), the same in both sidebar states. Entry
-   pages in the main panel (plugin manager, settings-like pages — not the
+   pages in the main panel (plugin manager, settings-like pages вЂ” not the
    conversation, which owns its header) pad their top by it so their leading
    content clears the strip, and overlay primitives add their own safe inset.
    Declared on the root element rather than the frame so
@@ -120,44 +120,45 @@
   --dsh-frame-chrome-top: 0px;
 }
 
+/* The sidebar wash lives here once, built from the ui-theme palette tokens:
+   macOS layers it over vibrancy, Windows and Web layer it over an opaque fill. */
+.frame {
+  --dsh-sidebar-wash: linear-gradient(
+    to bottom,
+    var(--dsw-specific-sidebar-wash-top),
+    var(--dsw-specific-sidebar-wash-top-clear) 35%,
+    var(--dsw-specific-sidebar-wash-bottom-clear) 68%,
+    var(--dsw-specific-sidebar-wash-bottom)
+  );
+}
+
 :global([data-platform='darwin']) .frame:not([data-sidebar-drawer]) .sidebarCol {
   /* A blue wash over the top of the translucent tint, gone by a third of the
-     column; a faint blue-grey-violet rises through the bottom third; and a
-     faint blue cast is mixed into the tint itself. Every layer stays
-     transparent so vibrancy shows. */
-  background:
-    linear-gradient(
-      to bottom,
-      rgb(122 155 240 / 0.1),
-      rgb(122 155 240 / 0) 35%,
-      rgb(143 137 184 / 0) 68%,
-      rgb(143 137 184 / 0.09)
-    ),
-    color-mix(in srgb, color-mix(in srgb, var(--dsw-specific-sidebar-fill) 97%, rgb(122 155 240)) 40%, transparent);
+     column, and a faint blue-grey-violet rising through the bottom third.
+     Every layer stays transparent so vibrancy shows; ui-theme sets each
+     palette's wash strength and tint. */
+  background: var(--dsh-sidebar-wash), var(--dsw-specific-sidebar-tint);
   border-right: none;
 }
 
-/* Dark drops the blue cast (the light-mode wash reads purple over dark fills)
-   and thins the fill so more wallpaper shows; the washes stay. */
-:global([data-platform='darwin']) :global([data-ds-dark-theme]) .frame:not([data-sidebar-drawer]) .sidebarCol {
-  background:
-    linear-gradient(
-      to bottom,
-      rgb(122 155 240 / 0.08),
-      rgb(122 155 240 / 0) 35%,
-      rgb(143 137 184 / 0) 68%,
-      rgb(143 137 184 / 0.07)
-    ),
-    color-mix(in srgb, var(--dsw-specific-sidebar-fill) 50%, transparent);
+/* Windows and Web have no vibrancy: the same wash sits on the opaque fill that
+   matches the mockup's blue-grey column. */
+:global(html:not([data-platform='darwin'])) .frame:not([data-sidebar-drawer]) .sidebarCol {
+  background: var(--dsh-sidebar-wash), var(--dsw-specific-sidebar-fill-solid);
+}
+
+/* The opaque fill above resolves to an elevated rung, so scrollbars inside the
+   column take the elevation pair instead of the base-surface indirection. */
+:global(html:not([data-platform='darwin'])) .sidebarCol {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 /* macOS Reduce Transparency: the OS flattens the window's vibrancy layer to a
    solid grey, so the thin tint and washes read washed-out over it. Replace
-   them with a 90%-opaque fill of the same token in both themes (the dark
-   selector repeats so this outranks its thinner fill). */
+   them with a 90%-opaque fill of the same token in both themes. */
 @media (prefers-reduced-transparency: reduce) {
-  :global([data-platform='darwin']) .frame:not([data-sidebar-drawer]) .sidebarCol,
-  :global([data-platform='darwin']) :global([data-ds-dark-theme]) .frame:not([data-sidebar-drawer]) .sidebarCol {
+  :global([data-platform='darwin']) .frame:not([data-sidebar-drawer]) .sidebarCol {
     background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 90%, transparent);
   }
 }
@@ -183,9 +184,9 @@
 }
 
 /* Published while the shell.leading seat is mounted (same condition as the
-   TSX mount: darwin with the sidebar collapsed — the collapse that hides the
+   TSX mount: darwin with the sidebar collapsed вЂ” the collapse that hides the
    column entirely): the inline band the window chrome occupies, measured from
-   the frame's left edge — traffic lights to x 68, controls at x 88
+   the frame's left edge вЂ” traffic lights to x 68, controls at x 88
    (28 + 8 + 28), then 8px of air. Main panels whose content reaches the
    top-left corner pad by this. */
 :global([data-platform='darwin']) .frame[data-sidebar-collapsed] {
@@ -213,8 +214,8 @@
    caption row above is the other platform's chrome and stays. */
 
 /* The seat itself: the two 28px controls centered on the conversation title
-   row (10px header inset + 30px row → centre y 25) and level with the traffic
-   lights (centre y ≈ 24). Sits above column content, below frame overlays
+   row (10px header inset + 30px row в†’ centre y 25) and level with the traffic
+   lights (centre y в‰€ 24). Sits above column content, below frame overlays
    (20) and the fullscreen right panel (40). The box subtracts itself from any
    window drag row beneath (Electron app-regions are geometry, not stacking). */
 .leadingSeat {
@@ -385,4 +386,13 @@
 
 .overlayLayer > * {
   pointer-events: auto;
+}
+
+/* Minimal chrome keeps the occupants mounted so their state survives, while the
+   covering surface hides them and takes them out of the interaction order. */
+.sidebarCol[data-frame-hidden],
+.rightbarCol[data-frame-hidden],
+.bottomRow[data-frame-hidden] {
+  visibility: hidden;
+  pointer-events: none;
 }

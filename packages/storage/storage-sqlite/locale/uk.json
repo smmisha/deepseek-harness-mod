@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Сховище SQLite",
+    "description": "Зберігайте дані Harness у вигляді пар ключ-значення в SQLite."
+  }
+}

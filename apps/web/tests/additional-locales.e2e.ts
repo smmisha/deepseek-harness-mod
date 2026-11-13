@@ -12,6 +12,7 @@ const languages = [
   ['fr', 'fr-CA', 'Menu du compte', 'Paramètres', 'Plugins', 'Langue', 'Français'],
   ['de', 'de-DE', 'Kontomenü', 'Einstellungen', 'Plugins', 'Sprache', 'Deutsch'],
   ['ru', 'ru-RU', 'Меню аккаунта', 'Настройки', 'Плагины', 'Язык', 'Русский'],
+  ['uk', 'uk-UA', 'Меню облікового запису', 'Налаштування', 'Плагіни', 'Мова', 'Українська'],
   ['pt', 'pt-BR', 'Menu da conta', 'Configurações', 'Plug-ins', 'Idioma', 'Português'],
 ] as const
 
