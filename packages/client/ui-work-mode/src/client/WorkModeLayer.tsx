@@ -67,7 +67,7 @@ function WebChatFallback({ config, t }: ModeLayerCopy & { readonly config: Deskt
 /**
  * Render the working-mode surface and its capsule.
  * @param props - store selection, injected guest face, and the `workMode` locale seat.
- * @returns The lazy guest page, its failure card, and the always-visible switch.
+ * @returns The lazy guest page, its cards, and the always-visible switch.
  */
 export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand, createGuest }: WorkModeLayerProps): ReactNode {
   const stored = useStore(state => state.mode)
@@ -77,6 +77,7 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
   const [started, setStarted] = useState(chat)
   const [guestState, setGuestState] = useState<ChatGuestState>('loading')
   const [login, setLogin] = useState<DesktopChatLoginPhase>({ kind: 'idle' })
+  const [clearing, setClearing] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const host = useRef<HTMLDivElement | null>(null)
   const guest = useRef<ChatGuestHandle | null>(null)
@@ -152,35 +153,24 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
           : started && (
             <>
               <div className={css.guest} ref={host} data-hidden={failed ? '' : undefined} data-work-mode-host="" />
-              {login.kind !== 'idle' && (
+              {login.kind === 'provider-rejected' && (
                 <div className={css.card} data-work-mode-login="">
-                  <p className={css.body}>
-                    {login.kind === 'window' ? t('chat.loginPending')
-                      : login.kind === 'browser' ? t('chat.browserWaiting')
-                        : t(login.reason === 'provider-rejected' ? 'chat.providerRejected'
-                          : login.reason === 'browser-missing' ? 'chat.browserMissing'
-                            : login.reason === 'login-window-open' ? 'chat.loginWindowOpen'
-                              : login.reason === 'timeout' ? 'chat.browserTimeout'
-                                : login.reason === 'transfer' ? 'chat.browserFailed'
-                                  : login.reason === 'site-rejected' ? 'chat.siteRejected'
-                                    : 'chat.unknown')}
-                  </p>
+                  <p className={css.title}>{t('chat.providerRejectedTitle')}</p>
+                  <p className={css.body}>{t('chat.providerRejectedBody')}</p>
                   <div className={css.actions}>
-                    {login.kind === 'failed' && (
-                      <button
-                        type="button"
-                        className={clsx(css.action, css.actionPrimary)}
-                        onClick={() => { void bridge.startBrowserLogin() }}
-                      >
-                        {t('chat.browserLogin')}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className={clsx(css.action, css.actionPrimary)}
+                      onClick={() => { bridge.returnToSignIn() }}
+                    >
+                      {t('chat.providerRejectedReturn')}
+                    </button>
                     <button
                       type="button"
                       className={css.action}
-                      onClick={() => { void bridge.cancelLogin() }}
+                      onClick={() => { bridge.openInBrowser() }}
                     >
-                      {t('chat.loginCancel')}
+                      {t('chat.openChatInBrowser')}
                     </button>
                   </div>
                 </div>
@@ -207,6 +197,28 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
                   </div>
                 </div>
               )}
+              {clearing && (
+                <div className={css.card} data-work-mode-clear="">
+                  <p className={css.title}>{t('chat.clearDataTitle')}</p>
+                  <p className={css.body}>{t('chat.clearDataBody')}</p>
+                  <div className={css.actions}>
+                    <button
+                      type="button"
+                      className={clsx(css.action, css.actionPrimary)}
+                      onClick={() => { setClearing(false); bridge.clearData() }}
+                    >
+                      {t('chat.clearDataConfirm')}
+                    </button>
+                    <button
+                      type="button"
+                      className={css.action}
+                      onClick={() => { setClearing(false) }}
+                    >
+                      {t('chat.clearDataCancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
       </div>
@@ -215,10 +227,10 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
         {chat && bridge !== undefined && (
           <button
             type="button"
-            className={css.browserLogin}
-            onClick={() => { void bridge.startBrowserLogin() }}
+            className={css.sessionAction}
+            onClick={() => { setClearing(true) }}
           >
-            {t('chat.browserLogin')}
+            {t('chat.clearData')}
           </button>
         )}
       </div>

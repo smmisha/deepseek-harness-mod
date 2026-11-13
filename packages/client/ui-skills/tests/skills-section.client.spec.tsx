@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** Skills tab: source rows, switches, statuses, search, and pagination. */
+/** Skills tab: source groups, skill cards, switches, statuses, search, and pagination. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
@@ -52,6 +52,16 @@ const SOURCES: readonly LocalSourceView[] = [
   },
   { id: 'user-dsh', kind: 'harness', title: 'user-dsh', path: '~\\.dsh\\skills', displayPath: '~\\.dsh\\skills', exists: true, enabled: true, skills: [] },
   { id: 'codex', kind: 'application', title: 'Codex', path: '~\\.codex\\skills', displayPath: '~\\.codex\\skills', exists: false, enabled: false, skills: [] },
+  {
+    id: 'paused',
+    kind: 'harness',
+    title: 'Paused source',
+    path: '~\\.paused\\skills',
+    displayPath: '~\\.paused\\skills',
+    exists: true,
+    enabled: false,
+    skills: [{ name: 'paused-skill', path: '~\\.paused\\skills\\paused-skill\\SKILL.md', status: 'available' }],
+  },
 ]
 
 /** Stub face over the fixture inventory. */
@@ -77,24 +87,29 @@ function sessionsAt(cwd: string): NonNullable<SkillsSectionProps['useSessions']>
 }
 
 describe('SkillsSection', () => {
-  it('lists sources with kind, shortened path, counts, and the missing-folder state', async () => {
+  it('groups sources with kind, folder, counts, and the missing-folder state', async () => {
     render(<SkillsSection {...props()} />)
     await screen.findByText('Claude Code')
     expect(screen.getAllByText('Other application')).toHaveLength(2)
     expect(screen.getByText('~\\.claude\\skills')).toBeTruthy()
     expect(screen.getByText('2 of 4 enabled')).toBeTruthy()
+    expect(screen.getByText('0 of 1 enabled')).toBeTruthy()
     expect(screen.getByText('Folder not found')).toBeTruthy()
     expect(screen.getByRole('switch', { name: 'Enable source Codex' })).toHaveProperty('disabled', true)
   })
 
-  it('expands a source and reports duplicate, disabled, and frontmatter states', async () => {
+  it('renders every skill as a card with its description, file, and discovery state', async () => {
     render(<SkillsSection {...props()} />)
-    await screen.findByText('Claude Code')
-    fireEvent.click(screen.getByRole('button', { name: 'Claude Code' }))
-    expect(screen.getByText('Helps with apps')).toBeTruthy()
+    await screen.findByText('Helps with apps')
+    expect(screen.getByText('~\\.claude\\skills\\app-skill\\SKILL.md')).toBeTruthy()
     expect(screen.getAllByText('Overridden by ~/.dsh folders')).toHaveLength(2)
     expect(screen.getByRole('switch', { name: 'Enable skill off-skill' }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByText('Frontmatter error: missing YAML frontmatter')).toBeTruthy()
+    // A rejected row has no parsed name: its path stands in the title and no switch can address it.
+    expect(screen.getByText('~\\.claude\\skills\\broken\\SKILL.md')).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: 'Enable skill broken' })).toBeNull()
+    // A source that is off disables its skills' switches.
+    expect(screen.getByRole('switch', { name: 'Enable skill paused-skill' })).toHaveProperty('disabled', true)
   })
 
   it('writes source and skill switches through the face', async () => {
@@ -104,19 +119,55 @@ describe('SkillsSection', () => {
     await screen.findByText('Claude Code')
     fireEvent.click(screen.getByRole('switch', { name: 'Enable source Claude Code' }))
     await waitFor(() => { expect(setSource).toHaveBeenCalledWith('claude-code', false) })
-    fireEvent.click(screen.getByRole('button', { name: 'Claude Code' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Enable skill app-skill' }))
     await waitFor(() => { expect(setSkill).toHaveBeenCalledWith('claude-code', 'app-skill', false) })
+  })
+
+  it('holds a switch disabled while its write is in flight', async () => {
+    let releaseSkill: ((error: string | undefined) => void) | undefined
+    let releaseSource: ((error: string | undefined) => void) | undefined
+    const setSkill = vi.fn(() => new Promise<string | undefined>((resolve) => { releaseSkill = resolve }))
+    const setSource = vi.fn(() => new Promise<string | undefined>((resolve) => { releaseSource = resolve }))
+    render(<SkillsSection {...props({ setSource, setSkill })} />)
+    await screen.findByText('Claude Code')
+    const skillSwitch = screen.getByRole('switch', { name: 'Enable skill app-skill' })
+    fireEvent.click(skillSwitch)
+    await waitFor(() => { expect(skillSwitch).toHaveProperty('disabled', true) })
+    releaseSkill?.(undefined)
+    await waitFor(() => { expect(skillSwitch).toHaveProperty('disabled', false) })
+    const sourceSwitch = screen.getByRole('switch', { name: 'Enable source Claude Code' })
+    fireEvent.click(sourceSwitch)
+    await waitFor(() => { expect(sourceSwitch).toHaveProperty('disabled', true) })
+    releaseSource?.(undefined)
+    await waitFor(() => { expect(sourceSwitch).toHaveProperty('disabled', false) })
   })
 
   it('filters by name and description', async () => {
     render(<SkillsSection {...props()} />)
     await screen.findByText('Claude Code')
-    fireEvent.click(screen.getByRole('button', { name: 'Claude Code' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search skills' }), { target: { value: 'helps' } })
     expect(screen.getByText('Helps with apps')).toBeTruthy()
+    expect(screen.queryByText('Paused source')).toBeNull()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search skills' }), { target: { value: 'nothing-matches' } })
     expect(screen.getByText('No matching skills')).toBeTruthy()
+  })
+
+  it('reports a reload that fails after a successful write', async () => {
+    const responses: (readonly LocalSourceView[] | Error | string)[] = [
+      SOURCES, 'reload failed', new Error('second reload failed'),
+    ]
+    const load = vi.fn(async () => {
+      const next = responses.shift()
+      if (next instanceof Error) throw next
+      if (typeof next === 'string') throw next
+      return next ?? SOURCES
+    })
+    render(<SkillsSection {...props({ load })} />)
+    await screen.findByText('Claude Code')
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable skill app-skill' }))
+    await screen.findByText('Could not read skills: reload failed')
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable skill dup-skill' }))
+    await screen.findByText('Could not read skills: second reload failed')
   })
 
   it('passes the active session folder to the loader and reports failed reads', async () => {
@@ -174,17 +225,10 @@ describe('SkillsSection', () => {
     expect(load).toHaveBeenCalledWith(undefined)
   })
 
-  it('reports a non-Error rejection and collapses an expanded source', async () => {
+  it('reports a non-Error rejection', async () => {
     const load = vi.fn(async () => { throw 'plain text failure' })
     render(<SkillsSection {...props({ load })} />)
     await screen.findByText('Could not read skills: plain text failure')
-    render(<SkillsSection {...props()} />)
-    await screen.findByText('Claude Code')
-    const disclosure = screen.getByRole('button', { name: 'Claude Code' })
-    fireEvent.click(disclosure)
-    expect(screen.getByText('Helps with apps')).toBeTruthy()
-    fireEvent.click(disclosure)
-    expect(screen.queryByText('Helps with apps')).toBeNull()
   })
 
   it('covers empty sources, refused writes, and missing optional fields', async () => {
@@ -214,11 +258,9 @@ describe('SkillsSection', () => {
     const setSource = vi.fn(async () => 'write refused')
     render(<SkillsSection {...props({ load: async () => [empty, minimal], setSource })} />)
     await screen.findByText('Additional folders')
-    fireEvent.click(screen.getByRole('button', { name: 'Additional folders' }))
     expect(screen.getByText('This source has no skills')).toBeTruthy()
     fireEvent.click(screen.getByRole('switch', { name: 'Enable source Additional folders' }))
     await screen.findByText('Could not save the switch: write refused')
-    fireEvent.click(screen.getByRole('button', { name: '~/.agents folders' }))
     expect(screen.getByText('Overridden by unknown-source')).toBeTruthy()
     expect(screen.getByText('~\\.agents\\skills\\plain\\SKILL.md')).toBeTruthy()
     expect(screen.getByText(/^Frontmatter error:/)).toBeTruthy()
@@ -242,7 +284,6 @@ describe('SkillsSection', () => {
     }
     render(<SkillsSection {...props({ load: async () => [many] })} />)
     await screen.findByText('~/.dsh folders')
-    fireEvent.click(screen.getByRole('button', { name: '~/.dsh folders' }))
     expect(screen.getByText('Show more (1 left)')).toBeTruthy()
     expect(screen.queryByText('skill-50')).toBeNull()
     fireEvent.click(screen.getByText('Show more (1 left)'))

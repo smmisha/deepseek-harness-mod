@@ -36,10 +36,6 @@ export interface Config {
   loginHosts?: string[]
   /** Provider host patterns: `.suffix` matches subdomains, `prefix.` matches regional hosts. */
   loginHostSuffixes?: string[]
-  /** Overall deadline of the external-browser fallback, in milliseconds. */
-  browserLoginTimeoutMs?: number
-  /** Delay between token checks in the external-browser fallback, in milliseconds. */
-  browserLoginPollMs?: number
 }
 
 /** Validated plugin configuration. */
@@ -48,8 +44,6 @@ export const Config: z<Config> = z.object({
   allowedOrigins: z.array(z.string()).default(['https://chat.deepseek.com']),
   loginHosts: z.array(z.string()).default(['accounts.youtube.com', 'appleid.apple.com']),
   loginHostSuffixes: z.array(z.string()).default(['accounts.google.']),
-  browserLoginTimeoutMs: z.number().default(300_000),
-  browserLoginPollMs: z.number().default(2_000),
 })
 
 /** Services this plugin binds. */

@@ -1,7 +1,13 @@
+/* Skills tab: the search field and one group per source. A group head carries
+   the source name, its folder, and the switch that owns every skill below;
+   each skill is a row card matching the Plugins page's list rows — a 48px
+   artwork frame, the name over its one-liner and file, and its switch. Warnings
+   sit under the head, indented to the name they explain. */
+
 .tab {
   display: flex;
   flex-direction: column;
-  gap: var(--dsw-space-3, 12px);
+  gap: 24px;
 }
 
 .toolbar {
@@ -28,63 +34,28 @@
   outline-offset: 1px;
 }
 
-.sources,
-.skills {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.sources {
+.group {
   display: flex;
   flex-direction: column;
-  gap: var(--dsw-space-2, 8px);
+  gap: 8px;
+  min-width: 0;
 }
 
-.source {
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-}
-
-.sourceRow {
+.groupHead {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 44px;
-  padding: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
-.disclosure {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.chevron,
-.chevronOpen {
-  display: inline-block;
-  font-size: 15px;
-  line-height: 1;
-  transition: transform 120ms ease;
-}
-
-.chevronOpen {
-  transform: rotate(90deg);
-}
-
-.sourceName {
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
+.groupTitle {
+  flex: none;
+  margin: 0;
   color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
 }
 
 .chip {
@@ -99,7 +70,7 @@
 
 .path {
   overflow: hidden;
-  flex: 1;
+  flex: 1 1 160px;
   min-width: 0;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
@@ -107,6 +78,15 @@
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Count, warning, and switch stay together at the row's end. */
+.groupEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
 }
 
 .count {
@@ -119,61 +99,137 @@
 
 .warning {
   flex: none;
-  color: var(--dsw-alias-label-warning, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-state-warn-label);
   font-size: 12px;
   white-space: nowrap;
 }
 
-.skills {
+.cards {
   display: flex;
   flex-direction: column;
-  padding: 0 8px 8px;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.skill {
+.card {
+  min-width: 0;
+  /* The row's hover-less surface reaches 8px past its content while the card
+     content stays aligned with the group head. */
+  margin: 0 -8px;
+  border-radius: var(--dsw-radius-xl);
+}
+
+.cardHead {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 44px;
   padding: 8px;
-  border-top: 0.5px solid var(--dsw-alias-border-l3);
 }
 
-.skillName {
+.cardIcon {
+  display: inline-flex;
   flex: none;
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 500;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  color: var(--dsw-alias-label-secondary);
 }
 
-.description {
-  overflow: hidden;
+.cardMain {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+}
+
+.cardTitle {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.cardDesc {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 18px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.cardPath {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+/* Under the title: 8px card padding, the 48px frame, and its 14px gap. */
+.reason {
+  margin: 0;
+  padding: 0 8px 8px 70px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.reasonWarning {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.reasonError {
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .message {
-  padding: 8px 0;
+  margin: 0;
+  padding: 0 8px;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
+  line-height: 20px;
 }
 
 .error {
   margin: 0;
-  color: var(--dsw-alias-label-error, var(--dsw-alias-label-secondary));
+  color: var(--dsw-alias-state-error-primary);
   font-size: 13px;
+  line-height: 20px;
 }
 
 .more {
+  align-self: flex-start;
+  margin-inline-start: 8px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--dsw-alias-state-business-primary);
   font: inherit;
   font-size: 13px;
+  line-height: 20px;
   cursor: pointer;
+}
+
+.more:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+  outline-offset: 1px;
 }
