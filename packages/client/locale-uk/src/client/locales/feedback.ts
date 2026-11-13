@@ -1,0 +1,23 @@
+/** Ukrainian dictionary for the `feedback` namespace. */
+export const ukFeedback = {
+  'action.like': 'Хороша відповідь',
+  'action.likeActive': 'Прибрати оцінку',
+  'action.dislike': 'Погана відповідь',
+  'action.dislikeActive': 'Прибрати оцінку',
+  'dialog.title': 'Надіслати відгук',
+  'dialog.categories': 'Категорія відгуку',
+  'dialog.detail': 'Деталі відгуку',
+  'dialog.hint': 'Додайте деталі, щоб допомогти нам покращити продукт. Ваш відгук міститиме журнал поточної розмови.',
+  'category.task-result': 'Результат завдання',
+  'category.instruction-following': 'Розуміння та дотримання інструкцій',
+  'category.product-interaction': 'Функції продукту та взаємодія',
+  'category.service-stability': 'Стабільність і швидкість',
+  'category.resource-cost': 'Використання ресурсів і вартість',
+  'category.security-privacy-permission': 'Безпека, приватність і дозволи',
+  'category.other': 'Інше',
+  'toast.recorded': 'Дякуємо за відгук',
+  'error.conflict': 'Цей відгук змінено в іншому місці; показано актуальний стан',
+  'error.load': 'Не вдалося завантажити відгук',
+  'error.generic': 'Не вдалося зберегти відгук',
+  'error.noteTooLarge': 'Опис задовгий; скоротіть його та надішліть знову',
+} satisfies Record<string, string>

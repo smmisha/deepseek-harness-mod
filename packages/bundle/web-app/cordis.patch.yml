@@ -261,6 +261,10 @@
     - id: locale
       name: '@deepseek-ai/dsh-client-locale'
 
+    # Ukrainian language pack: uk dictionaries for the shipped web UI.
+    - id: locale-uk
+      name: '@deepseek-ai/dsh-client-locale-uk'
+
     - id: shortcuts
       name: '@deepseek-ai/dsh-client-shortcuts'
 

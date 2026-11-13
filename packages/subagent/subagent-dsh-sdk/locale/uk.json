@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Бекенд субагентів DSH SDK",
+    "description": "Запускайте Harness у підпроцесі через TypeScript SDK і JSON-RPC у стандартних потоках введення й виведення."
+  }
+}

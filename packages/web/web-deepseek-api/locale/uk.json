@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Вебпошук і сканування через DeepSeek API",
+    "description": "Шукайте вебсторінки через DeepSeek Search API і завантажуйте основний текст сторінки через Fetch API."
+  }
+}
