@@ -66,7 +66,7 @@ describe('official browser-brand plugin', () => {
     expect(subject.slots.entries('conversation.hero.frame')).toHaveLength(1)
   })
 
-  it('keeps the official release lockup free of the mod label', async () => {
+  it('keeps the official release lockup free of the signature', async () => {
     vi.stubEnv('DSH_CLIENT_BUILD_PROFILE', 'official')
     const subject = await bench()
     await subject.ctx.plugin({ inject: [...inject], apply }).await()
@@ -121,16 +121,16 @@ describe('official browser-brand plugin', () => {
   })
 
   it('renders the official name independently from both requested mark sizes', () => {
-    const t = ((key: string) => key === 'brand.mod' ? 'mod' : key) as never
+    const t = ((key: string) => key === 'brand.signature' ? 'smmisha' : key) as never
     const name = render(<OfficialBrandName t={t} modBuild={false} />)
     expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
     expect(name.container.textContent).toBe('')
     name.unmount()
 
-    // An unofficial build adds the localized mod label after the wordmark.
+    // An unofficial build adds the small engraved signature after the wordmark.
     const mod = render(<OfficialBrandName t={t} modBuild />)
     expect(mod.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
-    expect(mod.container.textContent).toBe('mod')
+    expect(mod.container.textContent).toBe('smmisha')
     mod.unmount()
 
     const mark = render(<OfficialBrandMark size={34} />)

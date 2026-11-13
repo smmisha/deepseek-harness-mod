@@ -650,12 +650,10 @@ describe('DesktopBrowserGuests chat sign-in', () => {
     const guests = new DesktopBrowserGuests(() => undefined)
     guests.acquireChat(owner, CONFIG)
     await expect(guests.returnToSignIn(owner)).rejects.toThrow('no attached chat guest')
-    await expect(guests.clearChatData(owner)).resolves.toBeUndefined()
     expect(() => { guests.openInBrowser(owner) }).not.toThrow()
 
     const stranger = OWNER()
     expect(() => { guests.openInBrowser(stranger) }).toThrow('owns no chat guest')
-    await expect(guests.clearChatData(stranger)).rejects.toThrow('owns no chat guest')
     await expect(guests.returnToSignIn(stranger)).rejects.toThrow('owns no chat guest')
   })
 
@@ -663,23 +661,6 @@ describe('DesktopBrowserGuests chat sign-in', () => {
     const { owner, guests } = attachedChat()
     guests.openInBrowser(owner)
     expect(state.openExternal).toHaveBeenCalledWith(CONFIG.url)
-  })
-
-  it('clears the chat partition and reloads the guest', async () => {
-    const { owner, attached, guests } = attachedChat()
-    attached.emit('did-navigate', {}, 'https://accounts.google.com/v3/signin/rejected')
-    await guests.clearChatData(owner)
-    const clear = chatSession().clearStorageData as ReturnType<typeof vi.fn>
-    expect(clear).toHaveBeenCalledTimes(1)
-    expect(attached.reload).toHaveBeenCalledTimes(1)
-    expect(owner.send).toHaveBeenLastCalledWith('dsh-desktop:chat-login-state', { kind: 'idle' })
-  })
-
-  it('clears the partition even when the guest is already gone', async () => {
-    const { owner, guests } = attachedChat()
-    const clear = chatSession().clearStorageData as ReturnType<typeof vi.fn>
-    await guests.clearChatData(owner)
-    expect(clear).toHaveBeenCalledTimes(1)
   })
 
   it('opens the context menu for editable and selected content', () => {
@@ -844,13 +825,12 @@ describe('DesktopBrowserGuests edge policies', () => {
     expect(attached.isDestroyed()).toBe(true)
   })
 
-  it('publishes nothing to a destroyed document', async () => {
-    const owner = OWNER()
+  it('publishes nothing to a destroyed document', () => {
+    const { owner, attached } = attachedChat()
+    const sent = (owner.send as ReturnType<typeof vi.fn>).mock.calls.length
     Object.assign(owner, { isDestroyed: () => true })
-    const guests = new DesktopBrowserGuests(() => undefined)
-    guests.acquireChat(owner, CONFIG)
-    await guests.clearChatData(owner)
-    expect(owner.send).not.toHaveBeenCalled()
+    attached.emit('did-navigate', {}, 'https://accounts.google.com/v3/signin/rejected')
+    expect((owner.send as ReturnType<typeof vi.fn>).mock.calls.length).toBe(sent)
   })
 
   it('tracks several provider windows and closes only live ones', () => {

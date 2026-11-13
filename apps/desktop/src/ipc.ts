@@ -28,7 +28,6 @@ export const DESKTOP_IPC = {
   browserRelease: 'dsh-desktop:browser-release',
   browserOpenRequested: 'dsh-desktop:browser-open-requested',
   chatAcquire: 'dsh-desktop:chat-acquire',
-  chatClearData: 'dsh-desktop:chat-clear-data',
   chatLoginState: 'dsh-desktop:chat-login-state',
   chatOpenInBrowser: 'dsh-desktop:chat-open-in-browser',
   chatReturnToSignIn: 'dsh-desktop:chat-return-to-sign-in',

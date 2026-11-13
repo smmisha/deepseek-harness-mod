@@ -37,7 +37,6 @@ const BRIDGE: DesktopChatBridge = {
   onLoginState: () => () => {},
   returnToSignIn: () => {},
   openInBrowser: () => {},
-  clearData: () => {},
 }
 
 afterEach(() => {

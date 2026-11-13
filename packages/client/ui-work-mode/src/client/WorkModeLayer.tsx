@@ -77,7 +77,6 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
   const [started, setStarted] = useState(chat)
   const [guestState, setGuestState] = useState<ChatGuestState>('loading')
   const [login, setLogin] = useState<DesktopChatLoginPhase>({ kind: 'idle' })
-  const [clearing, setClearing] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const host = useRef<HTMLDivElement | null>(null)
   const guest = useRef<ChatGuestHandle | null>(null)
@@ -197,42 +196,11 @@ export function WorkModeLayer({ useStore, actions, t, config, bridge, setTopBand
                   </div>
                 </div>
               )}
-              {clearing && (
-                <div className={css.card} data-work-mode-clear="">
-                  <p className={css.title}>{t('chat.clearDataTitle')}</p>
-                  <p className={css.body}>{t('chat.clearDataBody')}</p>
-                  <div className={css.actions}>
-                    <button
-                      type="button"
-                      className={clsx(css.action, css.actionPrimary)}
-                      onClick={() => { setClearing(false); bridge.clearData() }}
-                    >
-                      {t('chat.clearDataConfirm')}
-                    </button>
-                    <button
-                      type="button"
-                      className={css.action}
-                      onClick={() => { setClearing(false) }}
-                    >
-                      {t('chat.clearDataCancel')}
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           )}
       </div>
       <div className={css.bar} data-work-mode-bar="">
         <ModeSwitcher mode={mode} onSelect={(next) => { actions.setMode(next) }} t={t} />
-        {chat && bridge !== undefined && (
-          <button
-            type="button"
-            className={css.sessionAction}
-            onClick={() => { setClearing(true) }}
-          >
-            {t('chat.clearData')}
-          </button>
-        )}
       </div>
     </div>
   )

@@ -35,7 +35,7 @@ export const de = {
   'expand': 'Ausklappen',
   'back': 'Zurück',
   'brand.localBuild': 'Lokaler DSH-Build',
-  'brand.mod': 'mod',
+  'brand.signature': 'smmisha',
   'workspace.defaultName': 'Standardarbeitsbereich',
   'unknown': 'Unbekannt',
   'none': 'Keine',

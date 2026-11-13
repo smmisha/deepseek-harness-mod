@@ -64,6 +64,4 @@ export interface DesktopChatBridge {
   returnToSignIn(): void
   /** Open the configured chat address in the system browser, passing it no data. */
   openInBrowser(): void
-  /** Clear the chat partition's storage and reload the guest. */
-  clearData(): void
 }

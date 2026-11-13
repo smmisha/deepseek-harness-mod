@@ -44,11 +44,6 @@ function createProductApi(): DshDesktopProductApi {
           // Main logs the failure; the guest is unaffected.
         })
       },
-      clearData: () => {
-        void ipcRenderer.invoke(DESKTOP_IPC.chatClearData).catch((_error: unknown) => {
-          // Main logs the failure; storage is cleared or not, and the page stays mounted.
-        })
-      },
     },
     fileDrag: {
       prepare: (source, requestId) => ipcRenderer.invoke(DESKTOP_IPC.fileDragPrepare, source, requestId) as

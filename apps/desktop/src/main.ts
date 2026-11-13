@@ -859,10 +859,6 @@ async function main(): Promise<void> {
     assertProductSender(event)
     browserGuests.openInBrowser(event.sender)
   })
-  ipcMain.handle(DESKTOP_IPC.chatClearData, (event) => {
-    assertProductSender(event)
-    return browserGuests.clearChatData(event.sender)
-  })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
     if (hostUrl === undefined || hostCookie === undefined || details.webContentsId !== mainWindow?.webContents.id) {

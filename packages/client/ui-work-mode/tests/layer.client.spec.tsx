@@ -51,7 +51,6 @@ function bridge(overrides: Partial<DesktopChatBridge> = {}): DesktopChatBridge {
     onLoginState: () => () => {},
     returnToSignIn: vi.fn(),
     openInBrowser: vi.fn(),
-    clearData: vi.fn(),
     ...overrides,
   }
 }
@@ -242,29 +241,13 @@ describe('WorkModeLayer', () => {
     expect(screen.queryByText(en['chat.providerRejectedTitle'])).toBeNull()
   })
 
-  it('clears the chat data only after the reader confirms', async () => {
-    const clearData = vi.fn()
+  it('keeps only the mode switch on the strip, with no sign-out control of its own', async () => {
     const factory = guests()
-    render(<WorkModeLayer {...props('chat', { bridge: bridge({ clearData }), createGuest: factory.createGuest })} />)
+    const view = render(<WorkModeLayer {...props('chat', { bridge: bridge(), createGuest: factory.createGuest })} />)
     await waitFor(() => { expect(factory.calls).toHaveLength(1) })
-
-    fireEvent.click(screen.getByRole('button', { name: en['chat.clearData'] }))
-    expect(screen.getByText(en['chat.clearDataTitle'])).toBeTruthy()
-    expect(clearData).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: en['chat.clearDataCancel'] }))
-    expect(clearData).not.toHaveBeenCalled()
-    expect(screen.queryByText(en['chat.clearDataTitle'])).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: en['chat.clearData'] }))
-    fireEvent.click(screen.getByRole('button', { name: en['chat.clearDataConfirm'] }))
-    expect(clearData).toHaveBeenCalledTimes(1)
-    expect(screen.queryByText(en['chat.clearDataTitle'])).toBeNull()
-  })
-
-  it('offers no chat-data action without the Desktop bridge', () => {
-    render(<WorkModeLayer {...props('chat')} />)
-    expect(screen.queryByRole('button', { name: en['chat.clearData'] })).toBeNull()
+    const strip = view.container.querySelector('[data-work-mode-bar]')
+    expect(strip?.querySelectorAll('button')).toHaveLength(2)
+    expect(strip?.querySelectorAll('[role="radio"]')).toHaveLength(2)
   })
 
   it('switches modes through the capsule', () => {

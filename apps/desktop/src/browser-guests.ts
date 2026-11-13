@@ -562,20 +562,6 @@ export class DesktopBrowserGuests {
     void shell.openExternal(lease.policy.url)
   }
 
-  /**
-   * Clear the chat partition's storage and reload the guest.
-   * @param owner - authenticated application WebContents.
-   */
-  async clearChatData(owner: WebContents): Promise<void> {
-    const lease = this.chatLease(owner)
-    await session.fromPartition(CHAT_PARTITION).clearStorageData()
-    logChatLogin('chat storage cleared')
-    this.publishLogin(owner, { kind: 'idle' })
-    const guest = lease.guest
-    if (guest === undefined || guest.isDestroyed()) return
-    guest.reload()
-  }
-
   /** The chat lease this document owns; every chat action belongs to one guest. */
   private chatLease(owner: WebContents): ChatLease {
     const lease = [...this.leases.values()].find((entry): entry is ChatLease => entry.kind === 'chat' && entry.owner === owner)

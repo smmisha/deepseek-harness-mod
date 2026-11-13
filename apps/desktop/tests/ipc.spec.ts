@@ -28,7 +28,8 @@ describe('chat IPC surface', () => {
     expect(DESKTOP_IPC.chatLoginState).toBe('dsh-desktop:chat-login-state')
     expect(DESKTOP_IPC.chatReturnToSignIn).toBe('dsh-desktop:chat-return-to-sign-in')
     expect(DESKTOP_IPC.chatOpenInBrowser).toBe('dsh-desktop:chat-open-in-browser')
-    expect(DESKTOP_IPC.chatClearData).toBe('dsh-desktop:chat-clear-data')
+    // Signing out belongs to the site itself; the shell keeps no storage-clearing channel.
+    expect(Object.keys(DESKTOP_IPC)).not.toContain('chatClearData')
     expect(Object.keys(DESKTOP_IPC)).not.toContain('chatLoginStart')
     expect(Object.keys(DESKTOP_IPC)).not.toContain('chatLoginCancel')
   })

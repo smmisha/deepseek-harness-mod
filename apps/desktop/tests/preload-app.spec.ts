@@ -332,18 +332,16 @@ it('exposes chat sign-in actions and only the provider refusal phase', async () 
 
   api.chat.returnToSignIn()
   api.chat.openInBrowser()
-  api.chat.clearData()
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
     [DESKTOP_IPC.chatReturnToSignIn],
     [DESKTOP_IPC.chatOpenInBrowser],
-    [DESKTOP_IPC.chatClearData],
   ])
+  expect(api.chat).not.toHaveProperty('clearData')
 
   electron.ipcRenderer.invoke.mockRejectedValue(new Error('main refused'))
   api.chat.returnToSignIn()
   api.chat.openInBrowser()
-  api.chat.clearData()
   await Promise.resolve()
   await Promise.resolve()
-  expect(electron.ipcRenderer.invoke).toHaveBeenCalledTimes(6)
+  expect(electron.ipcRenderer.invoke).toHaveBeenCalledTimes(4)
 })
