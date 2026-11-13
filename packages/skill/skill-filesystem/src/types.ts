@@ -11,8 +11,8 @@ export interface LocalSourceView {
   readonly id: string
   /** Reader-facing name; localized sources carry their own title from the service. */
   readonly title: string
-  /** Own folders are harness sources; the rest belong to other applications. */
-  readonly kind: 'harness' | 'application'
+  /** Own folders are harness sources, `folder` rows are folders the reader added, the rest belong to other applications. */
+  readonly kind: 'harness' | 'application' | 'folder'
   /** Absolute folder the source scans. */
   readonly path: string
   /** Shortened path for the row; `path` carries the full value. */
@@ -24,6 +24,9 @@ export interface LocalSourceView {
   /** Discovered skills, sorted by name. */
   readonly skills: readonly LocalSkillView[]
 }
+
+/** Outcome of adding a folder from the Skills tab; every outcome other than `added` writes nothing. */
+export type AddSkillFolderResult = 'added' | 'exists' | 'relative' | 'missing'
 
 /** One discovered skill row for the Skills tab. */
 export interface LocalSkillView {

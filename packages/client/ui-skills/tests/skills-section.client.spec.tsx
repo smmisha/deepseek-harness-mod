@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
-import { SkillsSection, type SkillsSectionProps } from '../src/client/SkillsSection.tsx'
+import { SkillsSection, type AddFolderOutcome, type SkillsSectionProps } from '../src/client/SkillsSection.tsx'
 import { en, type SkillsLocaleKey } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -69,6 +69,10 @@ type FaceStub = {
   load?: () => Promise<readonly LocalSourceView[]>
   setSource?: (id: string, enabled: boolean) => Promise<string | undefined>
   setSkill?: (source: string, name: string, enabled: boolean) => Promise<string | undefined>
+  addFolder?: (path: string) => Promise<AddFolderOutcome>
+  removeFolder?: (path: string) => Promise<string | undefined>
+  pickFolder?: () => Promise<string | null>
+  createWithAi?: () => void
 }
 
 function props(overrides: FaceStub = {}): SkillsSectionProps {
@@ -77,8 +81,29 @@ function props(overrides: FaceStub = {}): SkillsSectionProps {
     load: async () => SOURCES,
     setSource: async () => undefined,
     setSkill: async () => undefined,
+    addFolder: async () => 'added',
+    removeFolder: async () => undefined,
     ...overrides,
   } as SkillsSectionProps
+}
+
+/** An added folder as the Host describes it. */
+const ADDED: LocalSourceView = {
+  id: 'folder:D:\\team\\skills',
+  kind: 'folder',
+  title: 'skills',
+  path: 'D:\\team\\skills',
+  displayPath: 'D:\\team\\skills',
+  exists: true,
+  enabled: true,
+  skills: [{ name: 'team-skill', path: 'D:\\team\\skills\\team-skill\\SKILL.md', status: 'available' }],
+}
+
+/** Open the Add folder dialog through the split button's primary half. */
+async function openFolderDialog(): Promise<HTMLInputElement> {
+  await screen.findByText('Claude Code')
+  fireEvent.click(screen.getByRole('button', { name: 'Add skills' }))
+  return await screen.findByLabelText('Folder path') as HTMLInputElement
 }
 
 /** Sessions state whose single retained main-view Session lives in `cwd`. */
@@ -288,5 +313,134 @@ describe('SkillsSection', () => {
     expect(screen.queryByText('skill-50')).toBeNull()
     fireEvent.click(screen.getByText('Show more (1 left)'))
     expect(screen.getByText('skill-50')).toBeTruthy()
+  })
+})
+
+describe('SkillsSection: adding skills', () => {
+  it('adds a typed folder, closes the dialog, and reloads the sources', async () => {
+    const addFolder = vi.fn(async () => 'added' as const)
+    const load = vi.fn(async () => SOURCES)
+    render(<SkillsSection {...props({ addFolder, load })} />)
+    const input = await openFolderDialog()
+    expect(screen.getByRole('button', { name: 'Add' })).toHaveProperty('disabled', true)
+    fireEvent.change(input, { target: { value: '  D:\\team\\skills  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => { expect(addFolder).toHaveBeenCalledWith('D:\\team\\skills') })
+    await waitFor(() => { expect(screen.queryByLabelText('Folder path')).toBeNull() })
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('submits with Enter and explains every refusal in the dialog', async () => {
+    const outcomes: AddFolderOutcome[] = ['exists', 'relative', 'missing', { error: 'host is gone' }]
+    const addFolder = vi.fn(async () => outcomes.shift() ?? 'added')
+    render(<SkillsSection {...props({ addFolder })} />)
+    const input = await openFolderDialog()
+    fireEvent.change(input, { target: { value: 'skills' } })
+    const form = input.closest('form')
+    if (form === null) throw new Error('expected the folder form')
+    fireEvent.submit(form)
+    await screen.findByText('This folder is already in the list')
+    fireEvent.submit(form)
+    await screen.findByText('Enter a full path, starting with a drive, / or ~')
+    fireEvent.submit(form)
+    await screen.findByText('No folder exists at this path')
+    fireEvent.submit(form)
+    await screen.findByText('Could not add the folder: host is gone')
+    // Typing again clears the explanation.
+    fireEvent.change(input, { target: { value: 'skills2' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('ignores an empty path and a second submit while the first is pending', async () => {
+    let release: ((outcome: AddFolderOutcome) => void) | undefined
+    const addFolder = vi.fn(() => new Promise<AddFolderOutcome>((resolve) => { release = resolve }))
+    render(<SkillsSection {...props({ addFolder })} />)
+    const input = await openFolderDialog()
+    const form = input.closest('form')
+    if (form === null) throw new Error('expected the folder form')
+    fireEvent.submit(form)
+    expect(addFolder).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: 'D:\\one' } })
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    expect(addFolder).toHaveBeenCalledTimes(1)
+    await act(async () => { release?.('exists') })
+    await screen.findByText('This folder is already in the list')
+  })
+
+  it('fills the path from the folder chooser and reports a chooser failure', async () => {
+    const picks: (string | null | Error)[] = ['D:\\picked', null, new Error('no display'), 'plain']
+    const pickFolder = vi.fn(async () => {
+      const next = picks.shift()
+      if (next instanceof Error) throw next
+      if (next === 'plain') throw 'chooser offline'
+      return next ?? null
+    })
+    render(<SkillsSection {...props({ pickFolder })} />)
+    const input = await openFolderDialog()
+    const browse = screen.getByRole('button', { name: 'Browse…' })
+    fireEvent.click(browse)
+    await waitFor(() => { expect(input.value).toBe('D:\\picked') })
+    fireEvent.click(browse)
+    await waitFor(() => { expect(pickFolder).toHaveBeenCalledTimes(2) })
+    expect(input.value).toBe('D:\\picked')
+    fireEvent.click(browse)
+    await screen.findByText('Could not open the folder chooser: no display')
+    fireEvent.click(browse)
+    await screen.findByText('Could not open the folder chooser: chooser offline')
+  })
+
+  it('offers no Browse button without a chooser and closes from the footer and the corner', async () => {
+    render(<SkillsSection {...props()} />)
+    await openFolderDialog()
+    expect(screen.queryByRole('button', { name: 'Browse…' })).toBeNull()
+    // The footer action and the dialog's corner close button share the Cancel label.
+    const [corner, footer] = screen.getAllByRole('button', { name: 'Cancel' })
+    if (corner === undefined || footer === undefined) throw new Error('expected two Cancel buttons')
+    fireEvent.click(footer)
+    await waitFor(() => { expect(screen.queryByLabelText('Folder path')).toBeNull() })
+    await openFolderDialog()
+    const [reopenedCorner] = screen.getAllByRole('button', { name: 'Cancel' })
+    if (reopenedCorner === undefined) throw new Error('expected the corner close button')
+    fireEvent.click(reopenedCorner)
+    await waitFor(() => { expect(screen.queryByLabelText('Folder path')).toBeNull() })
+  })
+
+  it('offers both ways to add from the menu and starts the AI chat', async () => {
+    const createWithAi = vi.fn()
+    render(<SkillsSection {...props({ createWithAi })} />)
+    await screen.findByText('Claude Code')
+    const more = screen.getByRole('button', { name: 'Choose how to add' })
+    fireEvent.keyDown(more, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Create with AI/u }))
+    expect(createWithAi).toHaveBeenCalledTimes(1)
+    fireEvent.click(more)
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Add folder/u }))
+    expect(await screen.findByLabelText('Folder path')).toBeTruthy()
+  })
+
+  it('keeps an already open menu on ArrowDown and disables AI creation without a workspace', async () => {
+    render(<SkillsSection {...props()} />)
+    await screen.findByText('Claude Code')
+    const more = screen.getByRole('button', { name: 'Choose how to add' })
+    fireEvent.click(more)
+    fireEvent.keyDown(more, { key: 'ArrowDown' })
+    fireEvent.keyDown(more, { key: 'Enter' })
+    const item = await screen.findByRole('menuitem', { name: /Create with AI/u })
+    expect(item.getAttribute('aria-disabled') === 'true' || (item as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('A new chat cannot open from this page')).toBeTruthy()
+  })
+
+  it('marks an added folder and removes it from the list', async () => {
+    const removeFolder = vi.fn(async () => undefined)
+    const untitled: LocalSourceView = { ...ADDED, id: 'folder:D:\\', title: '', path: 'D:\\', displayPath: 'D:\\', skills: [] }
+    render(<SkillsSection {...props({ load: async () => [ADDED, untitled], removeFolder })} />)
+    await screen.findByText('team-skill')
+    expect(screen.getAllByText('Your folder')).toHaveLength(2)
+    // A drive root has no last segment, so its path names the group.
+    expect(screen.getByRole('heading', { name: 'D:\\' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove folder skills' }))
+    await waitFor(() => { expect(removeFolder).toHaveBeenCalledWith('D:\\team\\skills') })
+    expect(screen.queryByRole('button', { name: 'Remove folder Claude Code' })).toBeNull()
   })
 })

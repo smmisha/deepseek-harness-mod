@@ -5,11 +5,18 @@
  * returns.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { IconSkillOutlineRegular, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button, IconChevronDownOutlineRegular, IconFolderOpenOutlineRegular, IconPlusOutlineRegular,
+  IconSkillOutlineRegular, IconSparkleRegular, IconTrashOutlineRegular, Input, Menu, MenuItemButton, Modal,
+  Switch, Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
+import type { AddSkillFolderResult, LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import type { SkillsLocaleKey } from './locales.ts'
 import css from './SkillsSection.module.css'
+
+/** Outcome of adding a folder: the Host's answer, or a failure message when the call itself failed. */
+export type AddFolderOutcome = AddSkillFolderResult | { readonly error: string }
 
 /** Data and writes the tab reads from its Host namespace. */
 export interface SkillsFace {
@@ -19,6 +26,141 @@ export interface SkillsFace {
   setSource: (id: string, enabled: boolean) => Promise<string | undefined>
   /** Switch one skill; resolves to a failure message when the write was refused. */
   setSkill: (source: string, name: string, enabled: boolean) => Promise<string | undefined>
+  /** Add a folder of skill bundles on the Host. */
+  addFolder: (path: string) => Promise<AddFolderOutcome>
+  /** Remove an added folder; resolves to a failure message when the write was refused. */
+  removeFolder: (path: string) => Promise<string | undefined>
+  /** Open the system folder chooser; absent where no chooser can open, null when cancelled. */
+  pickFolder?: () => Promise<string | null>
+  /** Open a new chat whose draft asks the agent to write a skill; absent without a workspace view. */
+  createWithAi?: () => void
+}
+
+/** Locale keys for the Host answers that refuse a folder. */
+const ADD_REFUSALS: Readonly<Record<Exclude<AddSkillFolderResult, 'added'>, SkillsLocaleKey>> = {
+  exists: 'folderExists',
+  relative: 'folderRelative',
+  missing: 'folderMissing',
+}
+
+/** The split button: the primary half adds a folder, the menu also offers creating a skill with the agent. */
+function AddSkillsMenu({ t, onAddFolder, createWithAi }: {
+  readonly t: SkillsSectionProps['t']
+  readonly onAddFolder: () => void
+  readonly createWithAi: (() => void) | undefined
+}): ReactNode {
+  const [open, setOpen] = useState(false)
+  const dismiss = (): void => { setOpen(false) }
+  return (
+    <span className={css.addGroup} role="group" aria-label={t('addSkills')}>
+      <Button variant="primary" size="sm" className={css.addPrimary} icon={<IconPlusOutlineRegular size={13} />}
+        onClick={() => { dismiss(); onAddFolder() }}>
+        <span className={css.addLabel}>{t('addSkills')}</span>
+      </Button>
+      <Menu open={open} onClose={dismiss} align="end" portal autoFocus listClassName={css.addMenu}
+        anchor={(
+          <Button variant="primary" size="sm" className={css.addMore}
+            aria-label={t('chooseAddMethod')} aria-haspopup="menu" aria-expanded={open}
+            onClick={() => { setOpen(value => !value) }}
+            onKeyDown={(event) => {
+              if (!open && event.key === 'ArrowDown') { event.preventDefault(); setOpen(true) }
+            }}>
+            <IconChevronDownOutlineRegular size={12} aria-hidden="true" />
+          </Button>
+        )}>
+        <MenuItemButton icon={<IconFolderOpenOutlineRegular size={14} />} onSelect={() => { dismiss(); onAddFolder() }}>
+          <span className={css.addMenuItem}>
+            <span>{t('addFolder')}</span>
+            <span className={css.addMenuDescription}>{t('addFolderDescription')}</span>
+          </span>
+        </MenuItemButton>
+        <MenuItemButton icon={<IconSparkleRegular size={14} />} disabled={createWithAi === undefined}
+          onSelect={() => { dismiss(); createWithAi?.() }}>
+          <span className={css.addMenuItem}>
+            <span>{t('createWithAi')}</span>
+            <span className={css.addMenuDescription}>
+              {t(createWithAi === undefined ? 'createWithAiUnavailable' : 'createWithAiDescription')}
+            </span>
+          </span>
+        </MenuItemButton>
+      </Menu>
+    </span>
+  )
+}
+
+/** The dialog that takes a folder path, typed or picked, and adds it as a source. */
+function AddFolderDialog({ t, open, onClose, onAdded, addFolder, pickFolder }: {
+  readonly t: SkillsSectionProps['t']
+  readonly open: boolean
+  readonly onClose: () => void
+  readonly onAdded: () => void
+  readonly addFolder: SkillsFace['addFolder']
+  readonly pickFolder: SkillsFace['pickFolder']
+}): ReactNode {
+  const [path, setPath] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    setPath('')
+    setError(null)
+    setPending(false)
+  }, [open])
+
+  const browse = async (pick: () => Promise<string | null>): Promise<void> => {
+    try {
+      const picked = await pick()
+      if (picked !== null) { setPath(picked); setError(null) }
+    } catch (failure) {
+      setError(t('pickFailed', { error: failure instanceof Error ? failure.message : String(failure) }))
+    }
+  }
+
+  const submit = async (): Promise<void> => {
+    const value = path.trim()
+    if (value.length === 0 || pending) return
+    setPending(true)
+    try {
+      const outcome = await addFolder(value)
+      if (outcome === 'added') { onAdded(); return }
+      setError(typeof outcome === 'string' ? t(ADD_REFUSALS[outcome]) : t('addFailed', { error: outcome.error }))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={t('folderDialogTitle')} description={t('folderDialogDescription')}
+      closeLabel={t('cancel')} className={css.folderDialog as string}
+      footer={(
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>{t('cancel')}</Button>
+          <Button variant="primary" size="sm" disabled={path.trim().length === 0 || pending} aria-busy={pending}
+            onClick={() => { void submit() }}>
+            {t('add')}
+          </Button>
+        </>
+      )}>
+      <form className={css.folderForm} onSubmit={(event) => { event.preventDefault(); void submit() }}>
+        <label className={css.folderLabel} htmlFor="skills-folder-path">{t('folderPathLabel')}</label>
+        <div className={css.folderRow}>
+          <Input id="skills-folder-path" className={css.folderInput as string} value={path} autoFocus spellCheck={false}
+            placeholder={t('folderPathPlaceholder')} aria-invalid={error !== null}
+            {...error === null ? {} : { 'aria-describedby': 'skills-folder-error' }}
+            onChange={(event) => { setPath(event.target.value); setError(null) }} />
+          {pickFolder === undefined
+            ? null
+            : (
+              <Button variant="outline" size="sm" className={css.folderBrowse} icon={<IconFolderOpenOutlineRegular size={13} />}
+                onClick={() => { void browse(pickFolder) }}>
+                {t('browse')}
+              </Button>
+            )}
+        </div>
+        {error === null ? null : <p id="skills-folder-error" className={css.error} role="alert">{error}</p>}
+      </form>
+    </Modal>
+  )
 }
 
 /** One row of the framework session-list snapshot, as far as the tab reads it. */
@@ -48,6 +190,13 @@ const SOURCE_TITLES: Readonly<Record<string, SkillsLocaleKey>> = {
   'user-agents': 'sourceUserAgents',
   custom: 'sourceCustom',
   bundled: 'sourceBundled',
+}
+
+/** Locale keys for the chip that says who owns a source. */
+const SOURCE_KINDS: Readonly<Record<LocalSourceView['kind'], SkillsLocaleKey>> = {
+  harness: 'harness',
+  application: 'application',
+  folder: 'folder',
 }
 
 /** The name a card shows: the parsed name, or the file path of a skill the parser rejected. */
@@ -107,8 +256,11 @@ function SkillCard({ skill, shadowedLabel, sourceEnabled, busy, t, onSetEnabled 
  * @param props - the `skills` locale seat and the injected Host face.
  * @returns the source groups with their search, cards, switches, and paging.
  */
-export function SkillsSection({ t, useSessions, load, setSource, setSkill }: SkillsSectionProps): ReactNode {
+export function SkillsSection({
+  t, useSessions, load, setSource, setSkill, addFolder, removeFolder, pickFolder, createWithAi,
+}: SkillsSectionProps): ReactNode {
   const [sources, setSources] = useState<readonly LocalSourceView[] | null>(null)
+  const [folderDialog, setFolderDialog] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [writeFailure, setWriteFailure] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -189,23 +341,36 @@ export function SkillsSection({ t, useSessions, load, setSource, setSkill }: Ski
           aria-label={t('search')}
           onChange={(event) => { setQuery(event.target.value) }}
         />
+        <AddSkillsMenu t={t} onAddFolder={() => { setFolderDialog(true) }} createWithAi={createWithAi} />
       </div>
+      <AddFolderDialog t={t} open={folderDialog} onClose={() => { setFolderDialog(false) }}
+        onAdded={() => { setFolderDialog(false); void refresh() }} addFolder={addFolder} pickFolder={pickFolder} />
       {failure !== null && <p className={css.error} role="alert">{t('failed', { error: failure })}</p>}
       {writeFailure !== null && <p className={css.error} role="alert">{t('writeFailed', { error: writeFailure })}</p>}
       {rows.length === 0 && <p className={css.message}>{t('noMatches')}</p>}
       {rows.map(({ source, skills }) => {
         const limit = limits[source.id] ?? PAGE_SIZE
         const enabledCount = source.enabled ? source.skills.filter(skill => skill.status === 'available').length : 0
-        const title = labelFor(source.id)
+        const title = labelFor(source.id) || source.displayPath
         return (
           <section key={source.id} className={css.group} data-source={source.id}>
             <div className={css.groupHead}>
               <h3 className={css.groupTitle}>{title}</h3>
-              <span className={css.chip}>{t(source.kind === 'application' ? 'application' : 'harness')}</span>
+              <span className={css.chip}>{t(SOURCE_KINDS[source.kind])}</span>
               <code className={css.path} title={t('pathTooltip', { path: source.path })}>{source.displayPath}</code>
               <span className={css.groupEnd}>
                 {!source.exists && <span className={css.warning}>{t('notFound')}</span>}
                 <span className={css.count}>{t('count', { enabled: String(enabledCount), total: String(source.skills.length) })}</span>
+                {source.kind !== 'folder'
+                  ? null
+                  : (
+                    <Tooltip label={t('removeFolderHint')} side="bottom" delayMs={500} focusDelayMs={500} portal>
+                      <Button variant="ghost" size="sm" className={css.removeButton}
+                        aria-label={t('removeFolder', { name: title })} disabled={busy.includes(source.id)}
+                        icon={<IconTrashOutlineRegular size={14} />}
+                        onClick={() => { void withBusy(source.id, () => removeFolder(source.path)) }} />
+                    </Tooltip>
+                  )}
                 <Switch
                   checked={source.enabled}
                   label={t('sourceToggle', { name: title })}

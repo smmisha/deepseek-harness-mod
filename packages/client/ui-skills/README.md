@@ -39,6 +39,7 @@ Switching a source or a skill calls the Host `skillSources` Remote, which update
 - **Overridden rows.** `Overridden by <source>` means a skill with the same name comes from a higher-priority source and the model sees that one.
 - **Broken rows.** `Frontmatter error` shows the parser message; the skill is ignored. `Folder not found` marks a source whose folder disappeared.
 - **Switch it off and it is gone.** A disabled skill is absent from the session catalog and from `/skill` on the next request; nothing restarts.
+- **Add skills.** The **Add skills** button opens a dialog that takes a folder path, typed or picked with the system folder chooser; each subfolder with a `SKILL.md` becomes a skill. Added folders are stored in the `skill-sources` profile entry, start switched on, carry the **Your folder** label, and have a remove button that drops them from the list without deleting files. **Create with AI** in the button's menu opens a new chat whose unsent draft asks the agent to write a skill under `~/.dsh/skills`.
 
 ## Understand the implementation
 

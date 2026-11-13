@@ -9,13 +9,16 @@
  *
  * @module @deepseek-ai/dsh-skill-sources
  */
+import { resolve } from 'node:path'
 import { Service, type Context, type Volatile } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { SkillSource } from '@deepseek-ai/dsh-skill'
-import { bindVisibility, type SkillApplication, type SkillVisibility, type SkillVisibilityState } from './visibility.ts'
+import {
+  bindVisibility, sameFolder, type SkillApplication, type SkillFolder, type SkillVisibility, type SkillVisibilityState,
+} from './visibility.ts'
 
-export type { SkillApplication, SkillVisibility, SkillVisibilityState } from './visibility.ts'
+export type { SkillApplication, SkillFolder, SkillFolderSource, SkillVisibility, SkillVisibilityState } from './visibility.ts'
 
 /** Profile entry id whose volatile Config holds the switches. */
 const SETTINGS_NAMESPACE = 'skill-sources'
@@ -34,6 +37,8 @@ export interface Config {
   sources?: Volatile<Record<string, SkillSourceSwitch>>
   /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
   skills?: Volatile<Record<string, Record<string, boolean>>>
+  /** Folders the reader added from the Skills tab, in the order they were added. */
+  folders?: Volatile<SkillFolder[]>
 }
 
 /** Default applications, mapping the folders the common coding agents use. */
@@ -57,19 +62,27 @@ const ConfigSchema = z.object({
     enabled: z.boolean().description('Whether this source contributes skills; absent keeps the source default.'),
   })).default({}).volatile(),
   skills: z.dict(z.dict(z.boolean())).default({}).volatile(),
+  folders: z.array(z.object({
+    dir: z.string().min(1).description('Absolute folder scanned for skill bundles.'),
+  })).default([]).volatile(),
 })
 
 /** State used when no provider configured anything. */
 const EMPTY_STATE: SkillVisibilityState = { sources: {}, skills: {} }
-
 /** The one service a provider and the Skills tab both use. */
 export interface SkillSourcesService {
   /** Current switches. */
   read(): SkillVisibilityState
   /** Configured other-application folders. */
   applications(): readonly SkillApplication[]
-  /** One read of the switches and applications, answering which sources and skills are visible. */
+  /** Folders the reader added. */
+  folders(): readonly SkillFolder[]
+  /** One read of the switches, applications, and added folders, answering which sources and skills are visible. */
   visibility(): SkillVisibility
+  /** Add one absolute folder; resolves false when the folder is already listed. */
+  addFolder(dir: string): Promise<boolean>
+  /** Remove one added folder; its files and switches stay untouched. */
+  removeFolder(dir: string): Promise<void>
   /** Switch one source; the per-skill switches are preserved. */
   setSource(source: SkillSource, enabled: boolean): Promise<void>
   /** Switch one skill inside its source. */
@@ -115,9 +128,40 @@ export default class SkillSources extends Service implements SkillSourcesService
     return this.config.applications ?? []
   }
 
-  /** One read of the switches and applications bound to the visibility rules. */
+  /** Folders the reader added, from the live Config field. */
+  folders(): readonly SkillFolder[] {
+    return this.config.folders?.get() ?? []
+  }
+
+  /** One read of the switches, applications, and added folders bound to the visibility rules. */
   visibility(): SkillVisibility {
-    return bindVisibility(this.read(), this.applications())
+    return bindVisibility(this.read(), this.applications(), this.folders())
+  }
+
+  /**
+   * Add one folder to the end of the list; a folder already listed under any letter case on Windows is kept once.
+   * @param dir - absolute folder; the Remote controller validates it before calling.
+   * @returns false when the folder was already listed and nothing was written.
+   */
+  async addFolder(dir: string): Promise<boolean> {
+    const folder = resolve(dir)
+    const current = this.folders()
+    if (current.some(entry => sameFolder(entry.dir, folder))) return false
+    await this.ownerContext.settings.update(SETTINGS_NAMESPACE, { folders: [...current, { dir: folder }] }, undefined)
+    this.invalidateAll()
+    return true
+  }
+
+  /**
+   * Remove one added folder; its files and any switches stored under its source stay untouched.
+   * @param dir - folder as listed, compared the way `addFolder` compares it.
+   */
+  async removeFolder(dir: string): Promise<void> {
+    const current = this.folders()
+    const next = current.filter(entry => !sameFolder(entry.dir, dir))
+    if (next.length === current.length) return
+    await this.ownerContext.settings.update(SETTINGS_NAMESPACE, { folders: next }, undefined)
+    this.invalidateAll()
   }
 
   /**

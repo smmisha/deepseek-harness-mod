@@ -168,6 +168,8 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'skillSources/describe': 'owner-only', // owner local skill inventory and source folders
   'skillSources/setSource': 'owner-only', // owner switches one local source on or off
   'skillSources/setSkill': 'owner-only', // owner switches one local skill on or off
+  'skillSources/addFolder': 'owner-only', // owner adds a local skill folder
+  'skillSources/removeFolder': 'owner-only', // owner removes an added skill folder
   'officeKit/generation': 'owner-only', // owner document export
   'officeKit/render': 'owner-only', // owner document export
   'speech/cancelPreparation': 'owner-only', // owner voice input

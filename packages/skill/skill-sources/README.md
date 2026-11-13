@@ -39,6 +39,7 @@ The switches are ordinary volatile Config fields, so they are edited from the pr
 |---|---|---|
 | `sources` | `{}` | Source switches by source id; absent keeps the source's default (harness folders on, other applications off) |
 | `skills` | `{}` | Per-skill switches by source id and skill name; absent means enabled |
+| `folders` | `[]` | Folders the reader added from the Skills tab, as `{ dir }` entries in the order they were added; each is a source named `folder:<dir>` that starts on |
 
 `skill-filesystem` reads them through the `skillSources` service and registers itself for invalidation, so the next model step publishes a replacement skill catalog and `/skill` follows the same state.
 

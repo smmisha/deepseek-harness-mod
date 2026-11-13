@@ -316,6 +316,52 @@ describe('FileSystemSkillProvider', () => {
     expect(withoutCwd.length).toBeGreaterThan(0)
   })
 
+  it('scans added folders, lists a missing one for removal, and validates folders the tab adds', async () => {
+    const home = await tempDir('added-folders')
+    const project = await tempDir('added-folders-project')
+    const team = await tempDir('added-folders-team')
+    const gone = join(home, 'gone-skills')
+    await writeSkill(team, 'team-skill', 'From an added folder')
+    const updates: unknown[] = []
+    const ctx = new Context()
+    ctx.provide('settings', { update: async (...args: unknown[]) => { updates.push(args) } })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, { applications: [], folders: [{ dir: team }, { dir: gone }] })
+    await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    // An added folder starts switched on, so its skill reaches the catalog.
+    expect(await ctx.skills.get('team-skill', { cwd: project })).toBeDefined()
+    const views = await describeSources(ctx, project)
+    expect(views.find(view => view.id === `folder:${team}`)).toMatchObject({
+      kind: 'folder', title: basename(team), exists: true, enabled: true,
+    })
+    expect(views.find(view => view.id === `folder:${gone}`)).toMatchObject({ kind: 'folder', exists: false, skills: [] })
+
+    const controller = ctx.root.get('skillSourcesController') as {
+      addFolder(dir: unknown): Promise<string>
+      removeFolder(dir: string): Promise<void>
+    }
+    expect(await controller.addFolder('relative/skills')).toBe('relative')
+    expect(await controller.addFolder(42)).toBe('relative')
+    expect(await controller.addFolder(join(home, 'nowhere'))).toBe('missing')
+    expect(await controller.addFolder(`  ${team}  `)).toBe('exists')
+    const extra = await tempDir('added-folders-extra')
+    expect(await controller.addFolder(extra)).toBe('added')
+    await controller.removeFolder(team)
+    expect(updates).toEqual([
+      ['skill-sources', { folders: [{ dir: team }, { dir: gone }, { dir: extra }] }, undefined],
+      ['skill-sources', { folders: [{ dir: gone }] }, undefined],
+    ])
+  })
+
+  it('expands a home-relative folder the tab adds', async () => {
+    const home = await tempDir('added-folders-tilde')
+    const ctx = await setupLocal(home)
+    const controller = ctx.root.get('skillSourcesController') as { addFolder(dir: string): Promise<string> }
+    // `~` alone is the Host user's home, which exists; `~name` is not a home reference.
+    expect(await controller.addFolder('~')).toBe('added')
+    expect(await controller.addFolder('~nobody/skills')).toBe('relative')
+  })
+
   it.skipIf(process.platform === 'win32')('shortens roots outside the home folder and a folder equal to home', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'dsh-fs-'))
     tempDirs.push(outside)
@@ -344,7 +390,10 @@ describe('FileSystemSkillProvider', () => {
         skills: {},
       }),
       applications: () => applications,
-      visibility: () => ({ applications, sourceEnabled: () => true, skillEnabled: () => true }),
+      folders: () => [],
+      visibility: () => ({ applications, folders: [], sourceEnabled: () => true, skillEnabled: () => true }),
+      addFolder: async () => true,
+      removeFolder: async () => undefined,
       setSource: async () => undefined,
       setSkill: async () => undefined,
       register: () => () => {},

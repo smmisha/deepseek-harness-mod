@@ -12,13 +12,13 @@
 import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { unwatchFile, watchFile, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type { SkillVisibility } from '@deepseek-ai/dsh-skill-sources'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import type { LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
-export type { LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
+import type { AddSkillFolderResult, LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
+export type { AddSkillFolderResult, LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
 import chokidar from 'chokidar'
 import z from '@deepseek-ai/schemastery'
 import { parse as parseYaml } from 'yaml'
@@ -40,6 +40,7 @@ import {
 /** Visibility when no skill-sources service is mounted: no application folders, every source and skill on. */
 const ALL_VISIBLE: SkillVisibility = {
   applications: [],
+  folders: [],
   sourceEnabled: () => true,
   skillEnabled: () => true,
 }
@@ -47,6 +48,8 @@ const ALL_VISIBLE: SkillVisibility = {
 const PROJECT_DSH_RANK = 100
 const PROJECT_AGENTS_RANK = 200
 const CUSTOM_RANK = 300
+/** Folders the reader added rank below configured custom roots and above the user roots; ties keep their added order. */
+const FOLDER_RANK = 350
 const USER_DSH_RANK = 400
 const USER_AGENTS_RANK = 500
 /** Skills from another application's folder never outrank the harness's own roots. */
@@ -202,6 +205,30 @@ export class SkillSourcesController extends TypertRemoteService {
   @Remote
   setSkill(source: string, name: string, enabled: boolean): Promise<void> {
     return this.ctx.skillSources.setSkill(source, name, enabled)
+  }
+
+  /**
+   * Add a folder of skill bundles the reader picked or typed; `~` expands to the Host user's home.
+   * @param dir - folder path from the Skills tab.
+   * @returns `added`, `exists` when it was already listed, `relative` for a path that is not absolute after
+   *   expansion, or `missing` when no such folder exists on the Host.
+   */
+  @Remote
+  async addFolder(dir: string): Promise<AddSkillFolderResult> {
+    const trimmed = typeof dir === 'string' ? dir.trim() : ''
+    const expanded = /^~(?=$|[\\/])/u.test(trimmed) ? join(homedir(), trimmed.slice(1)) : trimmed
+    if (!isAbsolute(expanded)) return 'relative'
+    if (!await pathExists(expanded, optionalFileSystem(this.ctx))) return 'missing'
+    return await this.ctx.skillSources.addFolder(expanded) ? 'added' : 'exists'
+  }
+
+  /**
+   * Remove a folder the reader added; its files stay on disk.
+   * @param dir - the folder as the described source row reports it.
+   */
+  @Remote
+  removeFolder(dir: string): Promise<void> {
+    return this.ctx.skillSources.removeFolder(dir)
   }
 }
 
@@ -453,8 +480,12 @@ export class FileSystemSkillProvider implements SkillProvider {
     }
     const views: LocalSourceView[] = []
     for (const { root, candidates } of entries) {
-      const kind = gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
-      const title = gate.applications.find(application => application.id === root.source)?.title ?? root.source
+      const added = gate.folders.some(folder => folder.id === root.source)
+      const kind = added ? 'folder'
+        : gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
+      // An added folder is named by its last segment; a drive root has none and the tab shows its path instead.
+      const title = added ? basename(root.path)
+        : gate.applications.find(application => application.id === root.source)?.title ?? root.source
       const enabled = gate.sourceEnabled(root.source)
       const displayPath = toDisplayPath(root.path, options.cwd)
       if (root.missing === true) {
@@ -527,7 +558,20 @@ export class FileSystemSkillProvider implements SkillProvider {
     if (this.bundledSkillDir !== undefined) {
       roots.push({ path: this.bundledSkillDir, source: 'bundled', rank: BUNDLED_SKILL_RANK, trustedHost: true })
     }
-    for (const [index, application] of this.gate().applications.entries()) {
+    const gate = this.gate()
+    for (const folder of gate.folders) {
+      // A missing added folder stays listed in the Skills tab so the reader can remove it.
+      const exists = await pathExists(folder.dir, optionalFileSystem(this.ctx))
+      if (!exists && !includeMissingApplications) continue
+      roots.push({
+        path: folder.dir,
+        source: folder.id,
+        rank: FOLDER_RANK,
+        skipSystem: true,
+        ...(!exists ? { missing: true } : {}),
+      })
+    }
+    for (const [index, application] of gate.applications.entries()) {
       // A folder the other application never created is not a source at all,
       // except when the Skills tab asks to show a previously enabled one.
       const resolvedDir = resolveApplicationDir(application.dir)

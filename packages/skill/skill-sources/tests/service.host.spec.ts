@@ -1,8 +1,9 @@
 /** Unit coverage for the profile-owned switches and the application list. */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
+import { resolve } from 'node:path'
 import SkillSources, { type SkillApplication } from '../src/index.ts'
-import { skillEnabled, sourceEnabled } from '../src/visibility.ts'
+import { bindVisibility, folderSourceId, sameFolder, skillEnabled, sourceEnabled } from '../src/visibility.ts'
 
 const APPS: readonly SkillApplication[] = [
   { id: 'claude-code', dir: '~/.claude/skills', title: 'Claude Code' },
@@ -13,6 +14,7 @@ async function setup(config: {
   applications?: SkillApplication[]
   sources?: Record<string, { enabled: boolean }>
   skills?: Record<string, Record<string, boolean>>
+  folders?: { dir: string }[]
 } = {}): Promise<{ ctx: Context; update: ReturnType<typeof vi.fn> }> {
   const ctx = new Context()
   const update = vi.fn(async () => undefined)
@@ -43,6 +45,20 @@ describe('visibility rules', () => {
     expect(skillEnabled(state, 'claude-code', 'x', APPS)).toBe(false)
     expect(skillEnabled(state, 'claude-code', 'y', APPS)).toBe(true)
     expect(skillEnabled({ ...state, sources: { 'claude-code': { enabled: false } } }, 'claude-code', 'y', APPS)).toBe(false)
+  })
+
+  it('compares folders by letter case only on Windows', () => {
+    expect(sameFolder('/team/Skills', '/team/skills', 'win32')).toBe(true)
+    expect(sameFolder('/team/Skills', '/team/skills', 'linux')).toBe(false)
+    expect(sameFolder('/team/skills', '/team/skills/', 'linux')).toBe(true)
+    expect(sameFolder('/team/a', '/team/b')).toBe(false)
+  })
+
+  it('binds added folders as sources that start switched on', () => {
+    const visibility = bindVisibility({ sources: {}, skills: {} }, APPS, [{ dir: 'D:\\team' }])
+    expect(visibility.folders).toEqual([{ id: folderSourceId('D:\\team'), dir: 'D:\\team' }])
+    expect(visibility.sourceEnabled(folderSourceId('D:\\team'))).toBe(true)
+    expect(bindVisibility({ sources: {}, skills: {} }, APPS).folders).toEqual([])
   })
 
   it('treats an application added through configuration as off by default', () => {
@@ -89,6 +105,7 @@ describe('SkillSources service', () => {
     ctx.provide('settings', { update: async () => undefined })
     const service = new SkillSources(ctx, {})
     expect(service.applications()).toEqual([])
+    expect(service.folders()).toEqual([])
     expect(service.read()).toEqual({ sources: {}, skills: {} })
   })
 
@@ -99,6 +116,25 @@ describe('SkillSources service', () => {
       skills: { 'claude-code': { review: false } },
     })
     expect(ctx.skillSources.read()).toEqual({ sources: { 'claude-code': { enabled: true } }, skills: { 'claude-code': { review: false } } })
+  })
+
+  it('adds a folder once, removes it, and invalidates providers after each write', async () => {
+    const team = resolve('team-skills')
+    const { ctx, update } = await setup({ folders: [{ dir: team }] })
+    const invalidate = vi.fn()
+    ctx.skillSources.register(invalidate)
+    expect(ctx.skillSources.folders()).toEqual([{ dir: team }])
+    expect(ctx.skillSources.visibility().folders).toEqual([{ id: folderSourceId(team), dir: team }])
+    // The settings stub does not feed writes back, so each call sees the configured list.
+    await expect(ctx.skillSources.addFolder(team)).resolves.toBe(false)
+    const extra = resolve('extra-skills')
+    await expect(ctx.skillSources.addFolder(extra)).resolves.toBe(true)
+    expect(update).toHaveBeenLastCalledWith('skill-sources', { folders: [{ dir: team }, { dir: extra }] }, undefined)
+    await ctx.skillSources.removeFolder(extra)
+    expect(update).toHaveBeenCalledTimes(1)
+    await ctx.skillSources.removeFolder(team)
+    expect(update).toHaveBeenLastCalledWith('skill-sources', { folders: [] }, undefined)
+    expect(invalidate).toHaveBeenCalledTimes(2)
   })
 
   it('answers visibility from one read of the switches and applications', async () => {
