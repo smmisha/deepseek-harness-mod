@@ -33,11 +33,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_WINDOWS == 'blacksmith' && 'blacksmith-16vcpu-windows-2025'
-          || vars.DSH_CI_FAILOVER_WINDOWS == 'standard' && 'windows-2025'
           || vars.DSH_CI_FAILOVER_WINDOWS == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "dsh-win-ci", "windows"]')
-          || 'dsh-windows-2025-16core' }}
+          || 'windows-2025' }}
     name: windows node 24 / build & observational
     timeout-minutes: 60
     env:
@@ -123,11 +122,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_WINDOWS == 'blacksmith' && 'blacksmith-16vcpu-windows-2025'
-          || vars.DSH_CI_FAILOVER_WINDOWS == 'standard' && 'windows-2025'
           || vars.DSH_CI_FAILOVER_WINDOWS == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "dsh-win-ci", "windows"]')
-          || 'dsh-windows-2025-16core' }}
+          || 'windows-2025' }}
     name: windows node 24 / coverage
     timeout-minutes: 120
     env:
@@ -202,11 +200,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: >-
       ${{ vars.DSH_CI_FAILOVER_WINDOWS == 'blacksmith' && 'blacksmith-2vcpu-windows-2025'
-          || vars.DSH_CI_FAILOVER_WINDOWS == 'standard' && 'windows-2025'
           || vars.DSH_CI_FAILOVER_WINDOWS == 'selfhosted'
           && github.event.pull_request.user.login != 'dependabot[bot]'
           && fromJSON('["self-hosted", "dsh-win-ci", "windows"]')
-          || 'dsh-windows-2025-16core' }}
+          || 'windows-2025' }}
     name: windows node 24 / native tests
     timeout-minutes: 60
     steps:
