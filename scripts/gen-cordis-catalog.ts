@@ -130,6 +130,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   settings: 'settings.md',
   sessionTitle: 'session-title.md',
   skills: 'skills.md',
+  skillSources: 'skills.md',
   spillStore: 'spill.md',
   storage: 'storage.md',
   storageDomain: 'storage.md',
@@ -758,11 +759,6 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SkillRegistration: 'skills.md',
   SkillViewOptions: 'skills.md',
   SkillSummary: 'skills.md',
-  SkillApplication: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
-  SkillFolder: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
-  SkillSource: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
-  SkillVisibility: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
-  SkillVisibilityState: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
   SaveTextSpill: 'spill.md',
   SpillRef: 'spill.md',
   ContinuableCreateRequest: 'subagent.md',
@@ -1160,6 +1156,11 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   AgentTerminalRequest: 'Agent terminal allocation fields are owned by packages/api/terminal-controller/README.md',
   TerminalScreenRequest: 'Browser terminal screen reads are owned by packages/api/terminal-controller/README.md',
   TerminalScreenPage: 'Browser terminal screen reads are owned by packages/api/terminal-controller/README.md',
+  SkillApplication: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
+  SkillFolder: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
+  SkillSource: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
+  SkillVisibility: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
+  SkillVisibilityState: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

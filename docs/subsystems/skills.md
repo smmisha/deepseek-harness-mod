@@ -327,6 +327,75 @@ async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition
 
 Source: [`packages/skill/skill/src/index.ts`](../../packages/skill/skill/src/index.ts)
 
+<a id="ctxskillsources--skillsourcesservice"></a>
+
+### `ctx.skillSources` — `SkillSourcesService`
+
+The one service a provider and the Skills tab both use.
+
+```ts cordis-catalog
+/**
+ * Current switches.
+ * @returns the source and per-skill switches as stored.
+ */
+read(): SkillVisibilityState
+
+/**
+ * Configured other-application folders.
+ * @returns the application folders in configuration order.
+ */
+applications(): readonly SkillApplication[]
+
+/**
+ * Folders the reader added.
+ * @returns the added folders in the order they were added.
+ */
+folders(): readonly SkillFolder[]
+
+/**
+ * One read of the switches, applications, and added folders, answering which sources and skills are visible.
+ * @returns the visibility view over the current configuration.
+ */
+visibility(): SkillVisibility
+
+/**
+ * Add one local absolute folder, switched off until the reader turns its source on; refuses any other path.
+ * @param dir - local absolute folder to scan for skill bundles.
+ * @returns false when the folder is already listed, true when it was added.
+ */
+addFolder(dir: string): Promise<boolean>
+
+/**
+ * Remove one added folder; its files and switches stay untouched.
+ * @param dir - absolute folder as it was added.
+ */
+removeFolder(dir: string): Promise<void>
+
+/**
+ * Switch one source; the per-skill switches are preserved.
+ * @param source - source to switch.
+ * @param enabled - whether the source contributes skills.
+ */
+setSource(source: SkillSource, enabled: boolean): Promise<void>
+
+/**
+ * Switch one skill inside its source.
+ * @param source - source that holds the skill.
+ * @param name - skill name inside that source.
+ * @param enabled - whether the skill is visible.
+ */
+setSkill(source: SkillSource, name: string, enabled: boolean): Promise<void>
+
+/**
+ * Register the invalidator of one provider instance.
+ * @param invalidate - called after every write so the provider republishes its catalog.
+ * @returns the disposer that unregisters the invalidator.
+ */
+register(invalidate: () => void): () => void
+```
+
+Source: [`packages/skill/skill-sources/src/index.ts`](../../packages/skill/skill-sources/src/index.ts)
+
 <a id="skills-events"></a>
 
 ### `skills/*` events
