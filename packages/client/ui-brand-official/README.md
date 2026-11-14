@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package supplies a click-triggered pixel whale on the blank home and gives an `official` client build the DeepSeek Harness sidebar artwork. The shipped Web and Desktop compositions load it by default. Other build profiles retain their existing branding. The hero mark stays on its animated fish fallback. The background owns only temporary canvas resources and adds no model requests.
+This package supplies a click-triggered pixel whale on the blank home and gives `official` and `local` client builds the DeepSeek Harness sidebar artwork, with a small `smmisha` signature on `local` builds. The shipped Web and Desktop compositions load it by default. Any other build profile keeps the shell fallbacks. The hero mark stays on its animated fish fallback. The background owns only temporary canvas resources and adds no model requests.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This package supplies a click-triggered pixel whale on the blank home and gives 
 <a id="use-this-package"></a>
 ## Use this package
 
-The shipped Web and Desktop compositions already mount this plugin. Home feedback needs no extra installation or enablement; an `official` client build also registers the DeepSeek sidebar artwork.
+The shipped Web and Desktop compositions already mount this plugin. Home feedback needs no extra installation or enablement; `official` and `local` client builds also register the DeepSeek sidebar artwork.
 
 ### Choosing the profile
 
