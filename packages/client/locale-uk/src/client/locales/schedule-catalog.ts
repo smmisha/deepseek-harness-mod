@@ -29,6 +29,8 @@ export const ukScheduleCatalog = {
   'frequency.cron': 'Власний ({timeZone})',
   'frequency.cronLocal': 'Власний',
   'frequency.cronRule': '{rule} ({timeZone})',
+  // The cron and unit wording mirrors the schedule manager pack, as the two English dictionaries do.
+  /* jscpd:ignore-start */
   'cron.list.join': ', ',
   'cron.part.join': ' ',
   'cron.weekday.name': '{weekday}',
@@ -74,6 +76,7 @@ export const ukScheduleCatalog = {
   'relative.now': 'Настав час',
   'relative.future': 'через {value} {unit}',
   'relative.overdue': 'прострочено на {value} {unit}',
+  /* jscpd:ignore-end */
   'mark.aria': '{count} завдань автоматизації',
   'hover.more': 'ще {count}',
 } satisfies Record<string, string>

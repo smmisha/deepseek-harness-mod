@@ -25,6 +25,8 @@ export const ukOpenInApp = {
   'path.revealed': 'Розташування файла показано на іншому пристрої',
   'path.openError': 'Не вдалося відкрити. Спробуйте ще раз.',
   'path.revealError': 'Не вдалося показати розташування файла. Спробуйте ще раз.',
+  // Product names stay verbatim, so this run matches the English dictionary's shared list.
+  /* jscpd:ignore-start */
   'app.cursor': 'Cursor',
   'app.vscode': 'VS Code',
   'app.vscodeinsiders': 'VS Code Insiders',
@@ -56,6 +58,7 @@ export const ukOpenInApp = {
   'app.gnometerminal': 'GNOME Terminal',
   'app.konsole': 'Konsole',
   'app.finder': 'Finder',
+  /* jscpd:ignore-end */
   'app.explorer': 'Провідник файлів',
   'app.filemanager': 'Файли',
   'app.terminal': 'Термінал',
