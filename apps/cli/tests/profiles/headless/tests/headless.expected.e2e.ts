@@ -110,7 +110,9 @@ async function deepseekDefaultsServer(
       requests.push(JSON.parse(body) as JsonObject)
       paths.push(request.url ?? '')
       response.writeHead(200, { 'content-type': 'text/event-stream' })
-      let keepAlives = 3
+      // Comments must outlast the fixture's 1000 ms idle timeout while each gap
+      // stays far below it, so a slow runner cannot trip the watchdog between them.
+      let keepAlives = 20
       const write = (): void => {
         // One-shot teardown may cancel background title work after the main response.
         if (keepAlives-- > 0
