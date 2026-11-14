@@ -110,9 +110,11 @@ async function deepseekDefaultsServer(
       requests.push(JSON.parse(body) as JsonObject)
       paths.push(request.url ?? '')
       response.writeHead(200, { 'content-type': 'text/event-stream' })
-      // Comments must outlast the fixture's 1000 ms idle timeout while each gap
-      // stays far below it, so a slow runner cannot trip the watchdog between them.
-      let keepAlives = 20
+      // On the DeepSeek route the comments must outlast the fixture's 1000 ms idle
+      // timeout while each gap stays far below it, so a slow runner cannot trip the
+      // watchdog between them. The pi-ai route does not count comments as activity,
+      // so it keeps the short three-comment prelude well inside its timeout.
+      let keepAlives = options.piAiCompatibility === true ? 3 : 20
       const write = (): void => {
         // One-shot teardown may cancel background title work after the main response.
         if (keepAlives-- > 0
