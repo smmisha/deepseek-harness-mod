@@ -1209,7 +1209,9 @@ function optionalFileSystem(ctx: Context): FileSystem | undefined {
   return ctx.get('fs')
 }
 
-async function readSkillText(path: string, root: string, ctx: Context, signal?: AbortSignal, trustedHost = false): Promise<SkillText | undefined> {
+async function readSkillText(
+  path: string, root: string, ctx: Context, signal?: AbortSignal, trustedHost = false,
+): Promise<SkillText | undefined> {
   signal?.throwIfAborted()
   const fs = optionalFileSystem(ctx)
   if (fs !== undefined && !trustedHost) {
