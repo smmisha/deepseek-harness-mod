@@ -33,6 +33,15 @@ const MAX_LOGIN_ENTRIES = 16
 /** Lowercase host name, without scheme, path, port, or wildcard characters. */
 const HOST_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/u
 
+/**
+ * Remainder a trailing-dot provider prefix may leave: one country-code label
+ * (`accounts.google.ca`), the `co.` or `com.` second-level form
+ * (`accounts.google.co.uk`, `accounts.google.com.au`), or `com`. A longer
+ * remainder names a domain another party registers, such as `evil.com` in
+ * `accounts.google.evil.com`, so a prefix cannot vouch for it.
+ */
+const PROVIDER_PREFIX_REMAINDER = /^(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$/u
+
 /** Upper bound on a configured navigation allowlist. */
 const MAX_ALLOWED_ORIGINS = 8
 
@@ -86,7 +95,11 @@ function readLoginHost(value: unknown): string {
   return entry
 }
 
-/** Normalize one provider pattern from untrusted input. */
+/**
+ * Normalize one provider pattern from untrusted input: a leading-dot domain
+ * suffix, or a trailing-dot provider prefix that the matcher follows with one
+ * TLD-shaped regional suffix only.
+ */
 function readLoginSuffix(value: unknown): string {
   if (typeof value !== 'string') throw new Error('desktop chat guest: invalid provider suffix')
   const entry = value.trim().toLowerCase()
@@ -163,6 +176,20 @@ function providerRejection(value: string): boolean {
 }
 
 /**
+ * Whether one provider pattern matches a host.
+ * @param host - lowercase hostname of the candidate URL.
+ * @param pattern - normalized provider host or pattern.
+ * @returns true for an exact host or a leading-dot suffix; a trailing-dot
+ *   prefix matches only when it leaves a TLD-shaped remainder, so
+ *   `accounts.google.evil.com` cannot pass as a Google account host.
+ */
+function loginPatternMatches(host: string, pattern: string): boolean {
+  if (pattern.startsWith('.')) return host.endsWith(pattern)
+  if (!host.startsWith(pattern)) return false
+  return PROVIDER_PREFIX_REMAINDER.test(host.slice(pattern.length))
+}
+
+/**
  * Whether a chat navigation belongs to a sign-in provider hop.
  * @param value - candidate main-frame URL.
  * @param policy - the chat guest's provider hosts and patterns.
@@ -174,7 +201,7 @@ export function chatLoginNavigationAllowed(value: string, policy: Pick<ChatPolic
   if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false
   const host = url.hostname.toLowerCase()
   return policy.loginHosts.includes(host)
-    || policy.loginHostSuffixes.some(pattern => pattern.startsWith('.') ? host.endsWith(pattern) : host.startsWith(pattern))
+    || policy.loginHostSuffixes.some(pattern => loginPatternMatches(host, pattern))
 }
 
 /** A page the shell opens in the system browser instead of embedding it. */

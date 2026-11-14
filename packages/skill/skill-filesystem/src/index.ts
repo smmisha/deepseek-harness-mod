@@ -58,6 +58,41 @@ const DEFAULT_WATCH_STABILITY_THRESHOLD_MS = 200
 const DEFAULT_WATCH_POLL_INTERVAL_MS = 100
 const DEFAULT_WATCH_MAX_PROJECTS = 128
 
+/** Why a folder path is refused; `invalid` covers network, device, and parent-segment spellings. */
+type FolderPathProblem = 'relative' | 'invalid'
+
+/**
+ * Classify a folder path before the provider opens it. Two leading separators reject the Win32
+ * UNC and device namespaces (`\\server\share`, `\\?\C:\x`, `\\.\pipe\x`) on every platform:
+ * scanning them would connect to an attacker-named SMB endpoint and register a remote tree as
+ * skills. A parent segment is refused too, so the recorded folder is the one the reader saw.
+ * @param path - folder path after `~` expansion.
+ * @returns the refusal reason, or `undefined` when the folder may be scanned.
+ */
+function folderPathProblem(path: string): FolderPathProblem | undefined {
+  if (path.length === 0) return 'relative'
+  if (/^[\\/]{2}/u.test(path)) return 'invalid'
+  if (/(?:^|[\\/])\.\.(?:[\\/]|$)/u.test(path)) return 'invalid'
+  return isAbsolute(path) ? undefined : 'relative'
+}
+
+/**
+ * Refuse a folder the Skills provider must not scan: a network share or device namespace, a
+ * relative path, or a path carrying a parent (`..`) segment. The two leading separators that
+ * spell a Win32 device prefix are rejected on every platform, so the check holds where the Host
+ * is not Windows but the reader pastes a Windows path.
+ * @param path - absolute folder path, after `~` expansion.
+ * @throws {TypeError} when the path is not a local absolute folder path.
+ */
+export function assertFolderPathAcceptable(path: string): void {
+  const problem = folderPathProblem(path)
+  if (problem === undefined) return
+  const reason = problem === 'relative'
+    ? 'is not an absolute folder path'
+    : 'names a network or device location, or contains a parent segment'
+  throw new TypeError(`skill-filesystem: "${path}" ${reason}`)
+}
+
 /** Plugin name used by the Loader row. */
 export const name = 'skill-filesystem'
 
@@ -140,6 +175,8 @@ interface ParsedSkill extends SkillText {
 interface LocalLocator {
   path: string
   directory: string
+  /** Root the skill was discovered under; a read refuses a file that resolves outside it. */
+  root: string
 }
 
 interface ResolvedWatchConfig {
@@ -211,13 +248,15 @@ export class SkillSourcesController extends TypertRemoteService {
    * Add a folder of skill bundles the reader picked or typed; `~` expands to the Host user's home.
    * @param dir - folder path from the Skills tab.
    * @returns `added`, `exists` when it was already listed, `relative` for a path that is not absolute after
-   *   expansion, or `missing` when no such folder exists on the Host.
+   *   expansion, `missing` when no such folder exists on the Host, or `invalid` for a network/device path
+   *   or one carrying a parent segment.
    */
   @Remote
   async addFolder(dir: string): Promise<AddSkillFolderResult> {
     const trimmed = typeof dir === 'string' ? dir.trim() : ''
     const expanded = /^~(?=$|[\\/])/u.test(trimmed) ? join(homedir(), trimmed.slice(1)) : trimmed
-    if (!isAbsolute(expanded)) return 'relative'
+    const problem = folderPathProblem(expanded)
+    if (problem !== undefined) return problem
     if (!await pathExists(expanded, optionalFileSystem(this.ctx))) return 'missing'
     return await this.ctx.skillSources.addFolder(expanded) ? 'added' : 'exists'
   }
@@ -404,7 +443,9 @@ export class FileSystemSkillProvider implements SkillProvider {
     /* v8 ignore next 2 -- list() already drops switched-off skills; this guard answers a direct get(). */
     if (!gate.skillEnabled(candidate.source, candidate.name)) return undefined
     const locator = candidate.locator as LocalLocator
-    const parsed = await parseSkillFile(locator.path, this.ctx, options.signal, candidate.source === 'bundled')
+    const parsed = await parseSkillFile(
+      locator.path, locator.root, this.ctx, options.signal, candidate.source === 'bundled',
+    )
     if (parsed === undefined) return undefined
     return {
       name: parsed.name,
@@ -1068,13 +1109,13 @@ async function discoverRoot(
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (root.skipSystem && entry.name === '.system') continue
     const locator = entry.type === 'directory'
-      ? { path: join(entry.path, 'SKILL.md'), directory: entry.path }
+      ? { path: join(entry.path, 'SKILL.md'), directory: entry.path, root: root.path }
       : entry.type === 'file' && entry.name.endsWith('.md')
-        ? { path: entry.path, directory: root.path }
+        ? { path: entry.path, directory: root.path, root: root.path }
         : undefined
     if (locator === undefined) continue
     const parsed = await parseSkillFile(
-      locator.path, ctx, undefined, root.trustedHost === true,
+      locator.path, root.path, ctx, undefined, root.trustedHost === true,
       report === undefined ? undefined : (message: string) => { report(locator.path, message) },
     )
     if (parsed === undefined) continue
@@ -1141,10 +1182,10 @@ async function listSkillRootEntriesFromNode(root: SkillRoot, ctx: Context): Prom
 }
 
 async function parseSkillFile(
-  path: string, ctx: Context, signal?: AbortSignal, trustedHost = false,
+  path: string, root: string, ctx: Context, signal?: AbortSignal, trustedHost = false,
   report?: (message: string) => void,
 ): Promise<ParsedSkill | undefined> {
-  const raw = await readSkillText(ctx, path, signal, trustedHost)
+  const raw = await readSkillText(path, root, ctx, signal, trustedHost)
   signal?.throwIfAborted()
   if (raw === undefined) {
     return undefined
@@ -1202,14 +1243,18 @@ function optionalFileSystem(ctx: Context): FileSystem | undefined {
   return ctx.get('fs')
 }
 
-async function readSkillText(ctx: Context, path: string, signal?: AbortSignal, trustedHost = false): Promise<SkillText | undefined> {
+async function readSkillText(path: string, root: string, ctx: Context, signal?: AbortSignal, trustedHost = false): Promise<SkillText | undefined> {
   signal?.throwIfAborted()
   const fs = optionalFileSystem(ctx)
   if (fs !== undefined && !trustedHost) {
-    return await readSkillTextFromFileSystem(ctx, fs, path, signal)
+    return await readSkillTextFromFileSystem(ctx, fs, path, root, signal)
   }
   try {
     const resolvedPath = await realpath(path)
+    if (!await realPathWithin(root, resolvedPath)) {
+      ctx.logger.warn(`skill file ${path} ignored: it resolves outside its source folder ${root}`)
+      return undefined
+    }
     return { path: resolvedPath, content: await readFile(resolvedPath, { encoding: 'utf8', signal }) }
   } catch (error) {
     signal?.throwIfAborted()
@@ -1218,19 +1263,38 @@ async function readSkillText(ctx: Context, path: string, signal?: AbortSignal, t
   }
 }
 
+/**
+ * Whether an already-resolved instruction file stays inside its root.
+ * Lexical containment is not enough: a root can hold a symbolic link whose target is a file
+ * outside the root, so discovery and loading compare real paths on both sides instead.
+ * @param root - configured root the skill was discovered under.
+ * @param resolvedFile - real path of the instruction file.
+ * @returns true when the file is the root or lies beneath it.
+ */
+async function realPathWithin(root: string, resolvedFile: string): Promise<boolean> {
+  return containedSegments(await realpath(root), resolvedFile) !== undefined
+}
+
 async function readSkillTextFromFileSystem(
-  ctx: Context, fs: FileSystem, path: string, signal?: AbortSignal,
+  ctx: Context, fs: FileSystem, path: string, root: string, signal?: AbortSignal,
 ): Promise<SkillText | undefined> {
   // A missing or temporarily inaccessible skill file is not fatal to discovery.
   signal?.throwIfAborted()
   let target
+  let rootTarget
   try {
     target = await fs.resolve(path)
+    rootTarget = await fs.resolve(root)
   } catch (error) {
     if (isAbsentSkillPathError(error)) return undefined
     throw error
   }
   signal?.throwIfAborted()
+  // Both targets are canonical, so containment follows a symbolic link on either side.
+  if (!fs.contains(rootTarget, target)) {
+    ctx.logger.warn(`skill file ${path} ignored: it resolves outside its source folder ${root}`)
+    return undefined
+  }
   let info
   try {
     info = await fs.stat(target, signal)

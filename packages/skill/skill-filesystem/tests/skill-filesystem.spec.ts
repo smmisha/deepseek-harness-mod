@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
@@ -61,7 +61,8 @@ class TestFileSystem extends FileSystem {
   override fileUrl(target: FsTarget): string { return `file://${target.targetKey}` }
 
   override contains(parent: FsTarget, child: FsTarget): boolean {
-    return child.targetKey === parent.targetKey || String(child.targetKey).startsWith(`${parent.targetKey}/`)
+    const rest = relative(String(parent.targetKey), String(child.targetKey))
+    return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest))
   }
 
   override async stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined> {
@@ -218,6 +219,32 @@ describe('dsh-skill-filesystem plugin exports', () => {
   })
 })
 
+describe('folder path validation', () => {
+  it('accepts local absolute folders', () => {
+    expect(() => SkillFileSystem.assertFolderPathAcceptable(homedir())).not.toThrow()
+    expect(() => SkillFileSystem.assertFolderPathAcceptable(join(homedir(), 'skills'))).not.toThrow()
+  })
+
+  it('refuses network shares, device namespaces, relative paths, and parent segments', () => {
+    const refused = [
+      String.raw`\\server\share`,
+      String.raw`\\?\C:\skills`,
+      String.raw`\\.\pipe\skills`,
+      '//attacker/share',
+      'relative/skills',
+      '',
+      String.raw`C:\skills\..\elsewhere`,
+    ]
+    for (const path of refused) {
+      expect(() => SkillFileSystem.assertFolderPathAcceptable(path), path).toThrow(TypeError)
+    }
+    expect(() => SkillFileSystem.assertFolderPathAcceptable(String.raw`\\server\share`))
+      .toThrow('network or device location')
+    expect(() => SkillFileSystem.assertFolderPathAcceptable('relative/skills'))
+      .toThrow('not an absolute folder path')
+  })
+})
+
 describe('FileSystemSkillProvider', () => {
   it('keeps another application folder switched off until the source is enabled', async () => {
     const home = await tempDir('application-roots')
@@ -328,7 +355,8 @@ describe('FileSystemSkillProvider', () => {
     await ctx.plugin(SkillRegistry)
     await ctx.plugin(SkillSources, { applications: [], folders: [{ dir: team }, { dir: gone }] })
     await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
-    // An added folder starts switched on, so its skill reaches the catalog.
+    // A folder stored without a switch record keeps the non-application
+    // default, so its skill reaches the catalog as it always did.
     expect(await ctx.skills.get('team-skill', { cwd: project })).toBeDefined()
     const views = await describeSources(ctx, project)
     expect(views.find(view => view.id === `folder:${team}`)).toMatchObject({
@@ -342,13 +370,25 @@ describe('FileSystemSkillProvider', () => {
     }
     expect(await controller.addFolder('relative/skills')).toBe('relative')
     expect(await controller.addFolder(42)).toBe('relative')
+    for (const refused of [
+      String.raw`\\server\share`,
+      String.raw`\\?\C:\skills`,
+      String.raw`\\.\pipe\skills`,
+      '//attacker/share',
+    ]) {
+      expect(await controller.addFolder(refused), refused).toBe('invalid')
+    }
     expect(await controller.addFolder(join(home, 'nowhere'))).toBe('missing')
     expect(await controller.addFolder(`  ${team}  `)).toBe('exists')
     const extra = await tempDir('added-folders-extra')
     expect(await controller.addFolder(extra)).toBe('added')
     await controller.removeFolder(team)
     expect(updates).toEqual([
-      ['skill-sources', { folders: [{ dir: team }, { dir: gone }, { dir: extra }] }, undefined],
+      ['skill-sources', {
+        folders: [{ dir: team }, { dir: gone }, { dir: extra }],
+        // The tab's new folder is written switched off until the reader turns it on.
+        sources: { [`folder:${extra}`]: { enabled: false } },
+      }, undefined],
       ['skill-sources', { folders: [{ dir: gone }] }, undefined],
     ])
   })
@@ -688,16 +728,17 @@ describe('FileSystemSkillProvider', () => {
     expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['good-skill'])
   })
 
-  it.skipIf(!symlinksAvailable).each([false, true])('publishes regular-file paths for linked skills while retaining their resource roots (filesystem service: %s)', async (withFileSystem) => {
+  it.skipIf(!symlinksAvailable).each([false, true])('serves a linked skill whose target stays inside its root (filesystem service: %s)', async (withFileSystem) => {
     const home = await tempDir('skill-symlink-home')
-    const external = await tempDir('skill-symlink-external')
-    await writeSkill(external, 'linked-dir', 'Linked directory')
-    await writeFlatSkill(external, 'linked-flat', 'Linked flat')
-    await mkdir(join(home, '.dsh/skills'), { recursive: true })
-    await symlink(join(external, 'linked-dir'), join(home, '.dsh/skills/linked-dir'))
-    await symlink(join(external, 'linked-flat.md'), join(home, '.dsh/skills/linked-flat.md'))
-    await symlink(join(external, 'missing'), join(home, '.dsh/skills/broken-link'))
-    await symlink('/dev/null', join(home, '.dsh/skills/device-link'))
+    const root = join(home, '.dsh/skills')
+    // The target folder is not a top-level entry, so only the link is discovered.
+    await writeSkill(join(root, 'holder'), 'linked-dir', 'Linked directory')
+    await writeFlatSkill(join(root, 'holder'), 'linked-flat', 'Linked flat')
+    await mkdir(root, { recursive: true })
+    await symlink(join(root, 'holder', 'linked-dir'), join(root, 'linked-dir'))
+    await symlink(join(root, 'holder', 'linked-flat.md'), join(root, 'linked-flat.md'))
+    await symlink(join(root, 'holder', 'missing'), join(root, 'broken-link'))
+    await symlink('/dev/null', join(root, 'device-link'))
 
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)
@@ -715,17 +756,52 @@ describe('FileSystemSkillProvider', () => {
       const catalog = await ctx.skills.list()
       expect(catalog.map(skill => skill.name)).toEqual(['linked-dir', 'linked-flat'])
       for (const name of ['linked-dir', 'linked-flat']) {
-        const path = name === 'linked-dir' ? join(external, name, 'SKILL.md') : join(external, `${name}.md`)
+        const path = name === 'linked-dir'
+          ? join(root, 'holder', name, 'SKILL.md')
+          : join(root, 'holder', `${name}.md`)
         expect(catalog.find(skill => skill.name === name)?.path).toBe(path)
         const loaded = await ctx.skills.get(name)
         expect(loaded?.path).toBe(path)
-        expect(loaded?.resourceBase).toEqual({ kind: 'directory', path: name === 'linked-dir' ? join(home, '.dsh/skills', name) : join(home, '.dsh/skills') })
+        expect(loaded?.resourceBase).toEqual({ kind: 'directory', path: name === 'linked-dir' ? join(root, name) : root })
         expect((await lstat(path)).isFile()).toBe(true)
       }
-      await writeFile(join(external, 'replacement.md'), '---\nname: linked-flat\ndescription: Replacement\n---\n\nReplacement body.\n')
-      await rm(join(home, '.dsh/skills/linked-flat.md'))
-      await symlink(join(external, 'replacement.md'), join(home, '.dsh/skills/linked-flat.md'))
+      await writeFile(join(root, 'holder', 'replacement.md'), '---\nname: linked-flat\ndescription: Replacement\n---\n\nReplacement body.\n')
+      await rm(join(root, 'linked-flat.md'))
+      await symlink(join(root, 'holder', 'replacement.md'), join(root, 'linked-flat.md'))
       expect((await ctx.skills.get('linked-flat'))?.content).toBe('Replacement body.')
+    } finally {
+      await fiber.dispose()
+    }
+  })
+
+  it.skipIf(!symlinksAvailable).each([false, true])('refuses a skill whose link resolves outside its root (filesystem service: %s)', async (withFileSystem) => {
+    const home = await tempDir('skill-symlink-outside-home')
+    const external = await tempDir('skill-symlink-outside-external')
+    await writeSkill(external, 'outside-dir', 'Outside directory')
+    await writeFlatSkill(external, 'outside-flat', 'Outside flat')
+    const root = join(home, '.dsh/skills')
+    await mkdir(root, { recursive: true })
+    await symlink(join(external, 'outside-dir'), join(root, 'linked-dir'))
+    await symlink(join(external, 'outside-flat.md'), join(root, 'linked-flat.md'))
+
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    if (withFileSystem) {
+      await ctx.plugin(class extends TestFileSystem {
+        override async resolve(path: string): Promise<FsTarget> {
+          return { targetKey: await realpath(path) as never, displayPath: path }
+        }
+      })
+    }
+    const warnings = vi.spyOn(ctx.logger, 'warn')
+    onTestFinished(() => { warnings.mockRestore() })
+    const fiber = ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    await fiber
+
+    try {
+      expect(await ctx.skills.list()).toEqual([])
+      expect(await ctx.skills.get('outside-dir')).toBeUndefined()
+      expect(warnings).toHaveBeenCalledWith(expect.stringContaining('resolves outside its source folder'))
     } finally {
       await fiber.dispose()
     }
@@ -1188,11 +1264,11 @@ describe('FileSystemSkillProvider', () => {
 
   it.skipIf(!symlinksAvailable)('refreshes frontmatter through a followed skill symlink', { timeout: 10000 }, async () => {
     const home = await tempDir('skill-watch-symlink-home')
-    const external = await tempDir('skill-watch-symlink-external')
     const root = join(home, '.dsh/skills')
-    await writeSkill(external, 'linked-skill', 'First linked description')
+    const target = join(root, 'holder')
+    await writeSkill(target, 'linked-skill', 'First linked description')
     await mkdir(root, { recursive: true })
-    await symlink(join(external, 'linked-skill'), join(root, 'linked-skill'))
+    await symlink(join(target, 'linked-skill'), join(root, 'linked-skill'))
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)
     const fiber = await ctx.plugin(SkillFileSystem, {
@@ -1205,7 +1281,7 @@ describe('FileSystemSkillProvider', () => {
     })
     try {
       expect((await ctx.skills.list())[0]?.description).toBe('First linked description')
-      await writeSkill(external, 'linked-skill', 'Second linked description')
+      await writeSkill(target, 'linked-skill', 'Second linked description')
       const refreshed = await waitFor(
         async () => await ctx.skills.list(),
         skills => skills[0]?.description === 'Second linked description',
