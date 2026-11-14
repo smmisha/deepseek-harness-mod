@@ -411,6 +411,7 @@ describe('CI workflow', () => {
       const cores = jobName === 'windows-native-tests' ? 2 : 16
       expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_WINDOWS: 'blacksmith' } }))
         .toBe(`blacksmith-${cores}vcpu-windows-2025`)
+      expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_WINDOWS: 'standard' } })).toBe('windows-2025')
       expect(job.if).toBe("github.event_name == 'pull_request'")
     }
 
@@ -613,6 +614,10 @@ describe('CI workflow', () => {
         expect(evaluate(selector, { [variable]: mode }), `${name} default on ${mode}`).toBe(hosted)
       }
     }
+    // The mod's fork has no organization runners: the `standard` value moves
+    // the gates and Windows lanes onto GitHub's standard hosted runners.
+    expect(evaluate(selectors.linux, { DSH_CI_FAILOVER_LINUX: 'standard' }), 'linux gates standard value').toBe('ubuntu-24.04')
+    expect(evaluate(selectors.windows, { DSH_CI_FAILOVER_WINDOWS: 'standard' }), 'windows lanes standard value').toBe('windows-2025')
 
     // The run-gates aggregate lanes stop at the first blocking gate failure so
     // a red aggregate does not keep burning runner time on the remaining
