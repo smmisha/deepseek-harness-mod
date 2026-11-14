@@ -12,7 +12,7 @@ const DEFAULT_URL = 'https://chat.deepseek.com/'
 const DEFAULT_ORIGIN = 'https://chat.deepseek.com'
 /** Exact provider hosts the guest may visit while signing in. */
 const DEFAULT_LOGIN_HOSTS = ['accounts.youtube.com', 'appleid.apple.com']
-/** Provider patterns: `accounts.google.` matches the regional hosts. */
+/** Provider patterns: `accounts.google.` matches the regional account hosts. */
 const DEFAULT_LOGIN_SUFFIXES = ['accounts.google.']
 /** Upper bound on each configured provider list. */
 const MAX_LOGIN_ENTRIES = 16
@@ -26,7 +26,11 @@ function loginHost(value: string): string {
   return entry
 }
 
-/** Normalize one provider pattern; a dot marks the end that the pattern anchors. */
+/**
+ * Normalize one provider pattern; a dot marks the end that the pattern anchors.
+ * A trailing-dot prefix anchors on the provider name, and the shell matches it
+ * with one TLD-shaped regional suffix only.
+ */
 function loginSuffix(value: string): string {
   const entry = value.trim().toLowerCase()
   const body = entry.startsWith('.') ? entry.slice(1) : entry.endsWith('.') ? entry.slice(0, -1) : undefined

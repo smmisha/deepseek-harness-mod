@@ -230,6 +230,46 @@ describe('chatLoginNavigationAllowed', () => {
     expect(chatLoginNavigationAllowed('https://appleid.apple.com/auth/authorize', policy)).toBe(true)
   })
 
+  // A trailing-dot prefix names a provider, and Google keeps its own domain
+  // directly after the dot in every regional account host.
+  it.each([
+    'accounts.google.com',
+    'accounts.google.ca',
+    'accounts.google.de',
+    'accounts.google.co.uk',
+    'accounts.google.co.jp',
+    'accounts.google.co.in',
+    'accounts.google.co.za',
+    'accounts.google.com.au',
+    'accounts.google.com.br',
+    'accounts.google.com.mx',
+    'accounts.google.com.ua',
+  ])('accepts the regional account host %s', (host) => {
+    expect(chatLoginNavigationAllowed(`https://${host}/`, policy)).toBe(true)
+  })
+
+  // The remainder after the dot must be one TLD-shaped label pair; anything
+  // longer is another party's registrable domain and an embedded phishing page.
+  it.each([
+    'accounts.google.evil.com',
+    'accounts.google.com.evil.com',
+    'accounts.google.co.evil',
+    'accounts.google.attacker.io',
+    'accounts.google.evil.tools',
+  ])('rejects the lookalike %s', (host) => {
+    expect(chatLoginNavigationAllowed(`https://${host}/`, policy)).toBe(false)
+  })
+
+  it('matches a trailing-dot prefix only against a TLD-shaped remainder', () => {
+    expect(chatLoginNavigationAllowed('https://accounts.google.co.uk/', { loginHosts: [], loginHostSuffixes: ['accounts.google.'] }))
+      .toBe(true)
+    // A prefix that leaves a whole domain cannot vouch for it.
+    expect(chatLoginNavigationAllowed('https://accounts.google.com/', { loginHosts: [], loginHostSuffixes: ['accounts.'] }))
+      .toBe(false)
+    expect(chatLoginNavigationAllowed('https://accounts.example.com/', { loginHosts: [], loginHostSuffixes: ['accounts.'] }))
+      .toBe(false)
+  })
+
   it('rejects the chat itself, lookalikes, plain HTTP, credentials, and unknown hosts', () => {
     expect(chatLoginNavigationAllowed('https://chat.deepseek.com/', policy)).toBe(false)
     expect(chatLoginNavigationAllowed('https://notaccounts.google.com/', policy)).toBe(false)

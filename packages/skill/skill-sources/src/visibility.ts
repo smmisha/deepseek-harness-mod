@@ -19,7 +19,11 @@ export interface SkillApplication {
   readonly title: string
 }
 
-/** A folder the reader added from the Skills tab; its skills start switched on. */
+/**
+ * A folder the reader added from the Skills tab. `addFolder` records its source
+ * switched off, so its skills wait for the reader's switch; a folder stored
+ * before that record existed keeps the non-application default and stays on.
+ */
 export interface SkillFolder {
   /** Absolute folder scanned for skill bundles. */
   readonly dir: string
@@ -115,7 +119,8 @@ export function skillEnabled(
  * Bind one read of the switches, applications, and added folders to the visibility rules.
  * @param state - persisted switches.
  * @param applications - configured other-application folders.
- * @param folders - folders the reader added; each starts on because it is not an application.
+ * @param folders - folders the reader added; their switches come from `state`, so a folder
+ *   `addFolder` stored stays off until the reader turns it on.
  * @returns the bound visibility answers.
  */
 export function bindVisibility(
