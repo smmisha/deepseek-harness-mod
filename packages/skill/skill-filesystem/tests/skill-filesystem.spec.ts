@@ -6,6 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { FileSystem, FsError, FsVersion, type FsDirEntry, type FsEditOutcome, type FsEditRequest, type FsInfo, type FsPathInfo, type FsTarget, type FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import * as SkillFileSystem from '../src/index.ts'
+import { assertFolderPathAcceptable } from '../src/folder-path.ts'
 import SkillSources, { type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
 
 /** Every temp dir created by this file, removed after each test. */
@@ -234,8 +235,8 @@ describe('dsh-skill-filesystem plugin exports', () => {
 
 describe('folder path validation', () => {
   it('accepts local absolute folders', () => {
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(homedir())).not.toThrow()
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(join(homedir(), 'skills'))).not.toThrow()
+    expect(() => assertFolderPathAcceptable(homedir())).not.toThrow()
+    expect(() => assertFolderPathAcceptable(join(homedir(), 'skills'))).not.toThrow()
   })
 
   it('refuses network shares, device namespaces, relative paths, and parent segments', () => {
@@ -249,11 +250,11 @@ describe('folder path validation', () => {
       String.raw`C:\skills\..\elsewhere`,
     ]
     for (const path of refused) {
-      expect(() => SkillFileSystem.assertFolderPathAcceptable(path), path).toThrow(TypeError)
+      expect(() => assertFolderPathAcceptable(path), path).toThrow(TypeError)
     }
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(String.raw`\\server\share`))
+    expect(() => assertFolderPathAcceptable(String.raw`\\server\share`))
       .toThrow('network or device location')
-    expect(() => SkillFileSystem.assertFolderPathAcceptable('relative/skills'))
+    expect(() => assertFolderPathAcceptable('relative/skills'))
       .toThrow('not an absolute folder path')
   })
 })
