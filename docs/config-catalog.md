@@ -3484,7 +3484,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-skill-filesystem`
 
 - `inject`: `skills`
-- `source`: [`packages/skill/skill-filesystem/src/index.ts:58`](../packages/skill/skill-filesystem/src/index.ts)
+- `source`: [`packages/skill/skill-filesystem/src/index.ts:69`](../packages/skill/skill-filesystem/src/index.ts)
 
 ```ts config-catalog
 /** Local filesystem skill provider configuration. */
@@ -3555,7 +3555,7 @@ export type PythonEnvironment = 'workspace-dependencies' | 'user'
 
 - `inject`: `settings`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/skill/skill-sources/src/index.ts:37`](../packages/skill/skill-sources/src/index.ts)
+- `source`: [`packages/skill/skill-sources/src/index.ts:34`](../packages/skill/skill-sources/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the persisted switches and the application list. */
@@ -3566,6 +3566,8 @@ export interface Config {
   sources?: Volatile<Record<string, SkillSourceSwitch>>
   /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
   skills?: Volatile<Record<string, Record<string, boolean>>>
+  /** Folders the reader added from the Skills tab, in the order they were added. */
+  folders?: Volatile<SkillFolder[]>
 }
 
 /** Folders of another application whose skills may be shown. */
@@ -3582,6 +3584,16 @@ export interface SkillApplication {
 export interface SkillSourceSwitch {
   /** Whether the source contributes skills; absent keeps the source's own default. */
   readonly enabled?: boolean
+}
+
+/**
+ * A folder the reader added from the Skills tab. `addFolder` records its source
+ * switched off, so its skills wait for the reader's switch; a folder stored
+ * before that record existed keeps the non-application default and stays on.
+ */
+export interface SkillFolder {
+  /** Absolute folder scanned for skill bundles. */
+  readonly dir: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill-sources -->
