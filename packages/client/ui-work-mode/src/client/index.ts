@@ -34,7 +34,7 @@ export interface Config {
   allowedOrigins?: string[]
   /** Exact provider hostnames the guest may visit while signing in. */
   loginHosts?: string[]
-  /** Provider host patterns: `.suffix` matches subdomains, `prefix.` matches regional hosts. */
+  /** Provider host patterns: `.suffix` matches subdomains, `prefix.` matches the regional hosts of one provider. */
   loginHostSuffixes?: string[]
 }
 

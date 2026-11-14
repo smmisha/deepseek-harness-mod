@@ -25,8 +25,14 @@ export interface LocalSourceView {
   readonly skills: readonly LocalSkillView[]
 }
 
-/** Outcome of adding a folder from the Skills tab; every outcome other than `added` writes nothing. */
-export type AddSkillFolderResult = 'added' | 'exists' | 'relative' | 'missing'
+/**
+ * Outcome of adding a folder from the Skills tab; every outcome other than `added` writes nothing.
+ *
+ * `relative` means the path is not absolute after `~` expansion. `invalid` means the path names a
+ * network or device location (`\\server\share`, `\\?\C:\x`, `\\.\pipe\x`) or carries a parent
+ * (`..`) segment, so the provider must not scan it.
+ */
+export type AddSkillFolderResult = 'added' | 'exists' | 'relative' | 'missing' | 'invalid'
 
 /** One discovered skill row for the Skills tab. */
 export interface LocalSkillView {

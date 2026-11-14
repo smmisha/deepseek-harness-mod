@@ -36,7 +36,9 @@ export interface DesktopChatConfig {
   /**
    * Provider host patterns: a leading-dot suffix (`.google.com`) matches every
    * subdomain, and a trailing-dot prefix (`accounts.google.`) matches the
-   * regional hosts of one provider.
+   * regional hosts of one provider. A prefix matches only when it leaves one
+   * TLD-shaped remainder (`com`, `co.uk`, `com.au`, `de`), so a longer
+   * remainder such as `accounts.google.evil.com` is not a provider page.
    */
   readonly loginHostSuffixes: readonly string[]
 }
