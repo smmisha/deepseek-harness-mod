@@ -9,7 +9,7 @@
  *
  * @module @deepseek-ai/dsh-skill-sources
  */
-import { resolve } from 'node:path'
+import { isAbsolute, parse, resolve } from 'node:path'
 import { Service, type Context, type Volatile } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
@@ -70,6 +70,26 @@ const ConfigSchema = z.object({
 
 /** State used when no provider configured anything. */
 const EMPTY_STATE: SkillVisibilityState = { sources: {}, skills: {} }
+
+/** Path root a persisted folder must have: a drive root (`C:\`) or the POSIX root. */
+const LOCAL_FOLDER_ROOT = /^(?:[A-Za-z]:[\\/]|[\\/])$/u
+
+/**
+ * Refuse to persist a folder the provider must not scan. A path without a local root names a
+ * network share or a Win32 device namespace (`\\server\share`, `\\?\C:\x`, `\\.\pipe\x`), which
+ * would connect to a remote endpoint; a relative path would name a folder in the Host process's
+ * working directory. The Skills tab validates the reader's raw input first; this guard keeps any
+ * direct caller from writing the same value into the profile.
+ * @param dir - folder a caller wants to append.
+ * @throws {TypeError} when the folder is not a local absolute path.
+ */
+function assertPersistedFolderPath(dir: string): void {
+  const root = parse(dir).root
+  if (!isAbsolute(dir) || dir.startsWith('//') || !LOCAL_FOLDER_ROOT.test(root)) {
+    throw new TypeError(`skill-sources: "${dir}" is not a local absolute folder path`)
+  }
+}
+
 /** The one service a provider and the Skills tab both use. */
 export interface SkillSourcesService {
   /** Current switches. */
@@ -80,7 +100,7 @@ export interface SkillSourcesService {
   folders(): readonly SkillFolder[]
   /** One read of the switches, applications, and added folders, answering which sources and skills are visible. */
   visibility(): SkillVisibility
-  /** Add one absolute folder, switched off until the reader turns its source on. */
+  /** Add one local absolute folder, switched off until the reader turns its source on; refuses any other path. */
   addFolder(dir: string): Promise<boolean>
   /** Remove one added folder; its files and switches stay untouched. */
   removeFolder(dir: string): Promise<void>
@@ -142,10 +162,12 @@ export default class SkillSources extends Service implements SkillSourcesService
   /**
    * Add one folder to the end of the list; a folder already listed under any letter case on Windows is kept once.
    * The new source is recorded switched off: its SKILL.md files reach the model only after the reader turns it on.
-   * @param dir - absolute folder; the Remote controller validates it before calling.
+   * @param dir - absolute local folder; the Remote controller validates the reader's input before calling.
    * @returns false when the folder was already listed and nothing was written.
+   * @throws {TypeError} when the folder is not a local absolute path, so nothing is written.
    */
   async addFolder(dir: string): Promise<boolean> {
+    assertPersistedFolderPath(dir)
     const folder = resolve(dir)
     const current = this.folders()
     if (current.some(entry => sameFolder(entry.dir, folder))) return false

@@ -344,7 +344,7 @@ describe('SkillsSection: adding skills', () => {
   })
 
   it('submits with Enter and explains every refusal in the dialog', async () => {
-    const outcomes: AddFolderOutcome[] = ['exists', 'relative', 'missing', { error: 'host is gone' }]
+    const outcomes: AddFolderOutcome[] = ['exists', 'relative', 'missing', 'invalid', { error: 'host is gone' }]
     const addFolder = vi.fn(async () => outcomes.shift() ?? 'added')
     render(<SkillsSection {...props({ addFolder })} />)
     const input = await openFolderDialog()
@@ -357,6 +357,8 @@ describe('SkillsSection: adding skills', () => {
     await screen.findByText('Enter a full path, starting with a drive, / or ~')
     fireEvent.submit(form)
     await screen.findByText('No folder exists at this path')
+    fireEvent.submit(form)
+    await screen.findByText('Choose a local folder: network shares and device paths cannot be scanned')
     fireEvent.submit(form)
     await screen.findByText('Could not add the folder: host is gone')
     // Typing again clears the explanation.

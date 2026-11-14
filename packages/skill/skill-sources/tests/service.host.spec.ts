@@ -194,6 +194,20 @@ describe('SkillSources service', () => {
     expect(invalidate).toHaveBeenCalledTimes(2)
   })
 
+  it('refuses a folder that is not a local absolute path before writing settings', async () => {
+    const { ctx, update } = await setup()
+    for (const refused of [
+      String.raw`\\server\share`,
+      String.raw`\\?\C:\skills`,
+      String.raw`\\.\pipe\skills`,
+      '//attacker/share',
+      'relative/skills',
+    ]) {
+      await expect(ctx.skillSources.addFolder(refused), refused).rejects.toThrow('is not a local absolute folder path')
+    }
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it('answers visibility from one read of the switches and applications', async () => {
     const { ctx } = await setup({
       applications: [...APPS],

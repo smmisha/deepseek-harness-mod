@@ -41,6 +41,7 @@ const ADD_REFUSALS: Readonly<Record<Exclude<AddSkillFolderResult, 'added'>, Skil
   exists: 'folderExists',
   relative: 'folderRelative',
   missing: 'folderMissing',
+  invalid: 'folderInvalid',
 }
 
 /** The split button: the primary half adds a folder, the menu also offers creating a skill with the agent. */
