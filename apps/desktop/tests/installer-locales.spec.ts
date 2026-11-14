@@ -1,4 +1,4 @@
-import { SHIPPED_LOCALE_IDS } from '../../../scripts/shipped-locales.ts'
+import { DESKTOP_LOCALE_IDS } from '../../../scripts/shipped-locales.ts'
 import { createRequire } from 'node:module'
 /** Per-language installer resources feed both the packaging language list and the NSIS compiler. */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -10,7 +10,7 @@ import { readInstallerLocales, renderInstallerStrings } from '../scripts/install
 function fixture(): string {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-installer-locales-'))
   onTestFinished(() => { rmSync(directory, { recursive: true, force: true }) })
-  for (const id of ['en_US', 'zh_CN', 'ja_JP', 'es_ES', 'fr_FR', 'de_DE', 'ru_RU', 'pt_BR']) {
+  for (const id of ['en_US', 'zh_CN', 'ja_JP', 'es_ES', 'fr_FR', 'de_DE', 'ru_RU', 'pt_BR', 'uk_UA']) {
     writeFileSync(join(directory, `${id}.json`), readFileSync(new URL(`../installer/locales/${id}.json`, import.meta.url)))
   }
   return directory
@@ -18,18 +18,18 @@ function fixture(): string {
 
 it('generates Japanese NSIS strings from the same files that select packaged languages', () => {
   const locales = readInstallerLocales()
-  expect(locales.map(locale => locale.id)).toEqual(['en_US', 'de_DE', 'es_ES', 'fr_FR', 'ja_JP', 'pt_BR', 'ru_RU', 'zh_CN'])
+  expect(locales.map(locale => locale.id)).toEqual(['en_US', 'de_DE', 'es_ES', 'fr_FR', 'ja_JP', 'pt_BR', 'ru_RU', 'uk_UA', 'zh_CN'])
   const source = renderInstallerStrings(locales)
   expect(source).toContain('LangString INSTALLER_INSTALL ${LANG_JAPANESE} "今すぐインストール"')
   expect(source).toContain('LangString INSTALLER_NATIVE_PROGRESS ${LANG_JAPANESE} "インストールを準備しています… %d%%"')
   expect(source).toContain('!ifdef LANG_JAPANESE\n')
-  expect(source.match(/^LangString INSTALLER_UPDATE_WAIT /gmu)).toHaveLength(8)
-  expect(source.match(/^LangString /gmu)).toHaveLength(256)
+  expect(source.match(/^LangString INSTALLER_UPDATE_WAIT /gmu)).toHaveLength(9)
+  expect(source.match(/^LangString /gmu)).toHaveLength(288)
   const japanese = locales.filter(locale => locale.id === 'ja_JP')
   expect(renderInstallerStrings(japanese)).not.toContain('${LANG_ENGLISH}')
 })
 
-it.each(['en_US', 'zh_CN', 'ja_JP', 'es_ES', 'fr_FR', 'de_DE', 'ru_RU', 'pt_BR'])('rejects a missing %s configuration', (id) => {
+it.each(['en_US', 'zh_CN', 'ja_JP', 'es_ES', 'fr_FR', 'de_DE', 'ru_RU', 'pt_BR', 'uk_UA'])('rejects a missing %s configuration', (id) => {
   const directory = fixture()
   rmSync(join(directory, `${id}.json`))
   expect(() => readInstallerLocales(directory)).toThrow(`missing ${id}.json`)
@@ -69,7 +69,7 @@ it('uses the real electron-builder language identifiers and English fallback', (
   }
   const locales = readInstallerLocales()
   expect(locales[0]?.id).toBe('en_US')
-  expect(locales.map(locale => locale.id.split('_')[0]).sort()).toEqual([...SHIPPED_LOCALE_IDS].sort())
+  expect(locales.map(locale => locale.id.split('_')[0]).sort()).toEqual([...DESKTOP_LOCALE_IDS].sort())
   createAddLangsMacro({ macro: (_name, lines) => {
     expect(lines.map(line => /MUI_LANGUAGE "([^" ]+)"/u.exec(line)?.[1]?.toUpperCase()))
       .toEqual(locales.map(locale => locale.nsisLanguage))

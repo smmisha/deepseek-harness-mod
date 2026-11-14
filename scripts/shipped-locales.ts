@@ -5,6 +5,13 @@ export const SHIPPED_LOCALE_IDS = ['en', 'zh', 'ja', 'es', 'fr', 'de', 'ru', 'pt
 export type ShippedLocaleId = typeof SHIPPED_LOCALE_IDS[number]
 
 /**
+ * Languages the Desktop shell, its Windows installer and its macOS bundle ship.
+ * Ukrainian reaches the web UI as the additive dsh-client-locale-uk pack, so it
+ * stays out of the per-package dictionary gates but ships with the Desktop shell.
+ */
+export const DESKTOP_LOCALE_IDS = [...SHIPPED_LOCALE_IDS, 'uk'] as const
+
+/**
  * Extract copy tokens that translations must preserve verbatim.
  * @param text - Dictionary text containing placeholders, slash commands or API field names.
  * @returns Sorted tokens, retaining repeated occurrences.
