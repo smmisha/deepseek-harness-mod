@@ -26,7 +26,7 @@ kind: "package-reference"
 
 <a id="use-this-package"></a>
 
-只有「对话」模式隐藏外壳：插件调用 `ctx.layout.setChrome('minimal')`，框架只渲染中间一列，覆盖层用 guest 填满这一列。选择「Harness」调用 `setChrome('full')`，先前的侧栏、面板与所选面板原样恢复。选择保存在持久化存储 `dsh.work-mode.v1` 中；首次启动进入 Harness。
+只有「对话」模式隐藏外壳：插件调用 `ctx.layout.setChrome('minimal')`，框架隐藏被占用的列但保持其挂载，同一映射还会把框架标记为被覆盖，使这些列退出交互顺序；覆盖层用 guest 盖住整个框架。选择「Harness」调用 `setChrome('full')`，先前的侧栏、面板与所选面板原样恢复。选择保存在持久化存储 `dsh.work-mode.v1` 中；首次启动进入 Harness。模式属于框架外壳，因此其他功能也可能驱动 `ctx.layout.setChrome`；只有本包负责把「对话 / Harness」产品模式映射到它上面。
 
 guest 只挂载一次，插件存活期间绝不移动或卸载：切到 Harness 只是用 `opacity` 与 `inert` 隐藏覆盖层（而不是 `display: none`，后者会分离 guest 并导致重载），因此已打开的对话、滚动位置、草稿以及正在生成的回答都会跨切换保留。桌面外壳同样让隐藏状态的渲染进程不被节流。站点只在首次打开「对话」标签时加载，而不是在应用启动时。
 
@@ -80,5 +80,3 @@ guest 只挂载一次，插件存活期间绝不移动或卸载：切到 Harness
 无。
 
 </details>
-
-模式属于框架外壳，因此其他功能也可能驱动 `ctx.layout.setChrome`；只有本包负责把「对话 / Harness」产品模式映射到它上面。

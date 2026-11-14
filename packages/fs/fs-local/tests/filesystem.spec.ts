@@ -30,6 +30,20 @@ const symlinkFilesAvailable = await (async (): Promise<boolean> => {
   }
 })()
 
+/** Directory links: Windows junctions need no privileges, POSIX uses a dir symlink. */
+const directoryLinksAvailable = await (async (): Promise<boolean> => {
+  const probe = await mkdtemp(join(tmpdir(), 'dsh-dir-link-probe-'))
+  try {
+    await mkdir(join(probe, 'target'))
+    await symlink(join(probe, 'target'), join(probe, 'link'), process.platform === 'win32' ? 'junction' : 'dir')
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(probe, { recursive: true, force: true })
+  }
+})()
+
 let dir: string
 let ctx: Context
 let fs: LocalFileSystem
@@ -487,7 +501,7 @@ describe('writeText', () => {
     expect(await readFile(path, 'utf8')).toBe('competitor')
   })
 
-  it.skipIf(!symlinkFilesAvailable)('reports a createIfAbsent race with the unresolved display path', async () => {
+  it.skipIf(!directoryLinksAvailable)('reports a createIfAbsent race with the unresolved display path', async () => {
     const realDirectory = join(dir, 'real-workspace')
     const linkedDirectory = join(dir, 'linked-workspace')
     await mkdir(realDirectory)

@@ -37,6 +37,7 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
+| `applications` | Claude Code、Codex、GitHub Copilot、Gemini CLI、Google Antigravity、OpenCode | 其他应用的技能目录，以 `{ id, dir, title }` 条目表示，仅在目录存在时扫描，排在 harness 目录之后；每个默认关闭 |
 | `sources` | `{}` | 按 source id 的来源开关；缺省保持该来源的默认值（harness 目录开，其他应用关） |
 | `skills` | `{}` | 按 source id 与技能名的单技能开关；缺省表示启用 |
 | `folders` | `[]` | 读者在技能页添加的文件夹，按添加顺序存为 `{ dir }` 条目；每个文件夹是一个默认开启、名为 `folder:<dir>` 的来源 |

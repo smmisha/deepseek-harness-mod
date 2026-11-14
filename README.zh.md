@@ -37,8 +37,8 @@ npx @deepseek-ai/dsh web
 如需从仓库源码运行：
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/smmisha/deepseek-harness-mod.git
+cd deepseek-harness-mod
 pnpm install
 pnpm run build
 pnpm dsh web

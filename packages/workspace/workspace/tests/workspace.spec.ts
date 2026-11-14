@@ -36,6 +36,20 @@ const symlinkFilesAvailable = await (async (): Promise<boolean> => {
   }
 })()
 
+/** Junctions need no privileges on Windows; elsewhere the type is ignored and a dir symlink is made. */
+const junctionsAvailable = await (async (): Promise<boolean> => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-junction-probe-'))
+  try {
+    await mkdir(join(dir, 'target'))
+    await symlink(join(dir, 'target'), join(dir, 'link'), 'junction')
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})()
+
 const DOMAIN_VERSION = 2
 
 const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
@@ -808,7 +822,7 @@ describe('header-validated membership projection', () => {
     expect(again.registry.get(workspace.id)!.sessionIds).toEqual(['first', 'second'])
   })
 
-  it.skipIf(!symlinkFilesAvailable)('preserves an owned session when its symlink target disappears without bootstrapping missing paths', async () => {
+  it.skipIf(!junctionsAvailable)('preserves an owned session when its symlink target disappears without bootstrapping missing paths', async () => {
     const target = await makeDir('removed-symlink-target')
     const alias = join(base, 'removed-symlink-alias')
     await symlink(target, alias, 'junction')
