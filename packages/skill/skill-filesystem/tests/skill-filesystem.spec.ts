@@ -20,6 +20,19 @@ async function tempDir(name: string): Promise<string> {
   return await realpath(dir)
 }
 
+/**
+ * Point the POSIX home folder at a fresh temp dir for one test, so temp roots stay
+ * outside it even where TMPDIR lives under the real home, as on GitHub's
+ * standard runners (`/home/runner/work/_temp`).
+ * @returns the temporary home folder.
+ */
+async function isolateHome(): Promise<string> {
+  const home = await tempDir('home')
+  vi.stubEnv('HOME', home)
+  onTestFinished(() => { vi.unstubAllEnvs() })
+  return home
+}
+
 async function writeSkill(root: string, name: string, description: string, body = 'Use the skill.'): Promise<void> {
   const dir = join(root, name)
   await mkdir(dir, { recursive: true })
@@ -363,6 +376,7 @@ describe('FileSystemSkillProvider', () => {
   })
 
   it.skipIf(process.platform === 'win32')('shortens roots outside the home folder and a folder equal to home', async () => {
+    await isolateHome()
     const outside = await mkdtemp(join(tmpdir(), 'dsh-fs-'))
     tempDirs.push(outside)
     await writeSkill(join(outside, '.dsh', 'skills'), 'out-skill', 'Outside the home folder')
@@ -420,6 +434,7 @@ describe('FileSystemSkillProvider', () => {
   })
 
   it('shortens home and project roots and keeps other absolute roots', async () => {
+    if (process.platform !== 'win32') await isolateHome()
     const homeChild = await mkdtemp(join(homedir(), 'dsh-home-'))
     tempDirs.push(homeChild)
     await writeSkill(homeChild, 'home-skill', 'Under home')
