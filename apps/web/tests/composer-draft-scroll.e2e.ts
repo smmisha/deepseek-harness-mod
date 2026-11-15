@@ -299,8 +299,13 @@ describe('web e2e: composer draft scrolling', () => {
     const top = await measureComposer(page)
     await surface(page).hover()
     await page.mouse.wheel(0, 2000)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 })
-      .toBeGreaterThan(0)
+    // Wheel movement eases, so wait for the offset to settle at the end before
+    // recording the bottom state: a mid-animation sample would report the last
+    // line as off screen and pin an unrelated frame of the scroll.
+    await expect.poll(async () => {
+      const m = await measureComposer(page)
+      return m.scrollTop === m.scrollMax
+    }, { timeout: 10_000 }).toBe(true)
     const bottom = await measureComposer(page)
     await typeDraft(page, [...DRAFT_ROWS, ''])
     await surface(page).hover()
