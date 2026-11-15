@@ -1,0 +1,52 @@
+# Temporary Linux producer for the fork's refreshed browser goldens.
+# Runs the web lane in DSH_SNAPSHOT=refresh on a throwaway branch, uploads the
+# rewritten expectations, and never runs on the default branch or pull requests.
+name: golden refresh (temporary)
+
+on:
+  push:
+    branches: [ci/golden-refresh]
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  # CI runs must never report to the production telemetry endpoint baked
+  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v5.0.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium webkit
+      - name: Build artifacts
+        run: pnpm run build:artifacts
+      - name: Refresh web expectations
+        continue-on-error: true
+        env:
+          DSH_SNAPSHOT: refresh
+        run: >-
+          pnpm exec vitest run --config vitest.web.config.ts
+          --fileParallelism --maxWorkers=4
+      - name: Collect refreshed expectations
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: web-goldens
+          path: |
+            apps/web/tests/expected
+            snapshots/web
+          if-no-files-found: warn
