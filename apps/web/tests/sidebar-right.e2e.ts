@@ -524,7 +524,7 @@ describe('web e2e: shipped right Sidebar', () => {
       expect(await width(column)).toBe(trackWidth)
       const viewport = page.viewportSize()
       if (viewport === null) throw new Error('expected a fixed viewport')
-      await expect.poll(async () => await panel.boundingBox()).toEqual({ x: 0, y: 0, ...viewport })
+      await expect.poll(async () => await panel.boundingBox()).toEqual({ x: 0, y: 40, width: viewport.width, height: viewport.height - 40 })
       expect(await expandOf(page).count()).toBe(0)
       expect(await frame.locator('[data-side="rightbar"]').count()).toBe(0)
       await shot(page, '03-fullscreen-panel')
@@ -558,7 +558,7 @@ describe('web e2e: shipped right Sidebar', () => {
       await frame.evaluate(async (node) => { await Promise.allSettled(node.getAnimations().map(animation => animation.finished)) })
       const normalColumns = (await geometry()).columns
       await column.locator('[data-sidebar-right-mode="fullscreen"]').click()
-      await expect.poll(() => panel.boundingBox()).toEqual({ x: 0, y: 0, ...viewport })
+      await expect.poll(() => panel.boundingBox()).toEqual({ x: 0, y: 40, width: viewport.width, height: viewport.height - 40 })
       await column.locator('[data-sidebar-right-toggle]').click()
       await Promise.all([
         panel.evaluate(async (node) => {
@@ -586,7 +586,7 @@ describe('web e2e: shipped right Sidebar', () => {
 
         await held.evaluate((state) => { (state.animation as Animation).finish() })
         await expect.poll(() => frame.getAttribute('data-rightbar-fullscreen')).toBe('true')
-        expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, ...viewport })
+        expect(await panel.boundingBox()).toEqual({ x: 0, y: 40, width: viewport.width, height: viewport.height - 40 })
         expect(await geometry()).toEqual({ columns: normalColumns, transition: 'none', handles: ['none'], animatingGrid: false })
 
         const exit = await holdPanelSlide(panel)
@@ -621,7 +621,7 @@ describe('web e2e: shipped right Sidebar', () => {
         await expect.poll(() => frame.getAttribute('data-rightbar-fullscreen')).toBeNull()
         await expandOf(page).click()
         await expect.poll(() => frame.getAttribute('data-rightbar-fullscreen')).toBe('true')
-        expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, ...viewport })
+        expect(await panel.boundingBox()).toEqual({ x: 0, y: 40, width: viewport.width, height: viewport.height - 40 })
         expect((await geometry()).columns).toBe(normalColumns)
         expect((await geometry()).animatingGrid).toBe(false)
       } finally {

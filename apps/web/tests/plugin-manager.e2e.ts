@@ -361,7 +361,8 @@ describe('web e2e: plugin manager', () => {
       await page.waitForFunction(() => document.querySelector('[data-plugin-bar]')?.hasAttribute('data-compact') === true)
       expect(await barHeight()).toBe(restingHeight)
       expect(await bar.evaluate(element => getComputedStyle(element, '::after').borderBottomWidth)).not.toBe('0px')
-      expect(await bar.evaluate(element => Number.parseFloat(getComputedStyle(element, '::before').height))).toBe(64)
+      // The brand lockup row sets the header paint two pixels taller than upstream.
+      expect(await bar.evaluate(element => Number.parseFloat(getComputedStyle(element, '::before').height))).toBe(66)
       expect(await body.evaluate(element => element.getBoundingClientRect().top)).toBe(resting)
       expect(await Promise.all([refreshButton.boundingBox(), addButton.boundingBox()]))
         .toEqual(restingActions.map((bounds) => {

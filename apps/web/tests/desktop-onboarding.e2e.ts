@@ -391,7 +391,7 @@ describe.skipIf(MODE === 'record')('web e2e: App-only desktop onboarding', () =>
       expect(await selected.evaluate(element => document.activeElement === element)).toBe(true)
     }
     await page.getByRole('button', { name: '进入应用', exact: true }).waitFor()
-    const processBorders = await page.getByRole('radio').evaluateAll(cards => cards.map(card => getComputedStyle(card, '::after').backgroundImage))
+    const processBorders = await page.locator('[role=radiogroup][aria-labelledby=desktop-onboarding-title]').getByRole('radio').evaluateAll(cards => cards.map(card => getComputedStyle(card, '::after').backgroundImage))
     expect(processBorders.every(border => border.startsWith('conic-gradient('))).toBe(true)
     expect(new Set(processBorders).size).toBe(3)
     await snapshot('process')
