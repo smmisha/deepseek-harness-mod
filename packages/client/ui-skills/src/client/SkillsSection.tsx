@@ -274,6 +274,10 @@ export function SkillsSection({
 
   const cwd = useSessions?.(state => Object.values(state.byId)
     .find(summary => (summary.retainedBy.mainView ?? 0) > 0)?.cwd)
+  // A write that finishes after the working directory changed must reload the
+  // directory that is current then, not the one its render captured, so every
+  // load reads the latest cwd from this ref.
+  const currentCwd = useRef(cwd)
   // An older response must never replace a newer one: every load, from a cwd
   // change or after a write, captures a request number and drops a result that
   // is no longer the latest request.
@@ -282,7 +286,7 @@ export function SkillsSection({
     const request = latestLoad.current + 1
     latestLoad.current = request
     try {
-      const next = await load(cwd)
+      const next = await load(currentCwd.current)
       if (latestLoad.current !== request) return
       setSources(next)
       setFailure(null)
@@ -292,7 +296,10 @@ export function SkillsSection({
     }
   }
 
-  useEffect(() => { void refresh() }, [cwd])
+  useEffect(() => {
+    currentCwd.current = cwd
+    void refresh()
+  }, [cwd])
 
   const withBusy = async (key: string, write: () => Promise<string | undefined>): Promise<void> => {
     setNotice(null)
