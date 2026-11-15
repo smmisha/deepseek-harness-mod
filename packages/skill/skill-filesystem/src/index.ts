@@ -164,17 +164,41 @@ export class SkillSourcesController extends TypertRemoteService {
   static readonly inject = ['skills', 'skillSources']
 
   /**
+   * Provider instances sharing this root controller. Each agent preset mounts
+   * `skill-filesystem` into its own layer, but the Skills tab is one Remote
+   * service for the whole root, so its rows come from every attached instance.
+   */
+  private readonly accesses = new Set<() => {
+    readonly provider: FileSystemSkillProvider
+    readonly invalidate: () => void
+  }>()
+
+  /**
    * @param ctx - Host context carrying `ctx.skills`.
-   * @param provider - the live filesystem provider that feeds the catalog.
+   * @param first - the live filesystem provider of the first mounted instance.
    */
   constructor(
     ctx: Context,
-    private readonly access: () => {
+    first: () => {
       readonly provider: FileSystemSkillProvider
       readonly invalidate: () => void
     },
   ) {
     super(ctx, 'skillSourcesController', { namespace: 'skillSources' })
+    this.accesses.add(first)
+  }
+
+  /**
+   * Share this root controller with one more mounted provider instance.
+   * @param access - that instance's provider and invalidation callback.
+   * @returns the detach disposer for that instance.
+   */
+  attach(access: () => {
+    readonly provider: FileSystemSkillProvider
+    readonly invalidate: () => void
+  }): () => void {
+    this.accesses.add(access)
+    return () => { this.accesses.delete(access) }
   }
 
   /**
@@ -186,7 +210,13 @@ export class SkillSourcesController extends TypertRemoteService {
   async describe(cwd: string | undefined): Promise<LocalSourceView[]> {
     const catalog = await this.ctx.skills.list(cwd === undefined ? {} : { cwd })
     const winners = new Map(catalog.map(skill => [skill.name, String(skill.source)]))
-    return await this.access().provider.describeSources(cwd === undefined ? { winners } : { cwd, winners })
+    // Presets commonly expose the same harness roots; the first described row owns the identity.
+    const rows = new Map<string, LocalSourceView>()
+    for (const access of this.accesses) {
+      const described = await access().provider.describeSources(cwd === undefined ? { winners } : { cwd, winners })
+      for (const row of described) rows.set(`${row.id}\u0000${row.path}`, row)
+    }
+    return [...rows.values()]
   }
 
   /**
@@ -258,7 +288,14 @@ export function apply(ctx: Context, config: Config = {}): void {
   // provider that feeds the model catalog. The Host gateway resolves the
   // service as a sibling, so the controller mounts at the root.
   ctx.effect(() => {
-    const fiber = ctx.root.plugin(SkillSourcesController, () => ({ provider, invalidate }))
+    const access = (): { readonly provider: FileSystemSkillProvider; readonly invalidate: () => void } => ({
+      provider, invalidate,
+    })
+    // Every agent preset mounts this provider, so the first instance owns the
+    // root controller and later ones only attach their providers to it.
+    const existing = ctx.root.get('skillSourcesController') as SkillSourcesController | undefined
+    if (existing !== undefined) return existing.attach(access)
+    const fiber = ctx.root.plugin(SkillSourcesController, () => access())
     return () => { void fiber.dispose() }
   }, 'skill-sources remote')
   ctx.effect(function* () {
