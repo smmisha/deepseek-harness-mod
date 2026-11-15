@@ -412,7 +412,10 @@ describe('CI workflow', () => {
       const cores = jobName === 'windows-native-tests' ? 2 : 16
       expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_WINDOWS: 'blacksmith' } }))
         .toBe(`blacksmith-${cores}vcpu-windows-2025`)
-      expect(job.if).toBe("github.event_name == 'pull_request'")
+      // The coverage lane also needs the prepared pool its ACL diagnostics require.
+      expect(job.if).toBe(jobName === 'windows-coverage'
+        ? "github.event_name == 'pull_request' && vars.DSH_CI_FAILOVER_WINDOWS == 'selfhosted'"
+        : "github.event_name == 'pull_request'")
     }
 
     // windows-build runs the blocking build/site pair.
