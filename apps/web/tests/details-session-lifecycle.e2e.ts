@@ -195,7 +195,7 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
       await expect.poll(() => blankColumn.locator('[data-dockkit-host="dock"]:not([hidden])').evaluate(element => getComputedStyle(element).transform))
         .toBe('none')
       await expect.poll(() => blankColumn.locator('[data-sidebar-right-panel]').boundingBox())
-        .toEqual({ x: 0, y: 0, width: 767, height: blankViewport.height })
+        .toEqual({ x: 0, y: 40, width: 767, height: blankViewport.height - 40 })
       // A preview the files page opened starts with its tree hidden; shown, the tree fills the viewport.
       const treeToggle = blankColumn.locator('[data-files-navigator-toggle]')
       await expect.poll(() => treeToggle.getAttribute('aria-expanded')).toBe('false')
