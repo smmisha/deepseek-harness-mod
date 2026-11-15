@@ -13,7 +13,7 @@ import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promis
 import { unwatchFile, watchFile, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type { SkillVisibility } from '@deepseek-ai/dsh-skill-sources'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -159,6 +159,22 @@ interface ResolvedWatchConfig {
  * sources and their skills from here, and writes switches through the
  * `settings` namespace of this same plugin entry.
  */
+/** Root-owned controller shared by every provider instance mounted on that root. */
+interface SharedSkillSourcesController {
+  /** Fiber carrying the controller; the last owning instance disposes it. */
+  readonly fiber: Fiber
+  /** Resolves with the controller once its fiber is ready. */
+  readonly mounted: Promise<SkillSourcesController>
+  /** Mounted provider instances that still use the controller. */
+  owners: number
+}
+
+/**
+ * Controllers already mounted per root. Agent presets mount this plugin in
+ * separate layers of one root, so the root context owns the shared entry.
+ */
+const sharedControllers = new WeakMap<object, SharedSkillSourcesController>()
+
 export class SkillSourcesController extends TypertRemoteService {
   /** The registry supplies the winning-source map for shadowed rows. */
   static readonly inject = ['skills', 'skillSources']
@@ -291,12 +307,43 @@ export function apply(ctx: Context, config: Config = {}): void {
     const access = (): { readonly provider: FileSystemSkillProvider; readonly invalidate: () => void } => ({
       provider, invalidate,
     })
-    // Every agent preset mounts this provider, so the first instance owns the
-    // root controller and later ones only attach their providers to it.
-    const existing = ctx.root.get('skillSourcesController') as SkillSourcesController | undefined
-    if (existing !== undefined) return existing.attach(access)
-    const fiber = ctx.root.plugin(SkillSourcesController, () => access())
-    return () => { void fiber.dispose() }
+    // Every agent preset mounts this provider in its own layer of one root, so
+    // the root entry owns a single controller that later instances join.
+    const root = ctx.root
+    let shared = sharedControllers.get(root)
+    if (shared === undefined) {
+      const fiber = root.plugin(SkillSourcesController, () => access())
+      shared = {
+        fiber,
+        owners: 0,
+        mounted: fiber.await().then(() => {
+          /* v8 ignore next -- The fiber await rejects instead of leaving the service unset. */
+          const controller = root.get('skillSourcesController') as SkillSourcesController | undefined
+          if (controller === undefined) throw new Error('skillSourcesController did not mount')
+          return controller
+        }),
+      }
+      sharedControllers.set(root, shared)
+    }
+    const entry: SharedSkillSourcesController = shared
+    entry.owners += 1
+    let detach: (() => void) | undefined
+    let released = false
+    void entry.mounted.then((controller) => {
+      /* v8 ignore next -- Effects outlive their mount, so cancellation only happens when the root tears down mid-mount. */
+      if (released) return
+      detach = controller.attach(access)
+    }, () => {
+      /* v8 ignore next -- A failed mount is reported by the controller fiber itself. */
+    })
+    return () => {
+      released = true
+      detach?.()
+      entry.owners -= 1
+      if (entry.owners > 0) return
+      sharedControllers.delete(root)
+      void entry.fiber.dispose()
+    }
   }, 'skill-sources remote')
   ctx.effect(function* () {
     yield async () => { await provider.dispose() }

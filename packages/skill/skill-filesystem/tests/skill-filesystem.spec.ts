@@ -1382,3 +1382,37 @@ describe('FileSystemSkillProvider', () => {
     }
   })
 })
+
+describe('shared skill-sources controller', () => {
+  it('serves every mounted provider instance from one root controller', async () => {
+    const home = await tempDir('shared-controller')
+    const firstRoot = join(home, 'first')
+    const secondRoot = join(home, 'second')
+    await writeSkill(firstRoot, 'first-shared', 'First shared')
+    await writeSkill(secondRoot, 'second-shared', 'Second shared')
+    const ctx = new Context()
+    ctx.provide('settings', { update: async () => undefined })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, {})
+    const base = { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false }
+    const first = await ctx.plugin(SkillFileSystem, { ...base, customSkillDirs: [firstRoot] })
+    // A second preset registers another provider instance under its own registry name.
+    const second = await ctx.plugin(SkillFileSystem, { ...base, providerName: 'filesystem-second', customSkillDirs: [secondRoot] })
+    const controller = ctx.root.get('skillSourcesController') as {
+      describe(cwd: string | undefined): Promise<SkillFileSystem.LocalSourceView[]>
+    } | undefined
+    if (controller === undefined) throw new Error('skillSourcesController is not mounted')
+    // A later instance joins the shared controller through its mount microtask.
+    await new Promise(resolve => setTimeout(resolve, 25))
+    const paths = (await controller.describe(home)).map(row => row.path)
+    expect(paths).toContain(firstRoot)
+    expect(paths).toContain(secondRoot)
+    await second.dispose()
+    const remaining = (await controller.describe(home)).map(row => row.path)
+    expect(remaining).toContain(firstRoot)
+    expect(remaining).not.toContain(secondRoot)
+    await first.dispose()
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(ctx.root.get('skillSourcesController')).toBeUndefined()
+  })
+})
