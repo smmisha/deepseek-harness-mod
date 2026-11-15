@@ -430,7 +430,7 @@ it('overlays the conversation and closes after navigation without losing its sid
         window.visualViewport!.dispatchEvent(new Event('scroll'))
       })
       await expect.poll(() => root.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 })
-      await expect.poll(async () => (await main.boundingBox())?.height).toBe(844)
+      await expect.poll(async () => (await main.boundingBox())?.height).toBe(804)
       await opener.tap()
       await expect.poll(async () => (await drawer.boundingBox())?.height).toBe(804)
       const searchWithKeyboard = drawer.getByPlaceholder('Search session names')

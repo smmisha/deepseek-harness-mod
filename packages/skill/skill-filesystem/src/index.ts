@@ -175,6 +175,10 @@ interface SharedSkillSourcesController {
  */
 const sharedControllers = new WeakMap<object, SharedSkillSourcesController>()
 
+/**
+ * Remote service behind the Skills tab: one root-owned view over every mounted
+ * filesystem provider instance.
+ */
 export class SkillSourcesController extends TypertRemoteService {
   /** The registry supplies the winning-source map for shadowed rows. */
   static readonly inject = ['skills', 'skillSources']
