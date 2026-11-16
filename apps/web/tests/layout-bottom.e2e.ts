@@ -36,9 +36,7 @@ it('reserves bottom content height without remounting it on main-panel navigatio
       await page.goto(scaffold.authenticatedUrl)
       await page.locator('[data-shell-bottom]').waitFor({ state: 'attached' })
       const expected: string[] = []
-      // The work-mode strip reserves 40px above every column on both Web platforms;
-      // the Windows caption band reserves the same strip through the titlebar marker.
-      const check = async (height: number, caption = 40) => {
+      const check = async (height: number, caption = 0) => {
         await expect.poll(async () => (await geometry(page)).bottom.height).toBe(height)
         const result = await geometry(page)
         const viewportHeight = page.viewportSize()!.height
@@ -73,7 +71,7 @@ it('reserves bottom content height without remounting it on main-panel navigatio
           if (value === 'darwin') document.documentElement.setAttribute('data-platform', value)
           document.documentElement.style.setProperty('--dsh-windows-titlebar-height', '40px')
         }, platform)
-        expected.push(`${platform}: ${JSON.stringify(await check(360))}`)
+        expected.push(`${platform}: ${JSON.stringify(await check(360, platform === 'windows' ? 40 : 0))}`)
       }
       await page.setViewportSize({ width: 520, height: 600 })
       await expect.poll(() => page.locator('[data-shell-bottom]').locator('..').getAttribute('data-sidebar-collapsed')).toBe('true')

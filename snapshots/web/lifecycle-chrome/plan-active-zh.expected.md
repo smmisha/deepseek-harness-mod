@@ -26,6 +26,3 @@
 - button "计划模式已开启，按下关闭": 计划
 - button "选择模型，当前 DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "发送消息" [disabled]
-- radiogroup "工作模式":
-  - radio "对话"
-  - radio "Harness" [checked]
