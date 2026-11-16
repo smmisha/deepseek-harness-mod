@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包在空白首页提供点击浮出的像素鲸鱼，并让以 `official` profile 构建的客户端显示 DeepSeek Harness 侧栏品牌图形。随产品提供的 Web 与 Desktop 组合默认加载本包。其他构建 profile 保留原有品牌。首屏标志仍使用动画鱼回退。背景只持有临时 Canvas 资源，不增加模型请求。
+本包在空白首页提供点击浮出的像素鲸鱼，并让以 `official` 与 `local` profile 构建的客户端显示 DeepSeek Harness 侧栏品牌图形，`local` 构建另带一个小的 `smmisha` 签名。随产品提供的 Web 与 Desktop 组合默认加载本包。其他构建 profile 保留外壳回退品牌。首屏标志仍使用动画鱼回退。背景只持有临时 Canvas 资源，不增加模型请求。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-随产品提供的 Web 与 Desktop 组合已挂载本插件。首页反馈不需要额外安装或启用；`official` 客户端构建还会注册 DeepSeek 侧栏图形。
+随产品提供的 Web 与 Desktop 组合已挂载本插件。首页反馈不需要额外安装或启用；`official` 与 `local` 客户端构建还会注册 DeepSeek 侧栏图形。
 
 ### 选择 profile
 

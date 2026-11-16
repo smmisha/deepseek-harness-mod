@@ -682,6 +682,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Merges provider skill catalogs; tool-skill renders the session-prefix catalog and loads complete skill bodies.',
   },
   {
+    key: 'skillSources',
+    pkg: 'skill-sources',
+    title: 'Skill source switches',
+    mode: 'service',
+    consumers: ['skill-filesystem'],
+    note: 'Keeps the profile-owned source and per-skill switches, the application list and added folders in settings, and invalidates every registered local provider after a write.',
+  },
+  {
     key: 'agents',
     pkg: 'agent',
     title: 'Agent service',

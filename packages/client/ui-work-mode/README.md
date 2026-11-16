@@ -26,7 +26,7 @@ The window's top strip carries a switch between Chat and Harness: two flat icon 
 
 <a id="use-this-package"></a>
 
-Chat is the only mode that hides chrome: the plugin calls `ctx.layout.setChrome('minimal')`, the frame hides the occupied columns while keeping them mounted, and the same mapping marks the frame covered so those columns leave the interaction order; the layer covers the frame with the guest. Harness calls `setChrome('full')` and the previous sidebar, panels, and selected panel come back untouched. The plugin stores the selection in the persisted `dsh.work-mode.v1` store; first launch starts in Harness.
+Chat is the only mode that hides chrome: the plugin calls `ctx.layout.setChrome('minimal')`, the frame hides the occupied columns while keeping them mounted, and the same mapping marks the frame covered so those columns leave the interaction order; the layer covers the frame with the guest. Harness calls `setChrome('full')` and the previous sidebar, panels, and selected panel come back untouched. The plugin stores the selection in the persisted `dsh.work-mode.v1` store; first launch starts in Harness. The mode is frame chrome, so another feature may also drive `ctx.layout.setChrome`; only this package maps the Chat/Harness product modes onto it.
 
 The guest is attached once and never moved or unmounted while the plugin lives: switching to Harness hides the layer with `opacity` and `inert` (not `display: none`, which detaches the guest and reloads it), so an open chat, its scroll position, a typed draft, and a running answer survive the switch. The Desktop shell keeps the guest's renderer unthrottled while it is hidden for the same reason. The site loads on the first Chat visit, not at application start.
 
@@ -78,5 +78,3 @@ None; the switch changes frame chrome and the embedded page never enters a model
 None.
 
 </details>
-
-The mode is frame chrome, so another feature may also drive `ctx.layout.setChrome`; only this package maps the Chat/Harness product modes onto it.

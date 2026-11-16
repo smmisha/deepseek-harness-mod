@@ -73,7 +73,7 @@ it.each(['https://registry.npmjs.org/', MIRROR])('selects the fastest responding
       // mirror and a typed address.
       const registryToggle = dialog.getByRole('button', { name: winner === MIRROR ? '安装源 中国大陆镜像源' : '安装源 npm 官方源', exact: true })
       await registryToggle.waitFor()
-      expect(await page.getByRole('radio').count()).toBe(0)
+      expect(await dialog.getByRole('radio').count()).toBe(0)
       await registryToggle.click()
       const options = page.getByRole('group', { name: '从哪个 npm 源下载插件', exact: true })
       const mirror = options.getByRole('radio', { name: '中国大陆镜像源 registry.npmmirror.com', exact: true })

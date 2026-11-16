@@ -13,11 +13,12 @@ import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promis
 import { unwatchFile, watchFile, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type { SkillVisibility } from '@deepseek-ai/dsh-skill-sources'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { AddSkillFolderResult, LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
+import { folderPathProblem } from './folder-path.ts'
 export type { AddSkillFolderResult, LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
 import chokidar from 'chokidar'
 import z from '@deepseek-ai/schemastery'
@@ -57,41 +58,6 @@ const APPLICATION_RANK = 700
 const DEFAULT_WATCH_STABILITY_THRESHOLD_MS = 200
 const DEFAULT_WATCH_POLL_INTERVAL_MS = 100
 const DEFAULT_WATCH_MAX_PROJECTS = 128
-
-/** Why a folder path is refused; `invalid` covers network, device, and parent-segment spellings. */
-type FolderPathProblem = 'relative' | 'invalid'
-
-/**
- * Classify a folder path before the provider opens it. Two leading separators reject the Win32
- * UNC and device namespaces (`\\server\share`, `\\?\C:\x`, `\\.\pipe\x`) on every platform:
- * scanning them would connect to an attacker-named SMB endpoint and register a remote tree as
- * skills. A parent segment is refused too, so the recorded folder is the one the reader saw.
- * @param path - folder path after `~` expansion.
- * @returns the refusal reason, or `undefined` when the folder may be scanned.
- */
-function folderPathProblem(path: string): FolderPathProblem | undefined {
-  if (path.length === 0) return 'relative'
-  if (/^[\\/]{2}/u.test(path)) return 'invalid'
-  if (/(?:^|[\\/])\.\.(?:[\\/]|$)/u.test(path)) return 'invalid'
-  return isAbsolute(path) ? undefined : 'relative'
-}
-
-/**
- * Refuse a folder the Skills provider must not scan: a network share or device namespace, a
- * relative path, or a path carrying a parent (`..`) segment. The two leading separators that
- * spell a Win32 device prefix are rejected on every platform, so the check holds where the Host
- * is not Windows but the reader pastes a Windows path.
- * @param path - absolute folder path, after `~` expansion.
- * @throws {TypeError} when the path is not a local absolute folder path.
- */
-export function assertFolderPathAcceptable(path: string): void {
-  const problem = folderPathProblem(path)
-  if (problem === undefined) return
-  const reason = problem === 'relative'
-    ? 'is not an absolute folder path'
-    : 'names a network or device location, or contains a parent segment'
-  throw new TypeError(`skill-filesystem: "${path}" ${reason}`)
-}
 
 /** Plugin name used by the Loader row. */
 export const name = 'skill-filesystem'
@@ -193,22 +159,66 @@ interface ResolvedWatchConfig {
  * sources and their skills from here, and writes switches through the
  * `settings` namespace of this same plugin entry.
  */
+/** Root-owned controller shared by every provider instance mounted on that root. */
+interface SharedSkillSourcesController {
+  /** Fiber carrying the controller; the last owning instance disposes it. */
+  readonly fiber: Fiber
+  /** Resolves with the controller once its fiber is ready. */
+  readonly mounted: Promise<SkillSourcesController>
+  /** Mounted provider instances that still use the controller. */
+  owners: number
+}
+
+/**
+ * Controllers already mounted per root. Agent presets mount this plugin in
+ * separate layers of one root, so the root context owns the shared entry.
+ */
+const sharedControllers = new WeakMap<object, SharedSkillSourcesController>()
+
+/**
+ * Remote service behind the Skills tab: one root-owned view over every mounted
+ * filesystem provider instance.
+ */
 export class SkillSourcesController extends TypertRemoteService {
   /** The registry supplies the winning-source map for shadowed rows. */
   static readonly inject = ['skills', 'skillSources']
 
   /**
+   * Provider instances sharing this root controller. Each agent preset mounts
+   * `skill-filesystem` into its own layer, but the Skills tab is one Remote
+   * service for the whole root, so its rows come from every attached instance.
+   */
+  private readonly accesses = new Set<() => {
+    readonly provider: FileSystemSkillProvider
+    readonly invalidate: () => void
+  }>()
+
+  /**
    * @param ctx - Host context carrying `ctx.skills`.
-   * @param provider - the live filesystem provider that feeds the catalog.
+   * @param first - the live filesystem provider of the first mounted instance.
    */
   constructor(
     ctx: Context,
-    private readonly access: () => {
+    first: () => {
       readonly provider: FileSystemSkillProvider
       readonly invalidate: () => void
     },
   ) {
     super(ctx, 'skillSourcesController', { namespace: 'skillSources' })
+    this.accesses.add(first)
+  }
+
+  /**
+   * Share this root controller with one more mounted provider instance.
+   * @param access - that instance's provider and invalidation callback.
+   * @returns the detach disposer for that instance.
+   */
+  attach(access: () => {
+    readonly provider: FileSystemSkillProvider
+    readonly invalidate: () => void
+  }): () => void {
+    this.accesses.add(access)
+    return () => { this.accesses.delete(access) }
   }
 
   /**
@@ -220,7 +230,13 @@ export class SkillSourcesController extends TypertRemoteService {
   async describe(cwd: string | undefined): Promise<LocalSourceView[]> {
     const catalog = await this.ctx.skills.list(cwd === undefined ? {} : { cwd })
     const winners = new Map(catalog.map(skill => [skill.name, String(skill.source)]))
-    return await this.access().provider.describeSources(cwd === undefined ? { winners } : { cwd, winners })
+    // Presets commonly expose the same harness roots; the first described row owns the identity.
+    const rows = new Map<string, LocalSourceView>()
+    for (const access of this.accesses) {
+      const described = await access().provider.describeSources(cwd === undefined ? { winners } : { cwd, winners })
+      for (const row of described) rows.set(`${row.id}\u0000${row.path}`, row)
+    }
+    return [...rows.values()]
   }
 
   /**
@@ -292,8 +308,46 @@ export function apply(ctx: Context, config: Config = {}): void {
   // provider that feeds the model catalog. The Host gateway resolves the
   // service as a sibling, so the controller mounts at the root.
   ctx.effect(() => {
-    const fiber = ctx.root.plugin(SkillSourcesController, () => ({ provider, invalidate }))
-    return () => { void fiber.dispose() }
+    const access = (): { readonly provider: FileSystemSkillProvider; readonly invalidate: () => void } => ({
+      provider, invalidate,
+    })
+    // Every agent preset mounts this provider in its own layer of one root, so
+    // the root entry owns a single controller that later instances join.
+    const root = ctx.root
+    let shared = sharedControllers.get(root)
+    if (shared === undefined) {
+      const fiber = root.plugin(SkillSourcesController, () => access())
+      shared = {
+        fiber,
+        owners: 0,
+        mounted: fiber.await().then(() => {
+          /* v8 ignore next -- The fiber await rejects instead of leaving the service unset. */
+          const controller = root.get('skillSourcesController') as SkillSourcesController | undefined
+          if (controller === undefined) throw new Error('skillSourcesController did not mount')
+          return controller
+        }),
+      }
+      sharedControllers.set(root, shared)
+    }
+    const entry: SharedSkillSourcesController = shared
+    entry.owners += 1
+    let detach: (() => void) | undefined
+    let released = false
+    void entry.mounted.then((controller) => {
+      /* v8 ignore next -- Effects outlive their mount, so cancellation only happens when the root tears down mid-mount. */
+      if (released) return
+      detach = controller.attach(access)
+    }, () => {
+      /* v8 ignore next -- A failed mount is reported by the controller fiber itself. */
+    })
+    return () => {
+      released = true
+      detach?.()
+      entry.owners -= 1
+      if (entry.owners > 0) return
+      sharedControllers.delete(root)
+      void entry.fiber.dispose()
+    }
   }, 'skill-sources remote')
   ctx.effect(function* () {
     yield async () => { await provider.dispose() }
@@ -1243,7 +1297,9 @@ function optionalFileSystem(ctx: Context): FileSystem | undefined {
   return ctx.get('fs')
 }
 
-async function readSkillText(path: string, root: string, ctx: Context, signal?: AbortSignal, trustedHost = false): Promise<SkillText | undefined> {
+async function readSkillText(
+  path: string, root: string, ctx: Context, signal?: AbortSignal, trustedHost = false,
+): Promise<SkillText | undefined> {
   signal?.throwIfAborted()
   const fs = optionalFileSystem(ctx)
   if (fs !== undefined && !trustedHost) {

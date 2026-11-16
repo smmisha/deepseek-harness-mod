@@ -17,8 +17,12 @@
 // temp workspace while project skill discovery remains real; agent-instructions
 // disabled (recorded fixtures must not embed this repo's AGENTS.md);
 // session-title-llm disabled (its fire-and-forget title call would race the
-// loop for the session's replay cursor); webserver pinned to port 0 with the
-// built dist; ordinary keyless modes disable both direct adapters and fill the open
+// loop for the session's replay cursor); the mod's ui-work-mode overlay
+// disabled unless `workMode` asks for it (its top strip moves every column the
+// upstream layout contracts measure); the mod's ui-skills tab disabled unless
+// `skillsTab` asks for it (it adds a tablist to the Plugins header, which the
+// upstream header contracts measure without tabs); webserver pinned to port 0
+// with the built dist; ordinary keyless modes disable both direct adapters and fill the open
 // llm seam post-boot with installLlmReplay on the settled root ctx
 // (the plugin-row path discards the ReplayHandle; the direct install keeps
 // assertConsumed for the teardown fixture-consumption check).
@@ -308,6 +312,10 @@ export interface WebScaffold {
 export interface LaunchOptions {
   /** Override the developer-tools preference; omitted uses the shipped default. */
   developerTools?: boolean
+  /** Keep the mod's Chat/Harness overlay (and its 40px top strip) mounted; omitted boots without it. */
+  workMode?: boolean
+  /** Keep the mod's Skills tab on the Plugins page; omitted boots without it. */
+  skillsTab?: boolean
   /** Enable the real Open In rows with deterministic launch-environment facts. */
   openInAppEnvironment?: LaunchEnvironmentSnapshot
   /** Compare the replayed root Session; `read-only` also forbids refresh writes to a borrowed fixture. */
@@ -623,6 +631,15 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // workspace, keeping the composition untouched.
     { id: 'agent-instructions', disabled: true },
     { id: 'session-title-llm', disabled: true },
+    // The mod's Chat/Harness overlay reserves a 40px strip above every column
+    // and adds a second radiogroup to the page. The upstream layout contracts
+    // measure the shell under it, so the lane boots without the overlay unless
+    // a scenario asks for it.
+    ...options.workMode === true ? [] : [{ id: 'ui-work-mode', disabled: true }],
+    // The mod's Skills tab turns the Plugins header into a tabbed header even
+    // without the plugin market, which changes the geometry and aria the
+    // upstream plugin page contracts pin, so it is opt-in as well.
+    ...options.skillsTab === true ? [] : [{ id: 'ui-skills', disabled: true }],
     // Fixture sessions must never leave the process: the shipped row defaults
     // to the production OTLP endpoint (or whatever DSH_TELEMETRY_OTLP_URL
     // names in the ambient environment). A scenario with a local collector

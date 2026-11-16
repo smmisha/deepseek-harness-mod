@@ -241,6 +241,24 @@ describe('SkillsSection', () => {
     expect(screen.queryByText('Could not read skills: old failure')).toBeNull()
   })
 
+  it('reloads the current working directory when a write finishes after it changed', async () => {
+    let releaseWrite: ((error: string | undefined) => void) | undefined
+    const setSkill = vi.fn(() => new Promise<string | undefined>((resolve) => { releaseWrite = resolve }))
+    const pending: { cwd: string | undefined; resolve: (value: readonly LocalSourceView[]) => void }[] = []
+    const load = vi.fn((cwd?: string) => new Promise<readonly LocalSourceView[]>((resolve) => { pending.push({ cwd, resolve }) }))
+    const view = render(<SkillsSection {...props({ load, setSkill })} useSessions={sessionsAt('C:\\old')} />)
+    await waitFor(() => { expect(pending).toHaveLength(1) })
+    await act(async () => { pending[0]?.resolve(SOURCES) })
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable skill app-skill' }))
+    await waitFor(() => { expect(setSkill).toHaveBeenCalledTimes(1) })
+    view.rerender(<SkillsSection {...props({ load, setSkill })} useSessions={sessionsAt('C:\\new')} />)
+    await waitFor(() => { expect(pending).toHaveLength(2) })
+    await act(async () => { releaseWrite?.(undefined) })
+    await waitFor(() => { expect(pending).toHaveLength(3) })
+    // The write began in the old folder, but its reload asks for the folder that is current now.
+    expect(pending.map(entry => entry.cwd)).toEqual(['C:\\old', 'C:\\new', 'C:\\new'])
+  })
+
   it('ignores sessions without a main-view retainer', async () => {
     const load = vi.fn(async () => SOURCES)
     render(<SkillsSection {...props({ load })} useSessions={selector => selector({

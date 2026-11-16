@@ -6,6 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { FileSystem, FsError, FsVersion, type FsDirEntry, type FsEditOutcome, type FsEditRequest, type FsInfo, type FsPathInfo, type FsTarget, type FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import * as SkillFileSystem from '../src/index.ts'
+import { assertFolderPathAcceptable } from '../src/folder-path.ts'
 import SkillSources, { type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
 
 /** Every temp dir created by this file, removed after each test. */
@@ -18,6 +19,19 @@ async function tempDir(name: string): Promise<string> {
   const dir = await import('node:fs/promises').then(fs => fs.mkdtemp(join(tmpdir(), `dsh-${name}-`)))
   tempDirs.push(dir)
   return await realpath(dir)
+}
+
+/**
+ * Point the POSIX home folder at a fresh temp dir for one test, so temp roots stay
+ * outside it even where TMPDIR lives under the real home, as on GitHub's
+ * standard runners (`/home/runner/work/_temp`).
+ * @returns the temporary home folder.
+ */
+async function isolateHome(): Promise<string> {
+  const home = await tempDir('home')
+  vi.stubEnv('HOME', home)
+  onTestFinished(() => { vi.unstubAllEnvs() })
+  return home
 }
 
 async function writeSkill(root: string, name: string, description: string, body = 'Use the skill.'): Promise<void> {
@@ -221,8 +235,8 @@ describe('dsh-skill-filesystem plugin exports', () => {
 
 describe('folder path validation', () => {
   it('accepts local absolute folders', () => {
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(homedir())).not.toThrow()
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(join(homedir(), 'skills'))).not.toThrow()
+    expect(() => { assertFolderPathAcceptable(homedir()) }).not.toThrow()
+    expect(() => { assertFolderPathAcceptable(join(homedir(), 'skills')) }).not.toThrow()
   })
 
   it('refuses network shares, device namespaces, relative paths, and parent segments', () => {
@@ -236,11 +250,11 @@ describe('folder path validation', () => {
       String.raw`C:\skills\..\elsewhere`,
     ]
     for (const path of refused) {
-      expect(() => SkillFileSystem.assertFolderPathAcceptable(path), path).toThrow(TypeError)
+      expect(() => { assertFolderPathAcceptable(path) }, path).toThrow(TypeError)
     }
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(String.raw`\\server\share`))
+    expect(() => { assertFolderPathAcceptable(String.raw`\\server\share`) })
       .toThrow('network or device location')
-    expect(() => SkillFileSystem.assertFolderPathAcceptable('relative/skills'))
+    expect(() => { assertFolderPathAcceptable('relative/skills') })
       .toThrow('not an absolute folder path')
   })
 })
@@ -403,6 +417,7 @@ describe('FileSystemSkillProvider', () => {
   })
 
   it.skipIf(process.platform === 'win32')('shortens roots outside the home folder and a folder equal to home', async () => {
+    await isolateHome()
     const outside = await mkdtemp(join(tmpdir(), 'dsh-fs-'))
     tempDirs.push(outside)
     await writeSkill(join(outside, '.dsh', 'skills'), 'out-skill', 'Outside the home folder')
@@ -460,6 +475,7 @@ describe('FileSystemSkillProvider', () => {
   })
 
   it('shortens home and project roots and keeps other absolute roots', async () => {
+    if (process.platform !== 'win32') await isolateHome()
     const homeChild = await mkdtemp(join(homedir(), 'dsh-home-'))
     tempDirs.push(homeChild)
     await writeSkill(homeChild, 'home-skill', 'Under home')
@@ -1364,5 +1380,39 @@ describe('FileSystemSkillProvider', () => {
         process.env.DSH_BUNDLED_SKILL_DIR = previousBundledSkillDir
       }
     }
+  })
+})
+
+describe('shared skill-sources controller', () => {
+  it('serves every mounted provider instance from one root controller', async () => {
+    const home = await tempDir('shared-controller')
+    const firstRoot = join(home, 'first')
+    const secondRoot = join(home, 'second')
+    await writeSkill(firstRoot, 'first-shared', 'First shared')
+    await writeSkill(secondRoot, 'second-shared', 'Second shared')
+    const ctx = new Context()
+    ctx.provide('settings', { update: async () => undefined })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, {})
+    const base = { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false }
+    const first = await ctx.plugin(SkillFileSystem, { ...base, customSkillDirs: [firstRoot] })
+    // A second preset registers another provider instance under its own registry name.
+    const second = await ctx.plugin(SkillFileSystem, { ...base, providerName: 'filesystem-second', customSkillDirs: [secondRoot] })
+    const controller = ctx.root.get('skillSourcesController') as {
+      describe(cwd: string | undefined): Promise<SkillFileSystem.LocalSourceView[]>
+    } | undefined
+    if (controller === undefined) throw new Error('skillSourcesController is not mounted')
+    // A later instance joins the shared controller through its mount microtask.
+    await new Promise(resolve => setTimeout(resolve, 25))
+    const paths = (await controller.describe(home)).map(row => row.path)
+    expect(paths).toContain(firstRoot)
+    expect(paths).toContain(secondRoot)
+    await second.dispose()
+    const remaining = (await controller.describe(home)).map(row => row.path)
+    expect(remaining).toContain(firstRoot)
+    expect(remaining).not.toContain(secondRoot)
+    await first.dispose()
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(ctx.root.get('skillSourcesController')).toBeUndefined()
   })
 })

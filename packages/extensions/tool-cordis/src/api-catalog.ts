@@ -3686,6 +3686,64 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'skillSources',
+    summary: 'The one service a provider and the Skills tab both use.',
+    description: 'The one service a provider and the Skills tab both use.',
+    methods: [
+      {
+        signature: 'read(): SkillVisibilityState',
+        description: 'Current switches.',
+        parameters: [],
+        returns: 'the source and per-skill switches as stored.',
+      },
+      {
+        signature: 'applications(): readonly SkillApplication[]',
+        description: 'Configured other-application folders.',
+        parameters: [],
+        returns: 'the application folders in configuration order.',
+      },
+      {
+        signature: 'folders(): readonly SkillFolder[]',
+        description: 'Folders the reader added.',
+        parameters: [],
+        returns: 'the added folders in the order they were added.',
+      },
+      {
+        signature: 'visibility(): SkillVisibility',
+        description: 'One read of the switches, applications, and added folders, answering which sources and skills are visible.',
+        parameters: [],
+        returns: 'the visibility view over the current configuration.',
+      },
+      {
+        signature: 'addFolder(dir: string): Promise<boolean>',
+        description: 'Add one local absolute folder, switched off until the reader turns its source on; refuses any other path.',
+        parameters: [{ name: 'dir', description: 'local absolute folder to scan for skill bundles.' }],
+        returns: 'false when the folder is already listed, true when it was added.',
+      },
+      {
+        signature: 'removeFolder(dir: string): Promise<void>',
+        description: 'Remove one added folder; its files and switches stay untouched.',
+        parameters: [{ name: 'dir', description: 'absolute folder as it was added.' }],
+      },
+      {
+        signature: 'setSource(source: SkillSource, enabled: boolean): Promise<void>',
+        description: 'Switch one source; the per-skill switches are preserved.',
+        parameters: [{ name: 'source', description: 'source to switch.' }, { name: 'enabled', description: 'whether the source contributes skills.' }],
+      },
+      {
+        signature: 'setSkill(source: SkillSource, name: string, enabled: boolean): Promise<void>',
+        description: 'Switch one skill inside its source.',
+        parameters: [{ name: 'source', description: 'source that holds the skill.' }, { name: 'name', description: 'skill name inside that source.' }, { name: 'enabled', description: 'whether the skill is visible.' }],
+      },
+      {
+        signature: 'register(invalidate: () => void): () => void',
+        description: 'Register the invalidator of one provider instance.',
+        parameters: [{ name: 'invalidate', description: 'called after every write so the provider republishes its catalog.' }],
+        returns: 'the disposer that unregisters the invalidator.',
+      },
+    ],
+  },
+  {
     key: 'speechController',
     summary: 'Speech calls never activate or submit to an Agent.',
     description: 'Speech calls never activate or submit to an Agent.',
@@ -9534,6 +9592,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SignInErrorCode = \'no-response\' | \'network\' | \'protocol\' | \'expired\' | \'storage\';',
   },
   {
+    name: 'SkillApplication',
+    declaration: 'export interface SkillApplication {\n    readonly id: string;\n    readonly dir: string;\n    readonly title: string;\n}',
+  },
+  {
     name: 'SkillCandidate',
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -9548,6 +9610,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillEntry',
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
+  },
+  {
+    name: 'SkillFolder',
+    declaration: 'export interface SkillFolder {\n    readonly dir: string;\n}',
+  },
+  {
+    name: 'SkillFolderSource',
+    declaration: 'export interface SkillFolderSource {\n    readonly id: string;\n    readonly dir: string;\n}',
   },
   {
     name: 'SkillInvocationPolicy',
@@ -9596,6 +9666,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillViewOptions',
     declaration: 'export interface SkillViewOptions extends SkillLookupOptions {\n    readonly scope?: ScopeKey | undefined;\n}',
+  },
+  {
+    name: 'SkillVisibility',
+    declaration: 'export interface SkillVisibility {\n    readonly applications: readonly SkillApplication[];\n    readonly folders: readonly SkillFolderSource[];\n    sourceEnabled(source: string): boolean;\n    skillEnabled(source: string, name: string): boolean;\n}',
+  },
+  {
+    name: 'SkillVisibilityState',
+    declaration: 'export interface SkillVisibilityState {\n    readonly sources: Readonly<Record<string, {\n        readonly enabled?: boolean;\n    }>>;\n    readonly skills: Readonly<Record<string, Readonly<Record<string, boolean>>>>;\n}',
   },
   {
     name: 'SpeechCatalog',
