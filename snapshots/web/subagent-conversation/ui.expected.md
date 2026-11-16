@@ -3,7 +3,7 @@
     - button "Ask a research subagent to"
     - text: /
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
-    - button "1 subagent" [expanded]
+    - button "1 subagent"
   - text: Standard mode
   - button "More actions"
   - button "Open right sidebar"

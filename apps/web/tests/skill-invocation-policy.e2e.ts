@@ -57,7 +57,11 @@ const SKILLS: readonly SeedSkill[] = [
 async function seedSkills(workspaceCwd: string): Promise<void> {
   for (const skill of SKILLS) {
     const root = join(workspaceCwd, 'workspace', '.agents', 'skills')
-    const directory = skill.name === 'policy-shared' ? join(workspaceCwd, 'linked-skills', skill.name) : join(root, skill.name)
+    // The flat-file entry stays a symbolic link, but its target lives inside the
+    // root: the mod's skill-filesystem ignores a SKILL.md whose real path leaves
+    // its source folder. `linked/` holds no SKILL.md of its own, so discovery
+    // reaches the target only through the link.
+    const directory = skill.name === 'policy-shared' ? join(root, 'linked', skill.name) : join(root, skill.name)
     await mkdir(directory, { recursive: true })
     const policyLines = skill.frontmatter === '' ? [] : skill.frontmatter.trimEnd().split('\n')
     await writeFile(join(directory, 'SKILL.md'), [
