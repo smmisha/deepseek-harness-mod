@@ -3,29 +3,29 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-skills/README.md
 /:
-  en: f86c30668735d3ef
-  zh: 67241f4acad6409a
+  en: 44ec71183f1ce7d3
+  zh: 2943be37164fd594
 /deepseek-ai-dsh-client-ui-skills:
   en: 7acbcd5932ccf4ba
   zh: e2bae06a685e267e
 /deepseek-ai-dsh-client-ui-skills/summary:
-  en: d5f987d9aa9665d5
-  zh: 55bb1d8f956989fe
+  en: 4c275dee19969dd5
+  zh: 279478af2a86854f
 /deepseek-ai-dsh-client-ui-skills/table-of-contents:
   en: dd5b0179919ae12c
   zh: b4ceef795d3dc87a
 /deepseek-ai-dsh-client-ui-skills/use-this-package:
-  en: dffb4d40579df79d
-  zh: 3d01b0531028e48b
+  en: d162d90a01aff553
+  zh: 58de96d07cc5efe6
 /deepseek-ai-dsh-client-ui-skills/source-marks-and-licences:
   en: b3632e45b107939f
   zh: 234ac9d47600cacf
 /deepseek-ai-dsh-client-ui-skills/understand-the-implementation:
-  en: 749e849911ea92bd
-  zh: c031a200c8e2f210
+  en: f8d2ebf6f4e4372b
+  zh: 31020d44f5b88ed3
 /deepseek-ai-dsh-client-ui-skills/further-exploration:
-  en: 183f3838fa731ea7
-  zh: 404edef155e90e1b
+  en: 46068ab8a3546802
+  zh: 2a27fc59ac00ab8a
 /deepseek-ai-dsh-client-ui-skills/model-experience:
   en: ea4bfe1d89089fb7
   zh: e287211d8ed43308
@@ -33,8 +33,8 @@
   en: d49047040a56eb1b
   zh: 1e5e2d2557560b35
 /deepseek-ai-dsh-client-ui-skills/known-limitations-and-deferred-work:
-  en: b06c9532cb7c1751
-  zh: add44be07718d4ba
+  en: 8eb4f7ea07c14012
+  zh: 1726b6badcb169a7
 /deepseek-ai-dsh-client-ui-skills/known-limitations-and-deferred-work/dev-note:
-  en: a128be21bc599a5a
-  zh: 46047457d44c5bcc
+  en: 6eed7ec687b50589
+  zh: 7438b8281ce9153a

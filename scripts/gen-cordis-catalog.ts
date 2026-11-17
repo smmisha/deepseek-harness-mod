@@ -1157,6 +1157,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TerminalScreenRequest: 'Browser terminal screen reads are owned by packages/api/terminal-controller/README.md',
   TerminalScreenPage: 'Browser terminal screen reads are owned by packages/api/terminal-controller/README.md',
   SkillApplication: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
+  SkillCategory: 'skill categories are owned by packages/skill/skill-sources/README.md',
   SkillFolder: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
   SkillSource: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',
   SkillVisibility: 'skill switches and folders are owned by packages/skill/skill-sources/README.md',

@@ -33,13 +33,24 @@ agent（智能体）可以使用来自仓库、自定义目录或用户 agent �
 
 ### skill 格式
 
-skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也可以是平铺文件 `<name>.md`；刻意不支持发现嵌套的 `**/SKILL.md`。文件以 YAML frontmatter 开头：必填 `name` 与 `description`，另有可选 `whenToUse`、`metadata`、`disable-model-invocation` 与 `user-invocable`。
+skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也可以是平铺文件 `<name>.md`；刻意不支持发现嵌套的 `**/SKILL.md`。文件以 YAML frontmatter 开头：必填 `name` 与 `description`，另有可选 `whenToUse`、`category`、`metadata`、`disable-model-invocation` 与 `user-invocable`。
 
 `disable-model-invocation: true` 会把 skill 从面向模型的目录和 loader 中排除；`user-invocable: false` 会把它从面向用户的命令中排除，省略的字段默认允许对应接口调用。这两个键接受 YAML 布尔值，以及不区分大小写的 `true`/`false`、`yes`/`no`、`on`/`off` 和 `1`/`0` 形式；被拒绝的拼写或非布尔值会让整个 skill 随警告一起被丢弃，而不会静默允许某个接口。
 
 目录条目和已加载 skill 提供解析后的指令文件路径，使符号链接目录和扁平文件都能作为普通文件预览。重新加载的定位信息和资源根保留发现时的路径，包括符号链接。
 
 目录与正文具有独立的生命周期：发现阶段把 frontmatter 解析进目录条目，每次加载都会重新读取当前文件，因此编辑 skill 正文无需版本化或缓存失效。
+
+### 分类
+
+`describeSources()` 为技能页给每个 skill 推导一个分类。先匹配者生效：
+
+1. frontmatter 声明了分类：`category`、扁平的 `metadata.category` 键，或 `metadata` 映射中的 `category` 字段。作者自己的词会与已配置的规则匹配；没有规则认领时，它成为以该词命名与标示的独立分类。
+2. skill 名带有插件命名空间，例如 `ckm:banner-design` → `ckm`。
+3. skill 名带有前缀：命名空间之后、第一个 `-` 之前的部分，例如 `gcp-agent-builder` → `gcp`。单词名称就是它自己的前缀。
+4. 没有规则认领：该行不报告分类。
+
+这些规则不属于本提供方的配置。它们位于 [`skill-sources`](../skill-sources/README.zh.md#categories) 配置条目，并通过 `skillSources.visibility().categories` 到达提供方，因此部署方只需为一处、对所有已挂载的提供方实例声明分类。推导只读取 frontmatter 与名称：不打开文件、不写入，也不改变模型目录。frontmatter 无法读取的行没有名称，因此也没有分类。
 
 ### 根目录与优先级
 
@@ -92,6 +103,8 @@ skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也�
 | `language` | 当 `metadata.language` 是语言标签时取其值；技能页据此设置 `lang`，并始终对作者文本设置 `dir="auto"`。 |
 | `files` | 最多 100 个文件、三层目录：相对技能文件夹的路径、字节大小，以及是否为脚本（`scripts` 或 `bin` 目录，或解释器/可执行文件扩展名）。列出时只读取元数据，不打开、不运行任何文件。 |
 | `provenance` | `metadata.repository`，以及存在时的 `metadata.commit` 与 ISO-8601 的 `metadata.installedAt`。没有安装记录时为缺失。 |
+| `category` | 已配置规则赋予该 skill 的分类标识；没有规则认领时为缺失。没有规则认领的声明词会成为 `declared:<词>`，因此两个不同的词仍是两个分类。 |
+| `categoryTitle` | `category` 的展示名：认领规则的 `title`，或作者声明的词。技能页会翻译内置 id，其他情况显示该值。 |
 
 `application` 来源行还会携带 `applicationId`，即配置中的应用 id（`claude-code`、`codex` 等），技能页据此映射来源标记与译名；harness 与已添加文件夹的行则不带。
 
@@ -171,6 +184,7 @@ watcher 触发的失效可促使上述消费方在现有请求历史中追加替
 - **无正文修订协议**——已加载正文是普通的已保留工具历史；后续文件编辑会影响后续调用，但既不会改写旧结果，也不会通知正文已变化。
 - **来源信息由安装器写入**——只有在安装器把 `repository`、`commit` 与 `installedAt` 写入技能 frontmatter 的 `metadata` 时才会报告；本包不安装任何内容，因此手工复制的技能没有来源信息。
 - **文件列表是有界快照**——超过三层目录或 100 个文件的 bundle 会被截断，且该行不会说明。
+- **分类是推导出来的，从不存储**——该行报告的是描述时已配置规则与当前 frontmatter 的结果。规则变化会在不触碰任何 skill 文件的情况下重新分组技能页；没有规则认领的声明词在作者保留它期间始终是独立分类。
 
 <a id="dev-note"></a>
 ### 开发备注
