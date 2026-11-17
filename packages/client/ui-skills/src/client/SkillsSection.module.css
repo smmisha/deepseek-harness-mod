@@ -1,41 +1,31 @@
-/* Skills tab: the search field and one group per source. A group head carries
-   the source name, its folder, and the switch that owns every skill below;
-   each skill is a row card matching the Plugins page's list rows — a 48px
-   artwork frame, the name over its one-liner and file, and its switch. Warnings
-   sit under the head, indented to the name they explain. */
+/* Skills tab: a catalog of the skills the Host discovered. The toolbar is one
+   search field and the split add button; below it sit the two filters and a
+   quiet summary. Each source group has a disclosure header that carries its
+   mark, name, kind, folder, count, and switch; each skill is a catalog row of
+   mark, name and source, description, state, and the quiet switch. Selecting a
+   row opens the detail panel the tab renders beside the list. */
 
 .tab {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--dsw-space-3, 12px);
+  min-width: 0;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: var(--dsw-space-2, 8px);
+  gap: 8px;
 }
 
 .search {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 360px;
-  height: 32px;
-  padding: 0 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 13px;
 }
 
-.search:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
-  outline-offset: 1px;
-}
-
-/* Add skills: the Plugins page's split button — a primary half and a
-   chevron half that opens the two ways to add. */
+/* Add skills: the Plugins page's split button — a primary half and a chevron
+   half that opens every way to add. */
 .addGroup {
   display: inline-flex;
   flex: none;
@@ -74,33 +64,32 @@
   max-width: calc(100vw - 48px);
 }
 
+/* A menu row grows with its description instead of clipping it: the two longest
+   locales write three lines here. */
 .addMenu [role='menuitem'] {
-  height: 72px;
+  height: auto;
   box-sizing: border-box;
   gap: 10px;
-  padding: 6px 12px;
+  padding: 8px 10px;
 }
 
 .addMenuItem {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
   white-space: normal;
 }
 
 .addMenuDescription {
-  display: -webkit-box;
-  max-height: 36px;
-  overflow: hidden;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
-/* Narrow panes keep the icon halves and drop the label, as the Plugins toolbar does. */
+/* Narrow panes keep the icon halves and drop the label; the button keeps its
+   accessible name from aria-label. */
 @media (max-width: 560px) {
   .addLabel {
     display: none;
@@ -111,9 +100,567 @@
     min-width: 32px;
     padding-inline: 0;
   }
+
+  .search {
+    max-width: none;
+  }
 }
 
-/* A folder path needs the width of the Plugins install dialog, not the default confirmation card. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterButton {
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  font-size: 12px;
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.filterLabel {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filterMenu {
+  min-width: 180px;
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+.summary {
+  margin-inline-start: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The catalog and its detail panel share one row; the panel takes a fixed
+   column so every row keeps the same description measure. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.split[data-detail='true'] {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.list {
+  min-width: 0;
+  padding-block: 4px;
+}
+
+@media (max-width: 960px) {
+  .split[data-detail='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* One source group: a disclosure header and the catalog rows it owns. */
+.group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.groupToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.groupToggle:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.disclosure {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.groupName {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupKind {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.groupPath {
+  overflow: hidden;
+  flex: 1 1 120px;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  margin-inline-start: auto;
+}
+
+.count {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.warning {
+  flex: none;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.groupRule {
+  height: 1px;
+  margin: 2px 0 4px;
+  background: var(--dsw-alias-border-l1);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Catalog columns: mark, identity, description, state, switch. */
+.row {
+  display: grid;
+  grid-template-columns: 20px minmax(150px, 200px) minmax(0, 1fr) 92px 36px;
+  align-items: start;
+  gap: 20px;
+  padding: 10px 10px 10px 8px;
+  margin: 0 -10px 0 -8px;
+  border-radius: var(--dsw-radius-md);
+}
+
+.row + .row {
+  box-shadow: inset 0 0.5px 0 var(--dsw-alias-border-l1);
+}
+
+.row:hover,
+.row[data-selected='true'] {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.rowMark {
+  display: inline-flex;
+  margin-top: 2px;
+}
+
+.ident {
+  min-width: 0;
+}
+
+.identName,
+.identNameStatic {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identName {
+  cursor: pointer;
+}
+
+.identName:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.identOrigin {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The author's description: its own block, measured for reading, two lines with
+   a real expansion. Words break only at boundaries; paths use `anywhere` in the
+   detail panel. */
+.desc {
+  min-width: 0;
+  max-width: 34em;
+}
+
+.descText {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.descText[data-expanded='true'] {
+  -webkit-line-clamp: 3;
+}
+
+.descMore {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.descMore:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 1px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.state[data-state='enabled'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.state[data-state='overridden'] {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.state[data-state='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.rowEnd {
+  display: inline-flex;
+  justify-content: flex-end;
+  padding-top: 1px;
+}
+
+/* A row's explanation sits under its columns, aligned with the identity. */
+.rowNote {
+  grid-column: 2 / -1;
+  margin: 6px 0 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.rowNote[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.groupEmpty {
+  padding: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.removeButton {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.more {
+  align-self: flex-start;
+  margin-inline-start: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.more:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+/* Narrow panes stack the columns: mark, identity and switch on the first line,
+   the state under the identity, the description across the row. */
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: 20px minmax(0, 1fr) 36px;
+    gap: 6px 12px;
+    padding: 12px 4px;
+    margin: 0;
+  }
+
+  .desc {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .state {
+    grid-column: 2 / 3;
+    padding-top: 0;
+  }
+
+  .rowEnd {
+    grid-column: 3 / 4;
+  }
+
+  .rowNote {
+    grid-column: 1 / -1;
+  }
+
+  .groupHead {
+    flex-wrap: wrap;
+  }
+
+  .groupKind {
+    display: none;
+  }
+
+  .groupPath {
+    order: 1;
+    flex: 1 1 100%;
+  }
+}
+
+/* Loading: the same grid as the rows, so the tab does not reflow when they land. */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeletonRow {
+  display: grid;
+  grid-template-columns: 20px minmax(150px, 200px) minmax(0, 1fr) 92px 36px;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 8px;
+}
+
+.skeletonBlock {
+  display: block;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.skeletonMark {
+  width: 20px;
+  height: 20px;
+}
+
+.skeletonLine {
+  height: 12px;
+}
+
+.skeletonName {
+  width: 120px;
+}
+
+.skeletonOrigin {
+  width: 80px;
+  height: 10px;
+  margin-top: 6px;
+}
+
+.skeletonShortLine {
+  width: 70%;
+  margin-top: 6px;
+}
+
+.skeletonSwitch {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+}
+
+/* Feedback: an in-place notice keeps the described list on screen. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.noticeIcon {
+  flex: none;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.noticeText {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.status {
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.alert {
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.noResults {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+/* Empty inventory: one sentence, the three ways to add a skill, and the quiet
+   row of sources the tab reads. */
+.empty {
+  padding: 72px 24px 80px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.emptyBody {
+  max-width: 52ch;
+  margin: 0 auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.emptySources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.emptyMarks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* A folder path needs the width of the Plugins install dialog, not the default
+   confirmation card. */
 .folderDialog {
   width: min(560px, 100%);
 }
@@ -143,211 +690,4 @@
 .folderInput {
   flex: 1;
   min-width: 0;
-}
-
-.removeButton {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.groupHead {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  min-width: 0;
-}
-
-.groupTitle {
-  flex: none;
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  line-height: 22px;
-  font-weight: 500;
-}
-
-.chip {
-  flex: none;
-  padding: 1px 6px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.path {
-  overflow: hidden;
-  flex: 1 1 160px;
-  min-width: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Count, warning, and switch stay together at the row's end. */
-.groupEnd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  margin-inline-start: auto;
-}
-
-.count {
-  flex: none;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.warning {
-  flex: none;
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.cards {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.card {
-  min-width: 0;
-  /* The row's hover-less surface reaches 8px past its content while the card
-     content stays aligned with the group head. */
-  margin: 0 -8px;
-  border-radius: var(--dsw-radius-xl);
-}
-
-.cardHead {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 8px;
-}
-
-.cardIcon {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-lg);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.cardMain {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.cardTitle {
-  overflow: hidden;
-  color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cardDesc {
-  overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 18px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-}
-
-.cardPath {
-  overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cardEnd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-}
-
-/* Under the title: 8px card padding, the 48px frame, and its 14px gap. */
-.reason {
-  margin: 0;
-  padding: 0 8px 8px 70px;
-  font-size: 12px;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-}
-
-.reasonWarning {
-  color: var(--dsw-alias-state-warn-label);
-}
-
-.reasonError {
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.message {
-  margin: 0;
-  padding: 0 8px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.error {
-  margin: 0;
-  color: var(--dsw-alias-state-error-primary);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.more {
-  align-self: flex-start;
-  margin-inline-start: 8px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--dsw-alias-state-business-primary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  cursor: pointer;
-}
-
-.more:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
-  outline-offset: 1px;
 }
