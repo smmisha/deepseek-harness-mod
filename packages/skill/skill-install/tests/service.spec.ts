@@ -68,8 +68,11 @@ async function harness(options: {
     const sources: SkillSourcesService = {
       read: () => ({ sources: {}, skills: {} }),
       applications: () => [],
+      categories: () => [],
       folders: () => [],
-      visibility: () => ({ applications: [], folders: [], sourceEnabled: () => true, skillEnabled: () => true }),
+      visibility: () => ({
+        applications: [], folders: [], categories: [], sourceEnabled: () => true, skillEnabled: () => true,
+      }),
       addFolder: async () => true,
       removeFolder: async () => undefined,
       setSource: async () => undefined,
