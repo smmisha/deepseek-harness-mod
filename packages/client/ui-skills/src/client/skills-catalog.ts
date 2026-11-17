@@ -51,9 +51,20 @@ export function skillKey(sourceId: string, skill: LocalSkillView): string {
   return skillIdentity(sourceId, skill.name ?? skill.path)
 }
 
-/** Name a row shows: the parsed name, or the file path of a skill the parser rejected. */
+/**
+ * Name a tile shows: the parsed name, or — for a skill the parser rejected — the
+ * folder that holds it, which reads as a name where the whole path does not.
+ * @param skill - one discovered skill row.
+ * @returns the name to render.
+ */
 export function skillTitle(skill: LocalSkillView): string {
-  return skill.name ?? skill.displayPath ?? skill.path
+  if (skill.name !== undefined) return skill.name
+  const value = skill.displayPath ?? skill.path
+  const segments = value.split(/[\\/]/u).filter(segment => segment.length > 0)
+  const last = segments[segments.length - 1]
+  if (last === undefined) return value
+  const parent = segments.length > 1 ? segments[segments.length - 2] : undefined
+  return parent !== undefined && /^SKILL\.md$/iu.test(last) ? parent : last
 }
 
 /**

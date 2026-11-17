@@ -161,7 +161,7 @@
   padding-block: 4px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1200px) {
   .split[data-detail='true'] {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -269,7 +269,7 @@
  * offers: the grid decides the columns, each tile keeps the same anatomy. */
 .rows {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
@@ -283,7 +283,7 @@
   flex-direction: column;
   gap: 10px;
   min-width: 0;
-  padding: 14px;
+  padding: 12px;
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);

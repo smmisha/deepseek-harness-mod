@@ -209,7 +209,8 @@ describe('SkillsSection rows', () => {
     expect(skillSwitch('app-skill', 'on').getAttribute('aria-checked')).toBe('true')
     expect(skillSwitch('off-skill', 'off').getAttribute('aria-checked')).toBe('false')
     // A rejected row has no parsed name, so no switch can address it.
-    expect(screen.getByText('~\\.claude\\skills\\broken\\SKILL.md')).toBeTruthy()
+    // A rejected skill is named by the folder that holds it, not by its whole path.
+    expect(screen.getAllByText('broken').length).toBeGreaterThan(0)
     expect(screen.queryByRole('switch', { name: /broken/u })).toBeNull()
     expect(screen.getByText('9 shown · 4 on')).toBeTruthy()
   })
@@ -259,6 +260,24 @@ describe('SkillsSection rows', () => {
     expect(collapse.getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(collapse)
     expect(screen.getAllByRole('button', { name: 'Show full description' }).length).toBeGreaterThan(0)
+  })
+
+  it('names a rejected skill by the folder that holds it', async () => {
+    const rejected: LocalSourceView = {
+      id: 'rejected', kind: 'harness', title: 'rejected', path: '~\\.dsh\\skills', displayPath: '~\\.dsh\\skills',
+      exists: true, enabled: true,
+      skills: [
+        { path: '~\\.dsh\\skills\\bundled\\SKILL.md', displayPath: '~\\.dsh\\skills\\bundled\\SKILL.md', status: 'invalid', error: 'no frontmatter' },
+        { path: 'D:\\skills\\flat-skill.md', displayPath: 'D:\\skills\\flat-skill.md', status: 'invalid', error: 'no frontmatter' },
+        { path: 'single-step.md', status: 'invalid', error: 'no frontmatter' },
+        { path: '\\\\', status: 'invalid', error: 'no frontmatter' },
+      ],
+    }
+    mount({}, [rejected])
+    // A bundle is named by its folder and a flat file by its file name.
+    expect(await screen.findByText('bundled')).toBeTruthy()
+    expect(screen.getByText('flat-skill.md')).toBeTruthy()
+    expect(screen.getByText('single-step.md')).toBeTruthy()
   })
 
   it('draws one mark per source kind', async () => {
@@ -464,7 +483,7 @@ describe('SkillsSection detail panel', () => {
       skills: [{ path: '~\\.dsh\\skills\\broken\\SKILL.md', status: 'invalid', error: 'missing YAML frontmatter' }],
     }
     mount({}, [broken])
-    await screen.findByText('~\\.dsh\\skills\\broken\\SKILL.md')
+    await screen.findByText('broken')
     // A rejected row has no name to open the panel with; its note carries the reason.
     expect(screen.getByText('Frontmatter error: missing YAML frontmatter')).toBeTruthy()
   })
