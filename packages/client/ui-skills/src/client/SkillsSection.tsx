@@ -461,7 +461,9 @@ function Group({
         : (
           <ul id={listId} className={css.rows}>
             {skills.length === 0
-              ? <li className={css.groupEmpty}>{t('emptySource')}</li>
+              // A folder that disappeared is explained by the header alone; the same row
+              // must not also claim the source has no skills.
+              ? (source.exists ? <li className={css.groupEmpty}>{t('emptySource')}</li> : null)
               : skills.slice(0, limit).map((skill) => {
                 const key = skillKey(source.id, skill)
                 return (

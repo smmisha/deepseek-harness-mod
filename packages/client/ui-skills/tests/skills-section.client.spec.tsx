@@ -228,7 +228,8 @@ describe('SkillsSection rows', () => {
     // An added folder is a line glyph, its own kind, and a remove control.
     expect(screen.getAllByText('Your folder').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Remove folder skills' })).toBeTruthy()
-    // A source with no skills keeps its own explanation.
+    // A source with no skills keeps its own explanation; a vanished folder is explained once, by its header.
+    expect(within(codex).queryByText('This source has no skills')).toBeNull()
     expect(screen.getAllByText('This source has no skills').length).toBeGreaterThan(0)
     // A group with no title falls back to its folder.
     expect(screen.getByRole('button', { name: 'D:\\' })).toBeTruthy()
