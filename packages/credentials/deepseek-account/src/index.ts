@@ -14,6 +14,7 @@ import { type AccountNotification, type AccountNotificationBatch, type AccountNo
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import { profile, readAccountDetail } from './details.ts'
+import { failedCallbackPage } from './failed-callback.ts'
 import { readNotificationContent, readNotifications, sendNotificationEvent } from './notifications.ts'
 import { revokeAccount, type LogoutRetryPolicy } from './logout.ts'
 import { AccountUnauthorizedError, PlatformAuthError, platformHeaders, platformOrigin, browserUrl, requestPlatform, initialization, exchange, loginOrigin } from './protocol.ts'
@@ -88,7 +89,10 @@ const Config = Schema.object({
 })
 
 interface Attempt {
+  /** Platform wire locale for authorization requests. */
   locale: 'en_US' | 'zh_CN'
+  /** UI language of the initiating client; localizes the browser return document. */
+  uiLocale: string
   clientHeaders: Record<string, string>
   view: SignInAttemptView
   controller: AbortController
@@ -495,6 +499,7 @@ export class DeepSeekAccount extends TypertRemoteService {
     const attempt: Attempt = {
       origin, loginSource,
       locale: platformWireLocale(client.locale),
+      uiLocale: client.locale,
       clientHeaders: platformClientHeaders(this.platform, client),
       view: { id: randomUUID() as SignInAttemptId, phase: 'initializing' },
       controller: new AbortController(), done: Promise.resolve(), running: Promise.resolve(),
@@ -799,14 +804,13 @@ export class DeepSeekAccount extends TypertRemoteService {
   private finishFailedCallback(attempt: Attempt): void {
     if (attempt.loginSource === 'web') {
       const nonce = randomBytes(16).toString('base64url')
-      const message = attempt.locale === 'zh_CN' ? '登录失败，请关闭此标签页并在原页面重试。'
-        : 'Sign-in failed. Close this tab and try again in the original tab.'
+      const page = failedCallbackPage(attempt.uiLocale)
       attempt.callback?.writeHead(200, {
         'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
         'content-security-policy': `default-src 'none'; script-src 'nonce-${nonce}'; frame-ancestors 'none'`,
         'referrer-policy': 'no-referrer',
-      }).end(`<!doctype html><html lang="${attempt.locale === 'zh_CN' ? 'zh-CN' : 'en'}"><meta charset="utf-8"><title>${message}</title>`
-        + `<body><p>${message}</p><script nonce="${nonce}">window.close()</script></body></html>`)
+      }).end(`<!doctype html><html lang="${page.lang}"><meta charset="utf-8"><title>${page.message}</title>`
+        + `<body><p>${page.message}</p><script nonce="${nonce}">window.close()</script></body></html>`)
     } else {
       // Native account subscribers focus the login window; retain the browser’s Platform document.
       attempt.callback?.writeHead(204, { 'cache-control': 'no-store' }).end()
