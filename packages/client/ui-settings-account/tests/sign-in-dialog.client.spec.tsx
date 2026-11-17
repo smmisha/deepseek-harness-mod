@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 /** Login choices, timeout recovery, and manual cancellation. */
+import { readFileSync } from 'node:fs'
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import { SignInDialog } from '../src/client/SignInDialog.tsx'
-import { en, zh } from '../src/client/locales.ts'
+import { en, ja, zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 const id = 'login-attempt' as SignInAttemptId
@@ -35,6 +36,14 @@ it.each([en, zh])('requires a user action after timeout', async (copy) => {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.retry })) })
   expect(props.start).toHaveBeenCalledOnce()
 })
+it.each([en, ja, zh])('keeps the waiting copy in separate sentences around the copy action', (copy) => {
+  mount({ id, phase: 'waiting-browser', authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=example' }, copy)
+  const paragraphs = [...screen.getByRole('dialog').querySelectorAll('p')].map(paragraph => paragraph.textContent)
+  // The imperative button label is its own paragraph, never interpolated into a sentence.
+  expect(paragraphs).toEqual([copy.browserPrompt, copy.copyLink, copy.browserDescription])
+  expect(copy.browserDescription.startsWith(',')).toBe(false)
+})
+
 it.each([en, zh])('shows waiting actions and cancels before dismissing', async (copy) => {
   const props = mount({ id, phase: 'waiting-browser', authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=example' }, copy)
   expect(screen.getByRole('button', { name: copy.waiting }).hasAttribute('disabled')).toBe(true)
@@ -199,10 +208,49 @@ it.each([en, zh])('shows network advice only when the login request received no 
   expect(props.start).toHaveBeenCalledOnce()
 })
 
-it.each(['network', 'protocol', 'storage'] as const)('keeps generic copy for %s failures', (errorCode) => {
+it.each(['network', 'protocol', 'expired', 'storage'] as const)('gives the %s failure its own next step', (errorCode) => {
   mount({ id, phase: 'failed', errorCode })
-  expect(screen.getByText(en.failed)).toBeTruthy()
+  const key = errorCode === 'network' ? 'networkFailed' : errorCode === 'protocol' ? 'protocolFailed' : errorCode === 'storage' ? 'storageFailed' : 'expired'
+  expect(screen.getByText(en[key])).toBeTruthy()
+  expect(screen.queryByText(en.failed)).toBeNull()
   expect(screen.queryByText(en.noResponse)).toBeNull()
+})
+
+it('announces the copy result in a live region', async () => {
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const writeText = vi.fn(async () => {})
+  try {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    mount({ id, phase: 'waiting-browser', authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=example' })
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.copyLink })) })
+    expect(status.textContent).toBe(en.copiedLink)
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+it('announces a failed copy to assistive technology', async () => {
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  try {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => { throw new Error('denied') }) } })
+    mount({ id, phase: 'waiting-browser', authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=example' })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.copyLink })) })
+    expect(screen.getByRole('status').textContent).toBe(en.copyFailed)
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+it('wraps translated action labels instead of squeezing fixed-height buttons', () => {
+  const css = readFileSync(new URL('../src/client/SignInDialog.module.css', import.meta.url), 'utf8')
+  const actions = /\.actions\s*\{([^{}]*)\}/.exec(css)?.[1] ?? ''
+  const buttons = /\.primaryButton, \.secondaryButton\s*\{([^{}]*)\}/.exec(css)?.[1] ?? ''
+  expect(actions).toContain('flex-wrap: wrap;')
+  expect(buttons).toContain('white-space: nowrap;')
 })
 
 it('does not reuse network advice for a subsequent start failure', async () => {

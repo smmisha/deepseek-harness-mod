@@ -2,10 +2,16 @@
 import { useEffect, useState } from 'react'
 import { Button, IconCloseOutlineRegular, IconLoadingOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { AccountSnapshot } from './AccountSection.tsx'
-import type { SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { SignInAttemptId, SignInErrorCode } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { AccountKey } from './locales.ts'
 import { authorizeUrlWithTheme } from './authorize-url.ts'
 import css from './SignInDialog.module.css'
+
+/** Body copy per typed attempt failure; `expired` shares the timeout sentence. */
+const failureKeys = {
+  'no-response': 'noResponse', network: 'networkFailed', protocol: 'protocolFailed',
+  expired: 'expired', storage: 'storageFailed',
+} as const satisfies Record<SignInErrorCode, AccountKey>
 
 /** @param props - safe account state, localized copy, and user actions. @returns login dialog. */
 export function SignInDialog({ account, colorScheme, start, cancel, close, useApiKey, t }: {
@@ -16,7 +22,7 @@ export function SignInDialog({ account, colorScheme, start, cancel, close, useAp
   cancel: (id: SignInAttemptId) => Promise<void>
   close: () => void
   useApiKey: () => void
-  t: (key: AccountKey) => string
+  t: (key: AccountKey, params?: Record<string, unknown>) => string
 }) {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -34,8 +40,8 @@ export function SignInDialog({ account, colorScheme, start, cancel, close, useAp
   const expired = phase === 'expired'
   const localFailure = failed || account.loginFailed || account.failed
   const error = localFailure || phase === 'failed'
-  const failureKey = !localFailure
-    && phase === 'failed' && attempt?.errorCode === 'no-response' ? 'noResponse' : 'failed'
+  const errorCode = attempt?.errorCode
+  const failureKey = !localFailure && phase === 'failed' && errorCode !== undefined ? failureKeys[errorCode] : 'failed'
   const waiting = active && !error
   const committing = phase === 'committing'
   useEffect(() => { if (account.view?.status === 'credential-stored') close() }, [account.view?.status, close])
@@ -68,12 +74,17 @@ export function SignInDialog({ account, colorScheme, start, cancel, close, useAp
           <IconCloseOutlineRegular size={14} />
         </button>
       </div>
-      {waiting ? <p className={css.description}>
-        {t('browserPrompt')}<button type="button" className={css.link} disabled={!authorizeUrl}
-          onClick={authorizeUrl ? () => { void copyLink(authorizeUrl) } : undefined}>
-          {t(copyResult?.messageKey ?? 'copyLink')}
-        </button>{t('browserDescription')}
-      </p> : <p className={css.description}>
+      {waiting ? <>
+        <p className={css.description}>{t('browserPrompt')}</p>
+        <p className={`${css.description} ${css.copyAction}`}>
+          <button type="button" className={css.link} disabled={!authorizeUrl}
+            onClick={authorizeUrl ? () => { void copyLink(authorizeUrl) } : undefined}>
+            {t(copyResult?.messageKey ?? 'copyLink')}
+          </button>
+        </p>
+        <p className={css.description}>{t('browserDescription')}</p>
+        <span className={css.srOnly} role="status">{copyResult === null ? '' : t(copyResult.messageKey)}</span>
+      </> : <p className={css.description}>
         {error ? t(failureKey) : expired ? t('timeoutDescription') : t('loginDescription')}
       </p>}
     </div>

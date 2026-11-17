@@ -17,9 +17,11 @@ export interface PlatformBridge {
 }
 
 /** @param props - native commands, localized copy, and return action. @returns full-window Platform container. */
-export function PlatformOverlay({ bridge, page, backLabel, loadingLabel, failureLabel, retryLabel, onClose }: {
+export function PlatformOverlay({ bridge, page, pageLabel, backLabel, loadingLabel, failureLabel, retryLabel, onClose }: {
   bridge: PlatformBridge
   page: PlatformPage
+  /** Localized destination name; the dialog is named for the page it shows, not its Back action. */
+  pageLabel: string
   backLabel: string
   loadingLabel: string
   failureLabel: string
@@ -66,7 +68,7 @@ export function PlatformOverlay({ bridge, page, backLabel, loadingLabel, failure
       })
     }
   }, [bridge, page, attempt])
-  return createPortal(<div ref={layer} className={css.overlay} role="dialog" aria-modal="true" aria-label={backLabel}>
+  return createPortal(<div ref={layer} className={css.overlay} role="dialog" aria-modal="true" aria-label={pageLabel}>
     <header className={css.header} data-window-drag>
       <div className={css.controls}>
         <span className={css.trafficLights} aria-hidden="true" />

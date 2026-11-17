@@ -24,6 +24,7 @@ import { AccountSection, type AccountSectionInjected, type AccountSnapshot } fro
 import { DesktopOnboardingEntry, type DesktopOnboardingInjected } from '../src/client/DesktopOnboardingEntry.tsx'
 import type { DesktopOnboardingState } from '../src/client/onboarding-contract.ts'
 import { createPlatformPages, type PlatformPages } from '../src/client/platform-pages.ts'
+import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import type { PlatformBridge } from '../src/client/PlatformOverlay.tsx'
 import { en, zh } from '../src/client/locales.ts'
 
@@ -55,6 +56,9 @@ const storedView: AccountView = {
 const theme: ThemeSnapshot = {
   preference: 'light', fontSizes: { text: 14, code: 11, terminal: 13 }, fontFamilies: { text: '', code: '', terminal: '' }, active: { id: 'light', colorScheme: 'light', tokens: {} }, themes: [], revision: 0,
 }
+/** The account language hook this composition reads through the slot runtime. */
+const locale: LocaleSnapshot = { active: 'en', locales: [], revision: 0 }
+const localeHook = { getSnapshot: () => locale, subscribe: () => () => {} }
 
 /** The account settings commands, trimmed to what this composition renders. */
 function sectionOperations(account: AccountSnapshot, pages: PlatformPages): AccountSectionInjected {
@@ -62,6 +66,7 @@ function sectionOperations(account: AccountSnapshot, pages: PlatformPages): Acco
     hooks: {
       account: { getSnapshot: () => account, subscribe: () => () => {} },
       theme: { getSnapshot: () => theme, subscribe: () => () => {} },
+      locale: localeHook,
     },
     openPlatformPage: pages.open,
     refreshAccount: async () => {},
@@ -165,7 +170,7 @@ async function bench() {
   runtime.ctx.slots.inject('shell.overlay', () => runtime.ctx.slots.register({
     name: 'shell.overlay', id: 'desktop-onboarding', locale: 'settings.account',
     inject: (): DesktopOnboardingInjected => ({
-      hooks: { onboarding, account },
+      hooks: { onboarding, account, locale: localeHook },
       setVisible: () => {},
       openPlatformPage: pages.open,
       update: async () => true, complete: async () => true, retry: async () => true,
