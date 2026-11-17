@@ -415,6 +415,23 @@
   padding-top: 1px;
 }
 
+/* The switch states a row's setting; the row itself is the catalog entry, so the
+ * control keeps the row's ink instead of borrowing the primary action's brand
+ * fill. Two classes and an element beat the primitive's own
+ * `.switch[aria-checked='true']`, so this stays scoped to this tab. The knob
+ * position and `aria-checked` carry the state. */
+.rowEnd button[role='switch'],
+.groupEnd button[role='switch'] {
+  background: var(--dsw-alias-bg-layer-3);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+.rowEnd button[role='switch'][aria-checked='true'],
+.groupEnd button[role='switch'][aria-checked='true'] {
+  background: var(--dsw-alias-label-tertiary);
+  box-shadow: none;
+}
+
 /* A row's explanation sits under its columns, aligned with the identity. */
 .rowNote {
   grid-column: 2 / -1;
