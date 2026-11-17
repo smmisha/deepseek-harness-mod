@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
+import type { LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { SkillsSection, type AddFolderOutcome, type SkillsSectionProps } from '../src/client/SkillsSection.tsx'
 import { createSkillsStore, type SkillsStoreHandle } from '../src/client/skills-store.ts'
@@ -121,6 +121,10 @@ const SOURCES: readonly LocalSourceView[] = [
   {
     id: 'folder:D:\\', kind: 'folder', title: '', path: 'D:\\', displayPath: 'D:\\', exists: true, enabled: true, skills: [],
   },
+  {
+    id: 'folder:D:\\gone', kind: 'folder', title: 'gone', path: 'D:\\gone', displayPath: 'D:\\gone',
+    exists: false, enabled: true, skills: [],
+  },
   // An application the Host names by id only, and one it configured itself.
   {
     id: 'zebra', kind: 'application', title: 'Zebra', path: '~\\.zebra\\skills', displayPath: '~\\.zebra\\skills',
@@ -128,7 +132,8 @@ const SOURCES: readonly LocalSourceView[] = [
   },
   {
     id: 'nova', kind: 'application', applicationId: 'nova', title: 'Nova', path: '~\\.nova\\skills',
-    displayPath: '~\\.nova\\skills', exists: true, enabled: true, skills: [],
+    displayPath: '~\\.nova\\skills', exists: true, enabled: true,
+    skills: [{ name: 'nova-skill', path: '~\\.nova\\skills\\nova-skill\\SKILL.md', status: 'available' }],
   },
 ]
 
@@ -206,7 +211,7 @@ describe('SkillsSection rows', () => {
     // A rejected row has no parsed name, so no switch can address it.
     expect(screen.getByText('~\\.claude\\skills\\broken\\SKILL.md')).toBeTruthy()
     expect(screen.queryByRole('switch', { name: /broken/u })).toBeNull()
-    expect(screen.getByText('8 shown · 3 on')).toBeTruthy()
+    expect(screen.getByText('9 shown · 4 on')).toBeTruthy()
   })
 
   it('disables a skill switch when its source is off and a shadowed skill that lost the name', async () => {
@@ -217,22 +222,29 @@ describe('SkillsSection rows', () => {
     expect(skillSwitch('dup-skill', 'on')).toHaveProperty('disabled', true)
   })
 
-  it('groups carry their kind, folder, count, and the missing-folder state', async () => {
+  it('catalogs only sources that offer a skill, and keeps an empty added folder removable', async () => {
     mount()
     await screen.findByText('app-skill')
-    const codex = screen.getByRole('button', { name: 'Codex' }).closest('section')
-    if (codex === null) throw new Error('expected the Codex group')
-    expect(within(codex).getByText('Folder not found')).toBeTruthy()
-    expect(within(codex).getByText('~\\.codex\\skills')).toBeTruthy()
-    expect(within(codex).getByRole('switch', { name: 'Source Codex: off' })).toHaveProperty('disabled', true)
+    // A source with no skill is not a catalog entry: Codex and a configured
+    // application with an empty folder are absent from the board.
+    expect(screen.queryByRole('button', { name: 'Codex' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Zebra' })).toBeNull()
+    expect(screen.queryByText('This source has no skills')).toBeNull()
+    // A source that has skills keeps its kind, folder, count and source switch.
+    const paused = screen.getByRole('button', { name: 'Paused source' }).closest('section')
+    if (paused === null) throw new Error('expected the paused group')
+    expect(within(paused).getByText('Harness folders')).toBeTruthy()
+    expect(within(paused).getByText('~\\.paused\\skills')).toBeTruthy()
+    expect(within(paused).getByRole('switch', { name: 'Source Paused source: off' })).toHaveProperty('disabled', false)
     // An added folder is a line glyph, its own kind, and a remove control.
     expect(screen.getAllByText('Your folder').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Remove folder skills' })).toBeTruthy()
-    // A source with no skills keeps its own explanation; a vanished folder is explained once, by its header.
-    expect(within(codex).queryByText('This source has no skills')).toBeNull()
-    expect(screen.getAllByText('This source has no skills').length).toBeGreaterThan(0)
-    // A group with no title falls back to its folder.
-    expect(screen.getByRole('button', { name: 'D:\\' })).toBeTruthy()
+    // The added folder that holds no skill is hidden from the board but still removable.
+    expect(screen.getByText('Folders without skills')).toBeTruthy()
+    expect(screen.getByText('D:\\')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove folder D:\\' })).toBeTruthy()
+    // A folder that vanished while listed is explained here, once.
+    expect(screen.getByText('Folder not found')).toBeTruthy()
   })
 
   it('expands and collapses a description in place', async () => {
@@ -249,12 +261,45 @@ describe('SkillsSection rows', () => {
     expect(screen.getAllByRole('button', { name: 'Show full description' }).length).toBeGreaterThan(0)
   })
 
-  it('marks applications the Host configured itself with their own initial', async () => {
-    mount()
+  it('draws one mark per source kind', async () => {
+    const skill = (name: string): LocalSkillView => ({ name, path: `skills/${name}/SKILL.md`, status: 'available' })
+    const byKind: LocalSourceView[] = [
+      { id: 'zeta', kind: 'application', title: 'Zeta', path: '~\\.zeta\\skills', displayPath: '~\\.zeta\\skills', exists: true, enabled: true, skills: [skill('zeta-skill')] },
+      { id: 'claude', kind: 'application', applicationId: 'claude-code', title: 'Claude', path: '~\\.claude\\skills', displayPath: '~\\.claude\\skills', exists: true, enabled: true, skills: [skill('claude-skill')] },
+      { id: 'harness', kind: 'harness', title: 'harness', path: '~\\.dsh\\skills', displayPath: '~\\.dsh\\skills', exists: true, enabled: true, skills: [skill('harness-skill')] },
+      { id: 'folder:skills', kind: 'folder', title: 'skills', path: 'D:\\skills', displayPath: 'D:\\skills', exists: true, enabled: true, skills: [skill('folder-skill')] },
+    ]
+    const { view } = mount({}, byKind)
+    await screen.findByText('zeta-skill')
+    // An application without a configured id falls back to the first letter of its id,
+    // a configured one to its known monogram, harness folders to the home glyph.
+    const glyphs = [...view.container.querySelectorAll('[class*="monogram"]')].map(node => node.textContent)
+    expect(glyphs).toEqual(expect.arrayContaining(['Z', 'C', '~']))
+    // An added folder draws the neutral line glyph instead of a letter.
+    expect(view.container.querySelectorAll('[class*="line"]').length).toBeGreaterThan(0)
+  })
+
+  it('removes an added folder that holds no skill from the quiet line', async () => {
+    const removed: string[] = []
+    mount({ removeFolder: async (path) => { removed.push(path) } })
     await screen.findByText('app-skill')
-    // Neither id maps to a shipped mark or a known monogram, so the first letter stands in.
-    expect(screen.getByText('Z')).toBeTruthy()
-    expect(screen.getByText('N')).toBeTruthy()
+    const remove = screen.getByRole('button', { name: 'Remove folder D:\\' })
+    fireEvent.click(remove)
+    await vi.waitFor(() => { expect(removed).toEqual(['D:\\']) })
+  })
+
+  it('disables that removal while its write is in flight', async () => {
+    let settle: (() => void) | undefined
+    mount({ removeFolder: () => new Promise<string | undefined>((resolve) => { settle = () => { resolve(undefined) } }) })
+    await screen.findByText('app-skill')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove folder D:\\' }))
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Remove folder D:\\' })).toHaveProperty('disabled', true)
+    })
+    settle?.()
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Remove folder D:\\' })).toHaveProperty('disabled', false)
+    })
   })
 
   it('paginates a long source', async () => {

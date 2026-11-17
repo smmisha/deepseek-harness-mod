@@ -349,18 +349,33 @@ function SkillRow({
     : state === 'error' ? (skill.error === undefined ? t('invalidNoReason') : t('invalid', { error: skill.error })) : null
   return (
     <li className={css.row} data-state={state} data-selected={selected}>
-      <span className={css.rowMark}><SourceMark spec={mark} /></span>
-      <div className={css.ident}>
-        {name === undefined
-          ? <span className={css.identNameStatic}>{skillTitle(skill)}</span>
-          : (
-            <button type="button" className={css.identName} aria-expanded={selected}
-              {...selected ? { 'aria-controls': DETAIL_PANEL_ID } : {}}
-              onClick={onSelect}>
-              {name}
-            </button>
-          )}
-        <span className={css.identOrigin}>{sourceTitle}</span>
+      <div className={css.cardHead}>
+        <span className={css.rowMark}><SourceMark spec={mark} /></span>
+        <div className={css.ident}>
+          {name === undefined
+            ? <span className={css.identNameStatic}>{skillTitle(skill)}</span>
+            : (
+              <button type="button" className={css.identName} aria-expanded={selected}
+                {...selected ? { 'aria-controls': DETAIL_PANEL_ID } : {}}
+                onClick={onSelect}>
+                {name}
+              </button>
+            )}
+          <span className={css.identOrigin}>{sourceTitle}</span>
+        </div>
+        <span className={css.rowEnd}>
+          {name === undefined
+            ? null
+            : (
+              <Switch checked={skill.status === 'available' && source.enabled}
+                disabled={busy || state === 'overridden' || !source.enabled}
+                label={t('skillSwitch', {
+                  name,
+                  state: t(skill.status === 'available' && source.enabled ? 'switchOn' : 'switchOff'),
+                })}
+                title={note ?? undefined} onChange={(next) => { onToggleEnabled(name, next) }} />
+            )}
+        </span>
       </div>
       <div className={css.desc}>
         {skill.description === undefined ? null : (
@@ -374,24 +389,13 @@ function SkillRow({
             </button>
           )}
       </div>
-      <span className={css.state} data-state={state}>
-        <StateDot state={skillStateDot(state)} />
-        {t(SKILL_STATE_KEYS[state])}
-      </span>
-      <span className={css.rowEnd}>
-        {name === undefined
-          ? null
-          : (
-            <Switch checked={skill.status === 'available' && source.enabled}
-              disabled={busy || state === 'overridden' || !source.enabled}
-              label={t('skillSwitch', {
-                name,
-                state: t(skill.status === 'available' && source.enabled ? 'switchOn' : 'switchOff'),
-              })}
-              title={note ?? undefined} onChange={(next) => { onToggleEnabled(name, next) }} />
-          )}
-      </span>
-      {note === null ? null : <p className={css.rowNote} data-tone={state}>{note}</p>}
+      <div className={css.cardFoot}>
+        <span className={css.state} data-state={state}>
+          <StateDot state={skillStateDot(state)} />
+          {t(SKILL_STATE_KEYS[state])}
+        </span>
+        {note === null ? null : <p className={css.rowNote} data-tone={state}>{note}</p>}
+      </div>
     </li>
   )
 }
@@ -440,7 +444,6 @@ function Group({
         <span className={css.groupKind}>{t(SOURCE_KINDS[source.kind])}</span>
         <code className={css.groupPath} title={t('pathTooltip', { path: source.path })}>{source.displayPath}</code>
         <span className={css.groupEnd}>
-          {source.exists ? null : <span className={css.warning}>{t('notFound')}</span>}
           <span className={css.count}>{source.skills.length}</span>
           {source.kind === 'folder'
             ? (
@@ -451,7 +454,7 @@ function Group({
               </Tooltip>
             )
             : null}
-          <Switch checked={source.enabled} disabled={sourceBusy || !source.exists}
+          <Switch checked={source.enabled} disabled={sourceBusy}
             label={t('sourceSwitch', { name: title, state: t(source.enabled ? 'switchOn' : 'switchOff') })}
             onChange={onToggleSource} />
         </span>
@@ -461,11 +464,7 @@ function Group({
         ? null
         : (
           <ul id={listId} className={css.rows}>
-            {skills.length === 0
-              // A folder that disappeared is explained by the header alone; the same row
-              // must not also claim the source has no skills.
-              ? (source.exists ? <li className={css.groupEmpty}>{t('emptySource')}</li> : null)
-              : skills.slice(0, limit).map((skill) => {
+            {skills.slice(0, limit).map((skill) => {
                 const key = skillKey(source.id, skill)
                 return (
                   <SkillRow
@@ -645,9 +644,15 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
       || (skill.name ?? '').toLowerCase().includes(needle)
       || (skill.description ?? '').toLowerCase().includes(needle))
       && (stateFilter === 'any' || skillState(skill, source.enabled) === stateFilter))
-    // A search or filter hides a group it leaves empty; the unfiltered catalog keeps every source.
-    return filtering && skills.length === 0 ? [] : [{ source, skills }]
-  }), [sources, needle, sourceFilter, stateFilter, filtering])
+    // A source that offers no skill is nothing to browse: it is hidden whether or
+    // not a filter is active, and an added folder that holds no skill stays
+    // reachable through the hidden-folders line below.
+    return skills.length === 0 ? [] : [{ source, skills }]
+  }), [sources, needle, sourceFilter, stateFilter])
+
+  // Added folders whose folder holds no skill are not tiles, but the reader must
+  // still be able to drop one, so they are listed in one quiet line.
+  const emptyFolders = (sources ?? []).filter(source => source.kind === 'folder' && source.skills.length === 0)
 
   const totalSkills = (sources ?? []).reduce((sum, source) => sum + source.skills.length, 0)
   const emptyInventory = sources !== null && totalSkills === 0 && !filtering
@@ -744,10 +749,31 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
                   </div>
                 )
                 : null}
+              {emptyFolders.length === 0
+                ? null
+                : (
+                  <div className={css.hiddenFolders}>
+                    <span className={css.hiddenFoldersLabel}>{t('hiddenFolders')}</span>
+                    {emptyFolders.map(folder => (
+                      <span key={folder.id} className={css.hiddenFolder}>
+                        <code className={css.groupPath} title={t('pathTooltip', { path: folder.path })}>{folder.displayPath}</code>
+                        {folder.exists ? null : <span className={css.warning}>{t('notFound')}</span>}
+                        <Tooltip label={t('removeFolderHint')} side="bottom" delayMs={500} focusDelayMs={500} portal>
+                          <Button variant="ghost" size="sm" className={css.removeButton}
+                            aria-label={t('removeFolder', { name: titleFor(folder) })}
+                            disabled={busy.includes(folder.id)}
+                            icon={<IconTrashOutlineRegular size={14} />}
+                            onClick={() => {
+                              void withBusy(folder.id, titleFor(folder), () => removeFolder(folder.path))
+                            }} />
+                        </Tooltip>
+                      </span>
+                    ))}
+                  </div>
+                )}
               <div className={css.split} data-detail={selectedSkill !== null}>
                 <div className={css.list}>
-                  {groups.map(group => (
-                    <Group
+                  {groups.map(group => (                    <Group
                       key={group.source.id}
                       t={t}
                       group={group}

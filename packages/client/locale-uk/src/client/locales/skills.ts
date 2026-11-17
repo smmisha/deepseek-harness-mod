@@ -68,6 +68,7 @@ export const ukSkills = {
   'pickFailed': 'Не вдалося відкрити вибір теки: {error}',
   'removeFolder': 'Видалити теку {name}',
   'removeFolderHint': 'Вилучити зі списку; файли не видаляються',
+  'hiddenFolders': 'Теки без скілів',
   'detailDescription': 'Опис',
   'detailPath': 'Шлях',
   'detailFiles': 'Файли',
