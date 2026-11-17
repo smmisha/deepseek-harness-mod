@@ -1,9 +1,14 @@
+/* Plugin inventory tab: a search field, the preset switcher, and a board of
+   plugin cards. Each card is one reading order — title with its enablement
+   state, what the plugin does, then the machine identity — over the Settings
+   card material; the chevron discloses the card's facts. */
+
 /* The tab's own width, not the window's, decides the card columns below. */
 .section {
   container: plugin-inventory / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
   max-width: 760px;
   color: var(--dsw-alias-label-primary);
@@ -89,7 +94,7 @@
 .cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -97,7 +102,8 @@
 
 /* Cards stretch to their grid row's height. The button fills a stretched card:
    the title row and description stay at the top, in line with the other card's,
-   and the spare height sits above the entry id chip or at the bottom. */
+   and the spare height sits above the entry id chip, so the identity rows of a
+   grid row share one axis. */
 .card {
   display: flex;
   flex-direction: column;
@@ -127,11 +133,10 @@
   flex: 1 1 auto;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
   width: 100%;
   min-height: 52px;
   border: 0;
-  padding: 12px 14px;
+  padding: 12px 16px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -160,36 +165,36 @@
   outline-offset: -2px;
 }
 
+/* The title line: the name may wrap rather than lose characters, and the state
+   and disclosure keep one fixed trailing column, so a card with a long name
+   still shows its state where every other card shows it. */
 .cardMainRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
 }
 
-.cardTitle,
-.cardIdentity {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .cardTitle {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow-wrap: break-word;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
 }
 
-/* Two lines at most while collapsed; the expanded card shows the full text. */
+/* What the plugin does: secondary prose at the established row size, two lines
+   while the card is collapsed; expanding the card shows all of it. */
 .cardDescription {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: break-word;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -199,40 +204,53 @@
   display: block;
 }
 
-/* The entry id is metadata, not prose: a code chip in the card's bottom-left
-   corner whose left edge lines up with the title. */
+/* The machine identity closes the card: it belongs to this card's bottom edge
+   and to the same axis as its title. */
 .cardMeta {
   display: flex;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 8px;
 }
 
-/* The Loader entry id keeps one size in the card chip and the row it expands into;
-   the collapsed chip stays on the quieter label tier, while the expanded row carries
-   the card's primary value. */
-.cardIdentity,
-.entryValue {
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-}
-
+/* The entry id is a machine fact, not a control: hairline on the card surface,
+   code face one step below the description, quiet ink. It keeps its hover text
+   for the complete id. */
 .cardIdentity {
   display: block;
   box-sizing: border-box;
   max-width: 100%;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-xs);
   padding: 1px 6px;
-  background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* State and disclosure share the title's first line box: the state is the quiet
+   dot-plus-word the Skills tab uses, not a filled badge competing with the name. */
 .cardTrailing {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 8px;
+  height: 20px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.cardState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
 }
 
 /* Accessible-name and layout wrapper: StateDot is aria-hidden and carries no
@@ -245,7 +263,7 @@
 .group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* Every group header takes the preset switcher's 36px height, so each subtitle
@@ -259,7 +277,7 @@
 
 .group + .group {
   border-top: 0.5px solid var(--dsw-alias-border-l2);
-  padding-top: 14px;
+  padding-top: 16px;
 }
 
 .headerEnd {
@@ -359,7 +377,7 @@
 .groupBody {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 
@@ -373,6 +391,12 @@
   line-height: 18px;
   overflow-wrap: anywhere;
   white-space: pre-line;
+}
+
+/* A discovery diagnostic inside a card keeps the card's reading edge instead of
+   running into its rounded corner. */
+.card > .brokenNote {
+  margin: 0 16px 12px;
 }
 
 .hint {
@@ -396,16 +420,16 @@
   cursor: pointer;
 }
 
-/* Loading placeholder in the cards grid, sized like a card with one description
-   line; its bars pulse through the shared skeleton token as the input-trigger
-   menu's pending rows do. */
+/* Loading placeholder in the cards grid: the card's padding and its three rows,
+   so the board does not jump much when the rows land. Its bars pulse through the
+   shared skeleton token as the input-trigger menu's pending rows do. */
 .skeletonCard {
   display: flex;
   flex-direction: column;
   gap: 8px;
   border: 0.5px solid var(--dsw-alias-settings-card-stroke);
   border-radius: var(--dsw-radius-xl);
-  padding: 15px 14px;
+  padding: 12px 16px;
   background: var(--dsw-alias-settings-card-fill);
 }
 
@@ -419,6 +443,15 @@
 .skeletonBar + .skeletonBar {
   width: 80%;
   height: 12px;
+}
+
+/* The last row stands in for the entry id chip: outlined, not filled. */
+.skeletonChip {
+  width: 36%;
+  height: 16px;
+  margin-top: 4px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-xs);
 }
 
 .card[data-failed='true'] {
@@ -435,8 +468,11 @@
 }
 
 .cardDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
-  padding: 10px 14px 12px;
+  padding: 12px 16px;
   background: var(--dsw-alias-bg-module-platform);
 }
 
@@ -444,13 +480,16 @@
   display: block;
   overflow-wrap: anywhere;
   color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .details {
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
-  gap: 6px 10px;
-  margin: 8px 0 0;
+  gap: 8px 12px;
+  margin: 0;
 }
 
 .details div {
@@ -459,8 +498,8 @@
 
 .details dt {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 17px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .details dd {
@@ -469,7 +508,7 @@
   overflow-wrap: anywhere;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
-  line-height: 17px;
+  line-height: 18px;
 }
 
 .visuallyHidden {
@@ -498,9 +537,30 @@
   80%, 100% { opacity: 1; }
 }
 
+/* One column once the tab is narrow. The preset switcher moves under the section
+   title instead of squeezing it, and its label ellipsizes rather than running
+   past the tab edge. */
 @container plugin-inventory (max-width: 520px) {
   .cards {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .groupTitleRow {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .headerEnd {
+    flex: 1 1 100%;
+  }
+
+  .switcher {
+    max-width: 100%;
+  }
+
+  .switcherLabel {
+    flex: 0 1 auto;
+    min-width: 0;
   }
 }
 
