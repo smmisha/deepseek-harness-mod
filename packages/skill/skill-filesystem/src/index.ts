@@ -752,13 +752,14 @@ export class FileSystemSkillProvider implements SkillProvider {
         const diagnostics = new Map<string, string>()
         const discovered = await discoverRoot(root, this.ctx, this.name, (path, message) => { diagnostics.set(path, message) })
         const discoveredPaths = new Set(discovered.map(candidate => candidatePath(candidate)))
-        const rows: DiscoveredCandidate[] = []
-        for (const candidate of discovered) {
+        // One listing per skill runs concurrently: they are independent metadata reads,
+        // and a catalog of hundreds of skills would otherwise serialize them.
+        const rows = await Promise.all(discovered.map(async (candidate): Promise<DiscoveredCandidate> => {
           const path = candidatePath(candidate)
           const language = languageOf(candidate.metadata)
           const provenance = provenanceOf(candidate.metadata)
           const files = await listSkillFiles(candidate.listing, path, this.ctx, root.trustedHost === true)
-          rows.push({
+          return {
             name: candidate.name,
             path,
             displayPath: toDisplayPath(path, options.cwd),
@@ -766,8 +767,8 @@ export class FileSystemSkillProvider implements SkillProvider {
             ...(language === undefined ? {} : { language }),
             ...(provenance === undefined ? {} : { provenance }),
             ...(files === undefined ? {} : { files }),
-          })
-        }
+          }
+        }))
         candidates = [
           ...rows,
           ...([...diagnostics] as [string, string][])
