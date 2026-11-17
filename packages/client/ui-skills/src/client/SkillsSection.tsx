@@ -428,7 +428,8 @@ function Group({
   return (
     <section className={css.group} data-source={source.id}>
       <div className={css.groupHead}>
-        <button type="button" className={css.groupToggle} aria-expanded={!collapsed} aria-controls={listId}
+        <button type="button" className={css.groupToggle} aria-expanded={!collapsed}
+          {...collapsed ? {} : { 'aria-controls': listId }}
           onClick={onToggleGroup}>
           {collapsed
             ? <IconChevronRightOutlineRegular size={14} aria-hidden="true" className={css.disclosure} />
