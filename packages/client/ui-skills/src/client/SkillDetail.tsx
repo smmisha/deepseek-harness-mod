@@ -7,8 +7,8 @@
  */
 import type { ReactNode } from 'react'
 import {
-  Button, IconCheckOutlineRegular, IconCopyOutlineRegular, IconWarningTriangleOutlineRegular, StateDot, Tag,
-  useClipboardCopy,
+  Button, IconCheckOutlineRegular, IconCopyOutlineRegular, IconTrashOutlineRegular, IconWarningTriangleOutlineRegular,
+  StateDot, Tag, useClipboardCopy,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { LocalSkillView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import {
@@ -26,14 +26,17 @@ export const DETAIL_PANEL_ID = 'skills-detail'
  * @param props.categoryTitle - localized name of the skill's category, when the Host described one.
  * @param props.skill - the open skill row.
  * @param props.state - the row state the panel explains.
+ * @param props.onRemove - asks the tab to confirm removing an installed skill; absent
+ *   for a skill this app did not install, because its files are never deleted.
  * @returns the panel region.
  */
-export function SkillDetail({ t, sourceTitle, categoryTitle, skill, state }: {
+export function SkillDetail({ t, sourceTitle, categoryTitle, skill, state, onRemove }: {
   readonly t: SkillsTranslate
   readonly sourceTitle: string
   readonly categoryTitle?: string
   readonly skill: LocalSkillView
   readonly state: SkillState
+  readonly onRemove?: (() => void) | undefined
 }): ReactNode {
   const title = skillTitle(skill)
   const { copied, onCopy } = useClipboardCopy(skill.path)
@@ -112,6 +115,14 @@ export function SkillDetail({ t, sourceTitle, categoryTitle, skill, state }: {
             {provenance.installedAt === undefined
               ? null
               : <p className={css.provenance}>{t('installedOn', { date: formatDate(provenance.installedAt) })}</p>}
+            {onRemove === undefined
+              ? null
+              : (
+                <Button variant="outline" size="sm" className={css.remove}
+                  icon={<IconTrashOutlineRegular size={13} />} onClick={onRemove}>
+                  {t('removeSkill')}
+                </Button>
+              )}
           </section>
         )}
     </aside>

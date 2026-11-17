@@ -7,8 +7,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
+import type { InstallPreview } from '@deepseek-ai/dsh-skill-install/types'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { SkillsSection, type AddFolderOutcome, type SkillsSectionProps } from '../src/client/SkillsSection.tsx'
+import { SkillDetail } from '../src/client/SkillDetail.tsx'
+import type { SkillsTranslate } from '../src/client/skills-catalog.ts'
+import type { InstallFace } from '../src/client/skills-install.ts'
 import { createSkillsStore, type SkillsGrouping, type SkillsStoreHandle } from '../src/client/skills-store.ts'
 import { en, type SkillsLocaleKey } from '../src/client/locales.ts'
 
@@ -196,6 +200,29 @@ type FaceStub = {
   removeFolder?: (path: string) => Promise<string | undefined>
   pickFolder?: () => Promise<string | null>
   createWithAi?: () => void
+  catalogs?: InstallFace['catalogs']
+  repository?: InstallFace['repository']
+  previewRepository?: InstallFace['previewRepository']
+  previewArchive?: InstallFace['previewArchive']
+  previewFolder?: InstallFace['previewFolder']
+  install?: InstallFace['install']
+  removeInstalled?: InstallFace['removeInstalled']
+}
+
+/** The install surface every stub face carries; a case overrides what it exercises. */
+function installStubs(): InstallFace {
+  return {
+    catalogs: async () => ({ ok: true, value: [] }),
+    repository: async () => ({
+      ok: true,
+      value: { owner: 'acme', repo: 'skills', commit: 'abc', skills: [] },
+    }),
+    previewRepository: async () => ({ ok: false, failure: { code: 'skill-install/not-found', message: 'gone' } }),
+    previewArchive: async () => ({ ok: false, failure: { code: 'skill-install/archive-invalid', message: 'refused' } }),
+    previewFolder: async () => ({ ok: false, failure: { code: 'skill-install/invalid-skill', message: 'refused' } }),
+    install: async () => ({ ok: true, value: { installed: [] } }),
+    removeInstalled: async () => undefined,
+  }
 }
 
 /** Props of one tab instance over its own store. */
@@ -215,6 +242,7 @@ function catalogProps(overrides: FaceStub = {}, sources: readonly LocalSourceVie
     setSkill: async () => undefined,
     addFolder: async () => 'added',
     removeFolder: async () => undefined,
+    ...installStubs(),
     ...overrides,
   })
   return { store, props }
@@ -759,16 +787,17 @@ describe('SkillsSection adding skills', () => {
     await screen.findByText('Could not open the folder chooser: chooser offline')
   })
 
-  it('offers the three ways to add from the menu and opens the catalog shell', async () => {
+  it('offers every way to add from the menu and opens the catalog', async () => {
     const createWithAi = vi.fn()
-    mount({ createWithAi })
+    mount({ createWithAi, catalogs: async () => ({ ok: true, value: [] }) })
     await screen.findByText('app-skill')
     const more = screen.getByRole('button', { name: 'Choose how to add' })
     fireEvent.click(more)
     expect(await screen.findByRole('menuitem', { name: /Add folder/u })).toBeTruthy()
+    expect(await screen.findByRole('menuitem', { name: /Import archive/u })).toBeTruthy()
     fireEvent.click(await screen.findByRole('menuitem', { name: /Browse catalog/u }))
     const catalog = await screen.findByRole('dialog', { name: 'Skills catalog' })
-    expect(within(catalog).getByText(en.catalogPending)).toBeTruthy()
+    expect(within(catalog).getByText(en.catalogDescription)).toBeTruthy()
     const cancels = within(catalog).getAllByRole('button', { name: 'Cancel' })
     fireEvent.click(cancels[cancels.length - 1] as HTMLElement)
     await waitFor(() => { expect(screen.queryByRole('dialog', { name: 'Skills catalog' })).toBeNull() })
@@ -984,6 +1013,7 @@ describe('SkillsSection load and write states', () => {
       setSkill: async () => undefined,
       addFolder: async () => 'added',
       removeFolder: async () => undefined,
+      ...installStubs(),
     }
     render(<SkillsSection {...props} />)
     expect(await screen.findByRole('status')).toBeTruthy()
@@ -1003,6 +1033,7 @@ describe('SkillsSection load and write states', () => {
       setSkill: async () => undefined,
       addFolder: async () => 'added',
       removeFolder: async () => undefined,
+      ...installStubs(),
     }
     render(<SkillsSection {...props} />)
     expect(await screen.findByText('app-skill')).toBeTruthy()
@@ -1085,5 +1116,183 @@ describe('SkillsSection toolbar', () => {
     // The switch retires each mode it leaves, and its name states the new one.
     expect(screen.queryByRole('menuitem')).toBeNull()
     expect(screen.getByRole('button', { name: 'Choose grouping, current Sources' })).toBeTruthy()
+  })
+})
+
+describe('SkillsSection importing and removing', () => {
+  /** One confirmed preview of a repository skill. */
+  const PREVIEW: InstallPreview = {
+    id: 'preview-1',
+    source: { kind: 'archive', fileName: 'pack.zip' },
+    skills: [{
+      name: 'pdf',
+      description: 'Work with PDF files',
+      document: '---\nname: pdf\n---\n',
+      files: [{ path: 'SKILL.md', size: 20, isScript: false }],
+      hasScripts: false,
+      target: 'C:\\skills\\pdf',
+      conflict: false,
+    }],
+  }
+
+  /** The section element the drop handlers sit on. */
+  async function tabSection(): Promise<HTMLElement> {
+    const search = await screen.findByRole('searchbox')
+    const section = search.closest('section')
+    if (section === null) throw new Error('the tab section is missing')
+    return section
+  }
+
+  it('previews a dropped archive before installing it', async () => {
+    const previewArchive = vi.fn(async () => ({ ok: true as const, value: PREVIEW }))
+    mount({ previewArchive })
+    const section = await tabSection()
+    fireEvent.dragOver(section)
+    expect(screen.getByText(en.dropHint)).toBeTruthy()
+    fireEvent.dragLeave(section)
+    expect(screen.queryByText(en.dropHint)).toBeNull()
+    fireEvent.drop(section, { dataTransfer: { files: [new File(['zip'], 'pack.zip')] } })
+    await waitFor(() => { expect(previewArchive).toHaveBeenCalledWith('pack.zip', expect.any(String)) })
+    expect(await screen.findByRole('dialog', { name: en.catalogTitle })).toBeTruthy()
+  })
+
+  it('states why a drop carried nothing to install', async () => {
+    mount()
+    fireEvent.drop(await tabSection(), { dataTransfer: {} })
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining(en.dropEmpty))
+  })
+
+
+  it('names a drop past the byte cap', async () => {
+    mount()
+    const big = new File([new Uint8Array(16 * 1024 * 1024 + 1)], 'big.zip')
+    fireEvent.drop(await tabSection(), { dataTransfer: { files: [big] } })
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining(en.dropTooLarge))
+  })
+
+  it('names a drop past the file cap', async () => {
+    mount()
+    const many = Array.from({ length: 201 }, (_, index) => new File(['x'], `f${index}.md`))
+    fireEvent.drop(await tabSection(), { dataTransfer: { files: many } })
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining(en.dropTooMany))
+  })
+
+  it('reads an archive chosen from the add menu', async () => {
+    const previewArchive = vi.fn(async () => ({ ok: true as const, value: PREVIEW }))
+    mount({ previewArchive })
+    await screen.findByText('app-skill')
+    fireEvent.click(screen.getByRole('button', { name: 'Choose how to add' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Import archive/u }))
+    fireEvent.change(screen.getByLabelText(en.chooseArchive), {
+      target: { files: [new File(['zip'], 'pack.zip')] },
+    })
+    await waitFor(() => { expect(previewArchive).toHaveBeenCalledWith('pack.zip', expect.any(String)) })
+  })
+
+  it('installs the preview the tab read and says so', async () => {
+    const previewArchive = vi.fn(async () => ({ ok: true as const, value: PREVIEW }))
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      value: { installed: [{ name: 'pdf', path: 'C:\\skills\\pdf', replaced: false }] },
+    }))
+    mount({ previewArchive, install })
+    fireEvent.drop(await tabSection(), { dataTransfer: { files: [new File(['zip'], 'pack.zip')] } })
+    const dialog = await screen.findByRole('dialog', { name: en.catalogTitle })
+    fireEvent.click(within(dialog).getByRole('button', { name: en.install }))
+    await waitFor(() => { expect(install).toHaveBeenCalledWith('preview-1', undefined, false) })
+  })
+
+  it('removes an installed skill after confirmation', async () => {
+    const removeInstalled = vi.fn(async () => undefined)
+    mount({ removeInstalled })
+    fireEvent.click(await screen.findByRole('button', { name: 'app-skill' }))
+    fireEvent.click(await screen.findByRole('button', { name: en.removeSkill }))
+    const dialog = await screen.findByRole('dialog', { name: en.removeTitle.replace('{name}', 'app-skill') })
+    fireEvent.click(within(dialog).getByRole('button', { name: en.remove }))
+    await waitFor(() => { expect(removeInstalled).toHaveBeenCalledWith('app-skill') })
+    expect(await screen.findByText(en.removedNotice.replace('{name}', 'app-skill'))).toBeTruthy()
+  })
+
+  it('names a skill the Host refused to remove', async () => {
+    mount({ removeInstalled: async () => 'denied' })
+    fireEvent.click(await screen.findByRole('button', { name: 'app-skill' }))
+    fireEvent.click(await screen.findByRole('button', { name: en.removeSkill }))
+    const dialog = await screen.findByRole('dialog', { name: en.removeTitle.replace('{name}', 'app-skill') })
+    fireEvent.click(within(dialog).getByRole('button', { name: en.remove }))
+    expect(await screen.findByText(en.writeFailed.replace('{name}', 'app-skill').replace('{error}', 'denied')))
+      .toBeTruthy()
+  })
+
+  it('cancels a removal without touching the skill', async () => {
+    const removeInstalled = vi.fn(async () => undefined)
+    mount({ removeInstalled })
+    fireEvent.click(await screen.findByRole('button', { name: 'app-skill' }))
+    fireEvent.click(await screen.findByRole('button', { name: en.removeSkill }))
+    const dialog = await screen.findByRole('dialog', { name: en.removeTitle.replace('{name}', 'app-skill') })
+    const cancels = within(dialog).getAllByRole('button', { name: 'Cancel' })
+    fireEvent.click(cancels[cancels.length - 1] as HTMLElement)
+    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+    expect(removeInstalled).not.toHaveBeenCalled()
+  })
+
+
+  it('imports a dropped folder of files', async () => {
+    const previewFolder = vi.fn(async () => ({ ok: true as const, value: PREVIEW }))
+    mount({ previewFolder })
+    fireEvent.drop(await tabSection(), {
+      dataTransfer: { files: [new File(['body'], 'SKILL.md')] },
+    })
+    await waitFor(() => {
+      expect(previewFolder).toHaveBeenCalledWith('skill', [expect.objectContaining({ path: 'SKILL.md' })])
+    })
+  })
+
+  it('states why an import preview was refused', async () => {
+    mount({
+      previewArchive: async () => ({ ok: false, failure: { code: 'skill-install/archive-invalid', message: 'bad' } }),
+    })
+    fireEvent.drop(await tabSection(), { dataTransfer: { files: [new File(['zip'], 'pack.zip')] } })
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent',
+      expect.stringContaining(en.installArchiveInvalid))
+  })
+
+  it('ignores an empty archive choice', async () => {
+    const previewArchive = vi.fn(async () => ({ ok: true as const, value: PREVIEW }))
+    mount({ previewArchive })
+    await screen.findByText('app-skill')
+    fireEvent.change(screen.getByLabelText(en.chooseArchive), { target: { files: [] } })
+    await waitFor(() => { expect(previewArchive).not.toHaveBeenCalled() })
+  })
+
+  it('closes the removal dialog from its close control', async () => {
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'app-skill' }))
+    fireEvent.click(await screen.findByRole('button', { name: en.removeSkill }))
+    const dialog = await screen.findByRole('dialog', { name: en.removeTitle.replace('{name}', 'app-skill') })
+    const cancels = within(dialog).getAllByRole('button', { name: 'Cancel' })
+    fireEvent.click(cancels[0] as HTMLElement)
+    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+  })
+
+  it('keeps the removal action out of a panel rendered without one', () => {
+    const skill = SOURCES[0]?.skills[0]
+    if (skill === undefined) throw new Error('the fixture skill is missing')
+    render(<SkillDetail t={translator() as SkillsTranslate} sourceTitle="Claude Code" skill={skill} state="enabled" />)
+    expect(screen.queryByRole('button', { name: en.removeSkill })).toBeNull()
+  })
+
+  it('offers no removal for a skill this app did not install', async () => {
+    mount({}, [{
+      id: 'user-dsh',
+      kind: 'harness',
+      title: 'user-dsh',
+      path: '~\\.dsh\\skills',
+      displayPath: '~\\.dsh\\skills',
+      exists: true,
+      enabled: true,
+      skills: [{ name: 'local-skill', path: '~\\.dsh\\skills\\local-skill\\SKILL.md', status: 'available' }],
+    }])
+    fireEvent.click(await screen.findByRole('button', { name: 'local-skill' }))
+    expect(screen.queryByRole('button', { name: en.removeSkill })).toBeNull()
   })
 })

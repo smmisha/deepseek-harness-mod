@@ -19,6 +19,7 @@
     { "path": "../ui-primitives" },
     { "path": "../ui-renderer" },
     { "path": "../ui-slots" },
-    { "path": "../ui-workspace" }
+    { "path": "../ui-workspace" },
+    { "path": "../../skill/skill-install" }
   ]
 }

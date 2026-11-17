@@ -44,6 +44,8 @@ Four states replace the former bare messages. Loading is a skeleton of the same 
 
 Switching a source or a skill calls the Host `skillSources` Remote, which updates the `skill-sources` profile settings entry and invalidates every mounted provider, so the next model request sees the change without a restart. A skill switched off is absent from the model catalog and from `/skill`; switching its source back on restores the per-skill choices.
 
+The tab installs skills from three places. **Browse catalog** lists the catalogs the Host configures: a repository field that accepts `owner/repo`, a GitHub URL, or an `npx skills add …` command; a recommended repository whose skill folders the Host lists; and catalog pages that open in the browser, which the Host never fetches. **Import archive** takes a `.zip`, and dropping a folder or an archive on the tab does the same thing, so every path ends in one preview: the source, each skill's name, target folder, files, its `SKILL.md`, and a warning when the skill ships scripts. Nothing is written until the reader confirms, installing never runs anything the skill carries, and a name that is already installed asks whether to replace it, install under another name, or cancel. A confirmed install lands in the harness home's `skills` folder switched off, so it reaches the model only after the reader turns it on. The detail panel of an installed skill offers **Remove skill** with a confirmation; a folder the reader added is only unlisted, never deleted.
+
 ## Source marks and licences
 
 <a id="source-marks-and-licences"></a>
@@ -93,8 +95,8 @@ Appending the replacement catalog keeps the earlier prefix; the changed entries 
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Installation is a later stage.** **Browse catalog** opens a dialog that states installation arrives later; catalog search, preview, and download are not implemented here, and the skills.sh, SkillsMP, and skills-hub catalog sources are untouched.
-- **The install record needs an installer.** The repository, commit, and install date render only when an installer recorded them in the skill's frontmatter metadata, which nothing in this release writes.
+- **Three catalogs are link-only.** skills.sh, SkillsMP, and skills-hub.ai open in the browser because this release ships no client for their APIs; only a pasted `owner/repo` and the recommended repository are read by the Host.
+- **Provenance comes from the installer.** The repository, commit, and install date render only when a skill was installed through this tab or another installer that records them in the skill's frontmatter metadata.
 - **The description toggle has a fixed budget.** Rows expand from two lines to three; a longer description is read in the detail panel. The control is offered whenever a description exists rather than measured per row.
 - **A skill body is never read by this tab.** Descriptions come from frontmatter, and a body-only edit does not change the row.
 - **The write is unconditional (no revision fence).** Two simultaneous toggles overwrite each other; a source write disables the switches below it while it is in flight.

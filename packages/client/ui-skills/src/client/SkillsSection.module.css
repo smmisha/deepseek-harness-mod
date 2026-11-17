@@ -816,3 +816,43 @@
   flex: 1;
   min-width: 0;
 }
+
+/* A drop in progress: the tab dims and names what it accepts. The overlay takes
+   no pointer events, so the drop event still lands on the tab itself. */
+.tab {
+  position: relative;
+}
+
+.tab[data-dragging='true'] > *:not(.dropOverlay) {
+  opacity: 0.5;
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  pointer-events: none;
+}
+
+/* The archive picker is opened by the add menu; it stays out of the flow. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+}
