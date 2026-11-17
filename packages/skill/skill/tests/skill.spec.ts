@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { bindScopeParent, createScope, scopeOf } from '@deepseek-ai/dsh-scope'
 import SkillRegistry, {
   isModelInvocable,
+  isSkillName,
   isUserInvocable,
   renderSkillContent,
   type SkillCandidate,
@@ -1268,5 +1269,15 @@ describe('SkillRegistry scoped layers', () => {
     control?.invalidate()
     expect(await ctx.skills.list({ scope })).toEqual([])
     await preset.dispose()
+  })
+})
+
+describe('public skill-name grammar', () => {
+  it.each(['pdf', 'office-docx', 'ckm:banner-design', 'plugin:skill-2'])('accepts %s', (name) => {
+    expect(isSkillName(name)).toBe(true)
+  })
+
+  it.each(['Bad_Name', ':skill', 'plugin:', 'a::b', 'a:b:c', 'skill_2', '-skill', 'skill-'])('rejects %s', (name) => {
+    expect(isSkillName(name)).toBe(false)
   })
 })

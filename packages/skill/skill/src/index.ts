@@ -18,7 +18,13 @@ import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
 
-const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+/**
+ * Kebab-case skill name, optionally namespaced the way a Claude Code plugin names
+ * its skills (`ckm:banner-design`). The namespace is part of the name the catalog
+ * publishes: two plugins may ship the same bare name, and the model must be able to
+ * address either. Folder names derived from a skill name stay kebab-case.
+ */
+const SKILL_NAME = /^(?:[a-z0-9]+(?:-[a-z0-9]+)*:)?[a-z0-9]+(?:-[a-z0-9]+)*$/
 const DEFAULT_COLLECT_CACHE_ENTRIES = 128
 const MAX_COLLECT_ATTEMPTS = 2
 const RUNTIME_PROVIDER = 'runtime'
@@ -28,7 +34,8 @@ const RUNTIME_RANK = 250
 export const BUNDLED_SKILL_RANK = 600
 
 /**
- * Return whether a string is a valid kebab-case skill name.
+ * Return whether a string is a valid skill name: kebab-case, optionally carrying
+ * one `plugin:` namespace prefix.
  * @param name - candidate skill name to validate.
  * @returns whether the name matches the public skill-name grammar.
  */
