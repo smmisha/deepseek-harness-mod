@@ -80,6 +80,13 @@ export interface LocalSkillView {
   readonly files?: readonly LocalSkillFileView[]
   /** Install provenance; absent unless an installer recorded where the skill came from. */
   readonly provenance?: LocalSkillProvenance
+  /**
+   * Category identity the skill belongs to: the configured rule the author's
+   * declared category or the skill name matches. Absent when no rule matches.
+   */
+  readonly category?: string
+  /** Reader-facing name of `category`; the Skills tab translates the ids it knows and shows this otherwise. */
+  readonly categoryTitle?: string
   /** Row state the tab renders; the shadowed marker is separate. */
   readonly status: 'available' | 'disabled' | 'invalid'
   /** Frontmatter failure text for `invalid` rows. */

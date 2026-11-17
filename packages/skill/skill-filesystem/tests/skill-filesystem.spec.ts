@@ -7,7 +7,7 @@ import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { FileSystem, FsError, FsVersion, type FsDirEntry, type FsEditOutcome, type FsEditRequest, type FsInfo, type FsPathInfo, type FsTarget, type FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import * as SkillFileSystem from '../src/index.ts'
 import { assertFolderPathAcceptable } from '../src/folder-path.ts'
-import SkillSources, { type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
+import SkillSources, { type SkillCategory, type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
 
 /** Every temp dir created by this file, removed after each test. */
 const tempDirs: string[] = []
@@ -43,6 +43,25 @@ async function writeSkill(root: string, name: string, description: string, body 
 async function writeFlatSkill(root: string, name: string, description: string, body = 'Flat body.'): Promise<void> {
   await mkdir(root, { recursive: true })
   await writeFile(join(root, `${name}.md`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`)
+}
+
+/**
+ * Write one skill bundle whose folder name differs from the declared skill name,
+ * with extra frontmatter lines. A namespace a skill name carries includes `:`,
+ * which a Windows folder name cannot.
+ * @param root - skill root the bundle is created under.
+ * @param folder - folder name for the bundle.
+ * @param name - skill name the frontmatter declares.
+ * @param frontmatter - additional frontmatter lines, one field per entry or mapping rows.
+ */
+async function writeNamedSkill(
+  root: string, folder: string, name: string, frontmatter: readonly string[] = [],
+): Promise<void> {
+  const dir = join(root, folder)
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'SKILL.md'), [
+    '---', `name: ${name}`, `description: ${name}`, ...frontmatter, '---', '', 'Body.', '',
+  ].join('\n'))
 }
 
 class TestFileSystem extends FileSystem {
@@ -173,6 +192,7 @@ class TestFileSystem extends FileSystem {
 
 type SwitchConfig = {
   applications?: { id: string; dir: string; title: string }[]
+  categories?: SkillCategory[]
   sources?: Record<string, { enabled: boolean }>
   skills?: Record<string, Record<string, boolean>>
   folders?: { dir: string }[]
@@ -446,8 +466,11 @@ describe('FileSystemSkillProvider', () => {
         skills: {},
       }),
       applications: () => applications,
+      categories: () => [],
       folders: () => [],
-      visibility: () => ({ applications, folders: [], sourceEnabled: () => true, skillEnabled: () => true }),
+      visibility: () => ({
+        applications, folders: [], categories: [], sourceEnabled: () => true, skillEnabled: () => true,
+      }),
       addFolder: async () => true,
       removeFolder: async () => undefined,
       setSource: async () => undefined,
@@ -738,7 +761,8 @@ describe('FileSystemSkillProvider', () => {
     const home = await tempDir('skill-invalid-yaml')
     const root = join(home, '.dsh/skills')
     await writeSkill(root, 'good-skill', 'Good skill')
-    // An entry the lenient reader cannot rescue either: its name is not a skill name.\n    await writeFile(join(root, 'bad-yaml.md'), '---\nname: [unclosed\ndescription: [also\n---\n\nBad body.\n')
+    // An entry the lenient reader cannot rescue either: its name is not a skill name.
+    await writeFile(join(root, 'bad-yaml.md'), '---\nname: [unclosed\ndescription: [also\n---\n\nBad body.\n')
 
     const ctx = await setupLocal(home)
 
@@ -1337,7 +1361,7 @@ describe('FileSystemSkillProvider', () => {
 
       // Isolated providers see only their explicit roots: the environment
       // bundled root is a default root, so includeDefaultRoots: false must
-      // drop it — isolated providers never re-claim the app's builtins.
+      // drop it вЂ” isolated providers never re-claim the app's builtins.
       const isolated = new Context()
       await isolated.plugin(SkillRegistry)
       const customOnly = join(envHome, 'custom-only')
@@ -1587,6 +1611,134 @@ describe('Skills tab detail rows', () => {
     expect(views.find(view => view.id === 'claude-code')?.applicationId).toBe('claude-code')
     expect(views.find(view => view.id === `folder:${team}`)?.applicationId).toBeUndefined()
     expect(views.find(view => view.id === 'user-dsh')?.applicationId).toBeUndefined()
+  })
+})
+
+describe('Skill categories', () => {
+  /** The shipped rules, plus the namespace rule a deployment declares for its plugin skills. */
+  const CATEGORIES: readonly SkillCategory[] = [
+    ...SkillSources.Config({}).categories,
+    { id: 'plugin-ckm', title: 'ckm', namespaces: ['ckm'] },
+  ]
+
+  /** The `[id, title]` category of one described skill, or undefined when it has none. */
+  function categoryOf(
+    skills: readonly SkillFileSystem.LocalSkillView[], name: string,
+  ): readonly [string, string | undefined] | undefined {
+    const skill = skills.find(entry => entry.name === name)
+    if (skill === undefined) throw new Error(`expected the described skill ${name}`)
+    return skill.category === undefined ? undefined : [skill.category, skill.categoryTitle]
+  }
+
+  it('reads the declared word, then the plugin namespace, then the name prefix', async () => {
+    const home = await tempDir('category-precedence')
+    const project = await tempDir('category-precedence-project')
+    const root = join(home, '.dsh', 'skills')
+    // A declared word wins over the name: the name here would have matched google-cloud.
+    await writeNamedSkill(root, 'declared-category', 'gcp-agent-builder', ['category: video'])
+    await writeNamedSkill(root, 'declared-metadata', 'firebase-tools', ['metadata.category: design'])
+    await writeNamedSkill(root, 'declared-mapping', 'plain-skill', ['metadata:', '  category: office'])
+    await writeNamedSkill(root, 'empty-declared', 'figma-empty', ['category: ""'])
+    // A configured rule claims the namespace; an unclaimed one leaves the local name to the prefix.
+    await writeNamedSkill(root, 'namespaced', 'ckm:banner-design')
+    await writeNamedSkill(root, 'namespaced-other', 'zeta:ui-styling')
+    await writeNamedSkill(root, 'prefixed', 'hyperframes-cli')
+    await writeNamedSkill(root, 'single-word', 'figma')
+    await writeNamedSkill(root, 'unmatched', 'own-skill')
+    const ctx = await setupLocal(home, {}, { applications: [], categories: [...CATEGORIES] })
+    const skills = (await describeSources(ctx, project)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    expect(categoryOf(skills, 'gcp-agent-builder')).toEqual(['video', 'Video and animation'])
+    expect(categoryOf(skills, 'firebase-tools')).toEqual(['design', 'Design and Figma'])
+    expect(categoryOf(skills, 'plain-skill')).toEqual(['office', 'Documents and Office'])
+    expect(categoryOf(skills, 'ckm:banner-design')).toEqual(['plugin-ckm', 'ckm'])
+    expect(categoryOf(skills, 'zeta:ui-styling')).toEqual(['design', 'Design and Figma'])
+    expect(categoryOf(skills, 'hyperframes-cli')).toEqual(['video', 'Video and animation'])
+    expect(categoryOf(skills, 'figma')).toEqual(['design', 'Design and Figma'])
+    // An empty declaration is no declaration, so the name prefix still applies.
+    expect(categoryOf(skills, 'figma-empty')).toEqual(['design', 'Design and Figma'])
+    // A name no rule claims carries no category field at all.
+    expect(skills.find(entry => entry.name === 'own-skill')).not.toHaveProperty('category')
+  })
+
+  it('keeps a declared word no rule claims as its own stable category', async () => {
+    const home = await tempDir('category-declared')
+    const project = await tempDir('category-declared-project')
+    const root = join(home, '.dsh', 'skills')
+    // Two author words that differ only in case stay two identities, not one.
+    await writeNamedSkill(root, 'ops-upper', 'ops-toolkit', ['category: Ops Toolkit'])
+    await writeNamedSkill(root, 'ops-lower', 'ops-toolkit-lower', ['category: ops toolkit'])
+    await writeNamedSkill(root, 'spaced', 'spaced-word', ['category: "Video   Studio"'])
+    // A declared word a rule claims resolves to that rule, matched without letter case.
+    await writeNamedSkill(root, 'declared-prefix', 'declared-prefix', ['category: GCP'])
+    await writeNamedSkill(root, 'non-string', 'non-string-category', ['category: 42'])
+    const ctx = await setupLocal(home, {}, { applications: [], categories: [...CATEGORIES] })
+    const skills = (await describeSources(ctx, project)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    expect(categoryOf(skills, 'ops-toolkit')).toEqual(['declared:Ops Toolkit', 'Ops Toolkit'])
+    expect(categoryOf(skills, 'ops-toolkit-lower')).toEqual(['declared:ops toolkit', 'ops toolkit'])
+    expect(categoryOf(skills, 'spaced-word')).toEqual(['declared:Video Studio', 'Video Studio'])
+    expect(categoryOf(skills, 'declared-prefix')).toEqual(['google-cloud', 'Google Cloud'])
+    expect(categoryOf(skills, 'non-string-category')).toBeUndefined()
+  })
+
+  it('treats a rule that lists no name tokens as claiming only its own id', async () => {
+    const home = await tempDir('category-sparse')
+    const project = await tempDir('category-sparse-project')
+    const root = join(home, '.dsh', 'skills')
+    // Each lookup evaluates a rule whose optional token lists are absent.
+    await writeNamedSkill(root, 'declared', 'declared-name', ['category: Mystery'])
+    await writeNamedSkill(root, 'namespaced', 'zeta:namespaced-name')
+    await writeNamedSkill(root, 'bare', 'bare-name')
+    const rules: SkillCategory[] = [{ id: 'sparse', title: 'Sparse' }]
+    const fakeSources: SkillSourcesService = {
+      read: () => ({ sources: {}, skills: {} }),
+      applications: () => [],
+      categories: () => rules,
+      folders: () => [],
+      visibility: () => ({
+        applications: [], folders: [], categories: rules, sourceEnabled: () => true, skillEnabled: () => true,
+      }),
+      addFolder: async () => true,
+      removeFolder: async () => undefined,
+      setSource: async () => undefined,
+      setSkill: async () => undefined,
+      register: () => () => {},
+    }
+    const ctx = new Context()
+    ctx.provide('skillSources', fakeSources)
+    const provider = new SkillFileSystem.FileSystemSkillProvider(ctx, {
+      invalidate: () => {},
+      signal: new AbortController().signal,
+    }, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    const skills = (await provider.describeSources({ cwd: project, winners: new Map() }))
+      .find(row => row.id === 'user-dsh')?.skills ?? []
+
+    // The author's word still becomes its own category; the name carries none.
+    expect(categoryOf(skills, 'declared-name')).toEqual(['declared:Mystery', 'Mystery'])
+    expect(categoryOf(skills, 'zeta:namespaced-name')).toBeUndefined()
+    expect(categoryOf(skills, 'bare-name')).toBeUndefined()
+  })
+
+  it('leaves every skill without a category when no rules are configured', async () => {
+    const home = await tempDir('category-none')
+    const project = await tempDir('category-none-project')
+    const root = join(home, '.dsh', 'skills')
+    await writeSkill(root, 'video-skill', 'A skill whose name looks like a category')
+    await writeNamedSkill(root, 'declared', 'other-skill', ['category: video'])
+    await writeNamedSkill(root, 'array-metadata', 'array-metadata', ['metadata: [one]'])
+    const broken = join(root, 'broken')
+    await mkdir(broken, { recursive: true })
+    await writeFile(join(broken, 'SKILL.md'), 'no frontmatter at all')
+    const ctx = await setupLocal(home, {}, { applications: [], categories: [] })
+    const skills = (await describeSources(ctx, project)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    // Without rules, only the author's own word names a category; a name carries none.
+    expect(skills.find(skill => skill.name === 'video-skill')).not.toHaveProperty('category')
+    expect(skills.find(skill => skill.name === 'other-skill'))
+      .toMatchObject({ category: 'declared:video', categoryTitle: 'video' })
+    // A row whose frontmatter could not be read has no name to derive one from.
+    expect(skills.find(skill => skill.status === 'invalid')).not.toHaveProperty('category')
   })
 })
 
