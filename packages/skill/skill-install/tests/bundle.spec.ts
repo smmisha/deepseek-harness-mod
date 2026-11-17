@@ -53,6 +53,11 @@ describe('installName', () => {
     expect(installName(document('pdf-tools'), 'whatever')).toBe('pdf-tools')
   })
 
+  it('installs a namespaced name under its kebab-case tail', () => {
+    // The catalog accepts `ckm:banner-design`; a folder cannot carry the colon on Windows.
+    expect(installName(document('ckm:banner-design'), 'whatever')).toBe('ckm-banner-design')
+  })
+
   it('slugs the declared name when it is not kebab-case', () => {
     expect(installName(document('PDF Tools!'), 'whatever')).toBe('pdf-tools')
   })

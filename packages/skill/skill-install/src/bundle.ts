@@ -55,6 +55,9 @@ interface SkillDocument {
   readonly body: string
 }
 
+/** Folder-name grammar: the skill-name grammar without the namespace separator. */
+const FOLDER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
+
 /** The instruction file every skill folder carries. */
 const DOCUMENT_NAME = /^skill\.md$/iu
 
@@ -101,9 +104,9 @@ export function selectBundles(files: readonly BundleFile[], maxBundles: number):
 }
 
 /**
- * Choose the folder name a bundle installs under: the frontmatter name when it
- * is a valid skill name, otherwise a kebab-case name derived from the declared
- * name or the source folder.
+ * Choose the folder name a bundle installs under: the frontmatter name when it is
+ * usable as a folder name, otherwise a kebab-case name derived from the declared
+ * name or the source folder. A namespaced declared name installs under its slug.
  * @param document - instruction file text of the bundle.
  * @param folder - folder the bundle came from, used when the frontmatter names none.
  * @returns the install name.
@@ -113,7 +116,9 @@ export function selectBundles(files: readonly BundleFile[], maxBundles: number):
 export function installName(document: string, folder: string): string {
   const parsed = parseDocument(document)
   const declared = typeof parsed.data.name === 'string' ? parsed.data.name.trim() : ''
-  if (isSkillName(declared)) return declared
+  // A namespaced skill name (`ckm:banner-design`) is legal in the catalog but not in
+  // a folder name on Windows, so the install folder keeps the kebab-case tail.
+  if (FOLDER_NAME.test(declared)) return declared
   const fallback = declared.length > 0 ? declared : (folder.slice(folder.lastIndexOf('/') + 1) || 'skill')
   const slug = fallback.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')
   if (!isSkillName(slug)) {
