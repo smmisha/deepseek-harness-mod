@@ -1,11 +1,12 @@
 /**
- * Profile-owned skill source switches and the one application list every local
- * provider instance reads.
+ * Profile-owned skill source switches, the one application list every local
+ * provider instance reads, and the category rules that group the Skills tab.
  *
  * The switches live in this plugin entry's volatile Config, so the profile
  * settings service owns them, they survive restarts, and each write invalidates
- * the providers that reported themselves. The application list lives beside
- * them: a provider never hard-codes which folders belong to another app.
+ * the providers that reported themselves. The application list and the category
+ * rules live beside them: a provider never hard-codes which folders belong to
+ * another app or which name tokens form a category.
  *
  * @module @deepseek-ai/dsh-skill-sources
  */
@@ -18,8 +19,10 @@ import {
   bindVisibility, folderSourceId, sameFolder, type SkillApplication, type SkillFolder, type SkillVisibility,
   type SkillVisibilityState,
 } from './visibility.ts'
+import { assertCategoryRules, DEFAULT_SKILL_CATEGORIES, type SkillCategory } from './categories.ts'
 
 export type { SkillApplication, SkillFolder, SkillFolderSource, SkillVisibility, SkillVisibilityState } from './visibility.ts'
+export type { SkillCategory } from './categories.ts'
 
 /** Profile entry id whose volatile Config holds the switches. */
 const SETTINGS_NAMESPACE = 'skill-sources'
@@ -30,10 +33,16 @@ export interface SkillSourceSwitch {
   readonly enabled?: boolean
 }
 
-/** Plugin configuration: the persisted switches and the application list. */
+/** Plugin configuration: the persisted switches, the application list, and the category rules. */
 export interface Config {
   /** Other applications' skill folders; every one starts switched off. */
   applications?: SkillApplication[]
+  /**
+   * Category rules a local provider applies to the skills it describes. Omitted
+   * ships the built-in categories; an empty list leaves only the categories
+   * authors declare, so every other skill falls to the Skills tab's "Other" group.
+   */
+  categories?: SkillCategory[]
   /** Source switches keyed by source id; absent keeps the source's default. */
   sources?: Volatile<Record<string, SkillSourceSwitch>>
   /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
@@ -59,6 +68,17 @@ const ConfigSchema = z.object({
     dir: z.string().min(1),
     title: z.string().min(1),
   })).default(DEFAULT_APPLICATIONS.map(application => ({ ...application }))),
+  categories: z.array(z.object({
+    id: z.string().min(1).required().description('Stable category identity the Skills tab groups by.'),
+    title: z.string().min(1).required()
+      .description('Reader-facing category name, used when the client does not translate the id.'),
+    prefixes: z.array(z.string().min(1)).default([]).description('Skill-name prefixes this category claims.'),
+    namespaces: z.array(z.string().min(1)).default([]).description('Plugin namespaces this category claims.'),
+  })).default(DEFAULT_SKILL_CATEGORIES.map(rule => ({
+    ...rule,
+    prefixes: [...rule.prefixes],
+    namespaces: [...rule.namespaces],
+  }))),
   sources: z.dict(z.object({
     enabled: z.boolean().description('Whether this source contributes skills; absent keeps the source default.'),
   })).default({}).volatile(),
@@ -102,6 +122,11 @@ export interface SkillSourcesService {
    * @returns the application folders in configuration order.
    */
   applications(): readonly SkillApplication[]
+  /**
+   * Configured category rules.
+   * @returns the rules in configuration order.
+   */
+  categories(): readonly SkillCategory[]
   /**
    * Folders the reader added.
    * @returns the added folders in the order they were added.
@@ -162,10 +187,12 @@ export default class SkillSources extends Service implements SkillSourcesService
 
   /**
    * @param ctx - Host context with the settings service.
-   * @param config - persisted switches and the application list.
+   * @param config - persisted switches, the application list, and the category rules.
+   * @throws {TypeError} when the configured category rules are ambiguous.
    */
   constructor(private readonly ownerContext: Context, private readonly config: Config = {}) {
     super(ownerContext, 'skillSources')
+    assertCategoryRules(this.categories())
   }
 
   /** Current switches from the live Config fields. */
@@ -181,14 +208,19 @@ export default class SkillSources extends Service implements SkillSourcesService
     return this.config.applications ?? []
   }
 
+  /** Configured category rules. */
+  categories(): readonly SkillCategory[] {
+    return this.config.categories ?? []
+  }
+
   /** Folders the reader added, from the live Config field. */
   folders(): readonly SkillFolder[] {
     return this.config.folders?.get() ?? []
   }
 
-  /** One read of the switches, applications, and added folders bound to the visibility rules. */
+  /** One read of the switches, applications, added folders, and category rules bound to the visibility answers. */
   visibility(): SkillVisibility {
-    return bindVisibility(this.read(), this.applications(), this.folders())
+    return bindVisibility(this.read(), this.applications(), this.folders(), this.categories())
   }
 
   /**
