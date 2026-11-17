@@ -260,7 +260,7 @@
 }
 
 .groupRule {
-  height: 1px;
+  height: 0.5px;
   margin: 2px 0 4px;
   background: var(--dsw-alias-border-l1);
 }
@@ -288,9 +288,15 @@
   box-shadow: inset 0 0.5px 0 var(--dsw-alias-border-l1);
 }
 
-.row:hover,
 .row[data-selected='true'] {
   background: var(--dsw-alias-bg-layer-2);
+}
+
+/* A hover fill is a pointer affordance, so it waits for a hovering primary input. */
+@media (hover: hover) {
+  .row:hover {
+    background: var(--dsw-alias-bg-layer-2);
+  }
 }
 
 .rowMark {
@@ -544,7 +550,8 @@
 .skeletonSwitch {
   width: 36px;
   height: 20px;
-  border-radius: 10px;
+  border-radius: 999px;
+  corner-shape: round;
 }
 
 /* Feedback: an in-place notice keeps the described list on screen. */

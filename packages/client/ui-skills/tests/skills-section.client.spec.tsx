@@ -17,7 +17,7 @@ afterEach(cleanup)
 function stubClipboard(): void {
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
-    value: { writeText: async () => await Promise.resolve() },
+    value: { writeText: async () => { await Promise.resolve() } },
   })
 }
 
@@ -327,7 +327,7 @@ describe('SkillsSection groups and filters', () => {
     expect(await screen.findByText('No matching skills')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(await screen.findByText('app-skill')).toBeTruthy()
-    expect((screen.getByRole('searchbox', { name: 'Search skills' }) as HTMLInputElement).value).toBe('')
+    expect(screen.getByRole('searchbox', { name: 'Search skills' })).toHaveProperty('value', '')
   })
 })
 

@@ -320,8 +320,8 @@ function FilterMenu({ label, current, options, onSelect }: {
   )
 }
 
-/** One row of the catalog: mark, name and source, description, state, and its switch. */
-function SkillRow({ t, source, sourceTitle, shadowedTitle, skill, state, selected, busy, expanded, onSelect, onToggleEnabled, onToggleDescription }: {
+/** Props of one catalog row. */
+interface SkillRowProps {
   readonly t: SkillsTranslate
   readonly source: LocalSourceView
   readonly sourceTitle: string
@@ -335,7 +335,13 @@ function SkillRow({ t, source, sourceTitle, shadowedTitle, skill, state, selecte
   readonly onSelect: () => void
   readonly onToggleEnabled: (name: string, enabled: boolean) => void
   readonly onToggleDescription: () => void
-}): ReactNode {
+}
+
+/** One row of the catalog: mark, name and source, description, state, and its switch. */
+function SkillRow({
+  t, source, sourceTitle, shadowedTitle, skill, state, selected, busy, expanded, onSelect, onToggleEnabled,
+  onToggleDescription,
+}: SkillRowProps): ReactNode {
   const name = skill.name
   const mark = sourceMarkSpec(source)
   const note = state === 'overridden'
@@ -390,8 +396,8 @@ function SkillRow({ t, source, sourceTitle, shadowedTitle, skill, state, selecte
   )
 }
 
-/** One source group: a disclosure header that owns the source, and its skill rows. */
-function Group({ t, group, title, labelFor, collapsed, busy, selected, expanded, limit, onToggleGroup, onSelectSkill, onToggleDescription, onToggleSkill, onToggleSource, onRemoveFolder, onShowMore }: {
+/** Props of one source group. */
+interface GroupProps {
   readonly t: SkillsTranslate
   readonly group: CatalogGroup
   readonly title: string
@@ -409,7 +415,13 @@ function Group({ t, group, title, labelFor, collapsed, busy, selected, expanded,
   readonly onToggleSource: (enabled: boolean) => void
   readonly onRemoveFolder: () => void
   readonly onShowMore: () => void
-}): ReactNode {
+}
+
+/** One source group: a disclosure header that owns the source, and its skill rows. */
+function Group({
+  t, group, title, labelFor, collapsed, busy, selected, expanded, limit, onToggleGroup, onSelectSkill,
+  onToggleDescription, onToggleSkill, onToggleSource, onRemoveFolder, onShowMore,
+}: GroupProps): ReactNode {
   const { source, skills } = group
   const listId = `skills-group-${source.id}`
   const sourceBusy = busy.includes(source.id)
