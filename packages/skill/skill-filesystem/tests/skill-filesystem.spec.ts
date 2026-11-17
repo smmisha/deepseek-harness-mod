@@ -738,7 +738,7 @@ describe('FileSystemSkillProvider', () => {
     const home = await tempDir('skill-invalid-yaml')
     const root = join(home, '.dsh/skills')
     await writeSkill(root, 'good-skill', 'Good skill')
-    await writeFile(join(root, 'bad-yaml.md'), '---\nname: bad-yaml\ndescription: [unclosed\n---\n\nBad body.\n')
+    // An entry the lenient reader cannot rescue either: its name is not a skill name.\n    await writeFile(join(root, 'bad-yaml.md'), '---\nname: [unclosed\ndescription: [also\n---\n\nBad body.\n')
 
     const ctx = await setupLocal(home)
 
@@ -1622,4 +1622,29 @@ describe('shared skill-sources controller', () => {
     await new Promise(resolve => setTimeout(resolve, 25))
     expect(ctx.root.get('skillSourcesController')).toBeUndefined()
   })
+  it('reads a description whose unquoted colon makes the YAML invalid', async () => {
+    const home = await tempDir('skill-lenient')
+    await writeSkill(join(home, '.dsh/skills'), 'colon-skill', 'Rejects: everything about: colons')
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(entry => entry.name)).toContain('colon-skill')
+  })
+
+  it('keeps the first value of a field that a broken file declares twice', async () => {
+    const home = await tempDir('skill-lenient-duplicate')
+    const dir = join(home, '.dsh/skills', 'twice')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'SKILL.md'), '---\nname: first-name\nname: second-name\ndescription: Text: with colon\n---\n\nBody.\n')
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(entry => entry.name)).toContain('first-name')
+  })
+
+  it('still refuses frontmatter it cannot even read leniently', async () => {
+    const home = await tempDir('skill-lenient-bad')
+    const dir = join(home, '.dsh/skills', 'no-name')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'SKILL.md'), '---\ndescription: has: colon but no name\n---\n\nBody.\n')
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(entry => entry.name)).not.toContain('no-name')
+  })
+
 })

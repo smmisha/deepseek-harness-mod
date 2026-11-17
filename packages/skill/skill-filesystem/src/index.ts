@@ -1482,10 +1482,18 @@ async function parseSkillFile(
   try {
     parsed = parseFrontmatter(raw.content)
   } catch (error) {
-    const message = `invalid YAML frontmatter: ${errorMessage(error)}`
-    ctx.logger.warn(`skill file ${path} ignored: ${message}`)
-    report?.(message)
-    return undefined
+    // Another agent's folder may hold frontmatter that its own reader accepted: an
+    // unquoted colon inside a plain description is valid to a line reader and a
+    // nested mapping to YAML. Recovering the two catalog fields keeps such a skill
+    // usable; anything else in that file stays unread.
+    parsed = readFrontmatterLeniently(raw.content)
+    if (parsed === undefined) {
+      const message = `invalid YAML frontmatter: ${errorMessage(error)}`
+      ctx.logger.warn(`skill file ${path} ignored: ${message}`)
+      report?.(message)
+      return undefined
+    }
+    ctx.logger.warn(`skill file ${path}: frontmatter read leniently after ${errorMessage(error)}`)
   }
   if (!parsed) {
     const message = 'missing YAML frontmatter'
@@ -1641,6 +1649,33 @@ function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: s
   const parsed: unknown = parseYaml(yaml)
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
   return { data: parsed as Record<string, unknown>, body: raw.slice(closing.bodyStart) }
+}
+
+/**
+ * Read the two catalog fields from frontmatter the strict reader rejected. Only
+ * `name` and `description` are recovered, and only from one-line `key: value`
+ * entries, so the invocation policy and every other field stay at their defaults.
+ * @param raw - whole instruction file text.
+ * @returns frontmatter data and body, or undefined when the two fields are absent.
+ */
+function readFrontmatterLeniently(raw: string): { data: Record<string, unknown>; body: string } | undefined {
+  const firstLineEnd = raw.indexOf('\n')
+  /* v8 ignore next -- the strict reader already required a leading fence. */
+  if (firstLineEnd < 0) return undefined
+  const closing = findClosingFrontmatter(raw, firstLineEnd + 1)
+  /* v8 ignore next -- the strict reader already found this document's closing fence. */
+  if (closing === undefined) return undefined
+  const data: Record<string, unknown> = {}
+  for (const line of raw.slice(firstLineEnd + 1, closing.start).split('\n')) {
+    const field = /^(name|description):[ \t]*(\S.*)$/u.exec(line.replace(/\r$/, ''))
+    if (field === null) continue
+    const key = field[1] as string
+    if (!(key in data)) data[key] = field.slice(2).join('').trim()
+  }
+  const name = data.name
+  const description = data.description
+  if (typeof name !== 'string' || typeof description !== 'string') return undefined
+  return { data, body: raw.slice(closing.bodyStart) }
 }
 
 function findClosingFrontmatter(raw: string, start: number): { start: number; bodyStart: number } | undefined {
