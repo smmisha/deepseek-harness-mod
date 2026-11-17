@@ -23,13 +23,15 @@ export const DETAIL_PANEL_ID = 'skills-detail'
  * Render one skill's detail panel.
  * @param props.t - the `skills` locale seat.
  * @param props.sourceTitle - localized name of the source that discovered the skill.
+ * @param props.categoryTitle - localized name of the skill's category, when the Host described one.
  * @param props.skill - the open skill row.
  * @param props.state - the row state the panel explains.
  * @returns the panel region.
  */
-export function SkillDetail({ t, sourceTitle, skill, state }: {
+export function SkillDetail({ t, sourceTitle, categoryTitle, skill, state }: {
   readonly t: SkillsTranslate
   readonly sourceTitle: string
+  readonly categoryTitle?: string
   readonly skill: LocalSkillView
   readonly state: SkillState
 }): ReactNode {
@@ -44,6 +46,14 @@ export function SkillDetail({ t, sourceTitle, skill, state }: {
       <h2 className={css.title}>{title}</h2>
       <p className={css.subtitle}>
         <span>{sourceTitle}</span>
+        {categoryTitle === undefined
+          ? null
+          : (
+            <>
+              <span aria-hidden="true">{' · '}</span>
+              <span>{categoryTitle}</span>
+            </>
+          )}
         <span aria-hidden="true">{' · '}</span>
         <span className={css.state} data-state={state}>
           <StateDot state={skillStateDot(state)} />

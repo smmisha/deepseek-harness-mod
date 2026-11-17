@@ -1,13 +1,40 @@
 /**
  * Catalog vocabulary shared by the Skills tab's list and its detail panel: what
- * a row's state means, how a skill is identified, and the size and date formats
- * the panel prints.
+ * a row's state means, how a skill is identified, how a category is named, and
+ * the size and date formats the panel prints.
  */
 import type { LocalSkillView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import type { SkillsLocaleKey } from './locales.ts'
 
 /** Translate one `skills` dictionary key. */
 export type SkillsTranslate = (key: SkillsLocaleKey, params?: Record<string, unknown>) => string
+
+/** Locale key of every built-in category id the Host ships by default. */
+export const CATEGORY_KEYS: Readonly<Record<string, SkillsLocaleKey>> = {
+  'google-cloud': 'categoryGoogleCloud',
+  firebase: 'categoryFirebase',
+  video: 'categoryVideo',
+  design: 'categoryDesign',
+  content: 'categoryContent',
+  office: 'categoryOffice',
+  development: 'categoryDevelopment',
+  automation: 'categoryAutomation',
+  notes: 'categoryNotes',
+  security: 'categorySecurity',
+}
+
+/**
+ * Name a category header shows: the localized name of a built-in id, otherwise
+ * the Host's configured title, otherwise the raw id a user-defined rule reports.
+ * @param id - category identity from the Host.
+ * @param title - configured category title from the Host, when the row carries one.
+ * @param t - the `skills` dictionary seat.
+ * @returns the name to render.
+ */
+export function categoryTitle(id: string, title: string | undefined, t: SkillsTranslate): string {
+  const key = CATEGORY_KEYS[id]
+  return key === undefined ? title ?? id : t(key)
+}
 
 /** What the row's state column says. */
 export type SkillState = 'enabled' | 'disabled' | 'overridden' | 'error'

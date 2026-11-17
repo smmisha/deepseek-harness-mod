@@ -1,9 +1,11 @@
 /* Skills tab: a catalog of the skills the Host discovered. The toolbar is one
-   search field and the split add button; below it sit the two filters and a
-   quiet summary. Each source group has a disclosure header that carries its
-   mark, name, kind, folder, count, and switch; each skill is a catalog row of
-   mark, name and source, description, state, and the quiet switch. Selecting a
-   row opens the detail panel the tab renders beside the list. */
+   search field, the grouping switch, and the split add button; below it sit the
+   two filters and a quiet summary. The board groups skills by category or by
+   source; each section header carries a disclosure, the section name, and its
+   count, and a source header adds the mark, kind, folder, remove control, and
+   switch. Each skill is a catalog tile of mark, name and source, description,
+   state, and the quiet switch. Selecting a tile opens the detail panel the tab
+   renders beside the list. */
 
 .tab {
   display: flex;
@@ -14,6 +16,7 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -24,13 +27,22 @@
   max-width: 360px;
 }
 
+/* The grouping switch and the add button stay together at the trailing edge, so
+   the search keeps its measure at every width. */
+.toolbarEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
 /* Add skills: the Plugins page's split button — a primary half and a chevron
    half that opens every way to add. */
 .addGroup {
   display: inline-flex;
   flex: none;
   align-items: stretch;
-  margin-inline-start: auto;
 }
 
 .addPrimary,
@@ -89,7 +101,8 @@
 }
 
 /* Narrow panes keep the icon halves and drop the label; the button keeps its
-   accessible name from aria-label. */
+   accessible name from aria-label. The search takes its own line so the switch
+   and the add button never squeeze it. */
 @media (max-width: 560px) {
   .addLabel {
     display: none;
@@ -102,6 +115,7 @@
   }
 
   .search {
+    flex: 1 1 100%;
     max-width: none;
   }
 }

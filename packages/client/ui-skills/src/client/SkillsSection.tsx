@@ -1,25 +1,27 @@
 /**
- * Skills tab: the local skill catalog. A source is a group whose header carries
- * the source mark, name, kind, folder, count, and the switch that owns every
- * skill below; each skill is one row of the catalog columns — mark, name and
- * source, description, state, and the quiet switch. Selecting a row opens its
- * detail panel beside the list.
+ * Skills tab: the local skill catalog. The board groups skills either by the
+ * category the Host derived for them — the default view — or by the source that
+ * discovered them; a group header carries the name and count, and in source mode
+ * also the source mark, kind, folder, and the switch that owns every skill
+ * below. Each skill is one tile of the catalog columns — mark, name and source,
+ * description, state, and the quiet switch. Selecting a tile opens its detail
+ * panel beside the list.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Button, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconFolderOpenOutlineRegular,
   IconNewChatOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular,
-  IconTrashOutlineRegular, IconWarningTriangleOutlineRegular, Input, Menu, MenuItemButton, Modal, StateDot, Switch,
-  Tooltip,
+  IconTrashOutlineRegular, IconWarningTriangleOutlineRegular, Input, Menu, MenuItemButton, Modal, SegmentedControl,
+  StateDot, Switch, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AddSkillFolderResult, LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import { DETAIL_PANEL_ID, SkillDetail } from './SkillDetail.tsx'
 import { applicationMarkSpec, SourceMark, sourceMarkSpec } from './SourceMark.tsx'
 import type { SkillsLocaleKey } from './locales.ts'
-import type { SkillsStoreHandle } from './skills-store.ts'
+import type { SkillsGrouping, SkillsStoreHandle } from './skills-store.ts'
 import {
-  SKILL_STATE_KEYS, skillIdentity, skillKey, skillState, skillStateDot, skillTitle, type SkillState,
+  categoryTitle, SKILL_STATE_KEYS, skillIdentity, skillKey, skillState, skillStateDot, skillTitle, type SkillState,
   type SkillStateFilter, type SkillsTranslate,
 } from './skills-catalog.ts'
 import css from './SkillsSection.module.css'
@@ -101,13 +103,50 @@ const STATE_FILTER_KEYS: Readonly<Record<SkillStateFilter, SkillsLocaleKey>> = {
   error: 'stateError',
 }
 
-/** Skills rendered per source before the "show more" control appears. */
+/** Skills rendered per section before the "show more" control appears. */
 const PAGE_SIZE = 50
+
+/** Grouping options, in the order the switch lists them. */
+const GROUPINGS: readonly { readonly value: SkillsGrouping; readonly key: SkillsLocaleKey }[] = [
+  { value: 'categories', key: 'groupCategories' },
+  { value: 'sources', key: 'groupSources' },
+]
+
+/** Collapse-store key and DOM id prefix of the group that holds skills no category claims. */
+const CATEGORY_OTHER_KEY = 'category-other'
 
 /** One discovered source with the skills the current search and filters keep. */
 interface CatalogGroup {
   readonly source: LocalSourceView
   readonly skills: readonly LocalSkillView[]
+}
+
+/** One skill tile of the board, with everything the tile and its panel read. */
+interface CatalogTile {
+  /** Selection and busy identity of the skill. */
+  readonly key: string
+  readonly skill: LocalSkillView
+  readonly source: LocalSourceView
+  /** Localized name of the source that discovered the skill. */
+  readonly sourceTitle: string
+  readonly state: SkillState
+  /** Localized name of the source that won the duplicate, or empty for a tile that lost nothing. */
+  readonly shadowedTitle: string
+}
+
+/** One section of the board: a source group, or a category. */
+interface CatalogSection {
+  /** Identity the collapse store keeps for this section. */
+  readonly key: string
+  /** DOM id of the section's list, named by the header's `aria-controls` while it is open. */
+  readonly listId: string
+  /** Localized section name. */
+  readonly title: string
+  readonly tiles: readonly CatalogTile[]
+  /** Number the header prints: every skill the source holds, or the category's tiles after the search and filters. */
+  readonly count: number
+  /** Source a source-mode section stands for; absent for a category. */
+  readonly source?: LocalSourceView
 }
 
 /** Props of the tab, including the session-list hook that locates the open project. */
@@ -400,96 +439,104 @@ function SkillRow({
   )
 }
 
-/** Props of one source group. */
-interface GroupProps {
+/** Props of one board section. */
+interface SectionProps {
   readonly t: SkillsTranslate
-  readonly group: CatalogGroup
-  readonly title: string
-  /** Localized name of any described source, for a duplicate's winner. */
-  readonly labelFor: (sourceId: string) => string
+  readonly section: CatalogSection
   readonly collapsed: boolean
   readonly busy: readonly string[]
   readonly selected: string | null
   readonly expanded: readonly string[]
   readonly limit: number
-  readonly onToggleGroup: () => void
+  readonly onToggleSection: () => void
   readonly onSelectSkill: (key: string) => void
   readonly onToggleDescription: (key: string) => void
-  readonly onToggleSkill: (name: string, enabled: boolean) => void
-  readonly onToggleSource: (enabled: boolean) => void
-  readonly onRemoveFolder: () => void
+  readonly onToggleSkill: (source: LocalSourceView, name: string, enabled: boolean) => void
+  readonly onToggleSource: (source: LocalSourceView, enabled: boolean) => void
+  readonly onRemoveFolder: (source: LocalSourceView) => void
   readonly onShowMore: () => void
 }
 
-/** One source group: a disclosure header that owns the source, and its skill rows. */
-function Group({
-  t, group, title, labelFor, collapsed, busy, selected, expanded, limit, onToggleGroup, onSelectSkill,
-  onToggleDescription, onToggleSkill, onToggleSource, onRemoveFolder, onShowMore,
-}: GroupProps): ReactNode {
-  const { source, skills } = group
-  const listId = `skills-group-${source.id}`
-  const sourceBusy = busy.includes(source.id)
+/**
+ * One board section: a disclosure header over its skill tiles. A source section
+ * also carries the mark, kind, folder, remove control, and the switch that owns
+ * every skill below; a category section carries only its name and count, because
+ * a category is not a folder.
+ */
+function BoardSection({
+  t, section, collapsed, busy, selected, expanded, limit, onToggleSection, onSelectSkill, onToggleDescription,
+  onToggleSkill, onToggleSource, onRemoveFolder, onShowMore,
+}: SectionProps): ReactNode {
+  const { source, tiles } = section
+  const sourceBusy = source !== undefined && busy.includes(source.id)
   return (
-    <section className={css.group} data-source={source.id}>
+    <section className={css.group} data-source={source?.id} data-category={source === undefined ? section.key : undefined}>
       <div className={css.groupHead}>
         <button type="button" className={css.groupToggle} aria-expanded={!collapsed}
-          {...collapsed ? {} : { 'aria-controls': listId }}
-          onClick={onToggleGroup}>
+          {...collapsed ? {} : { 'aria-controls': section.listId }}
+          onClick={onToggleSection}>
           {collapsed
             ? <IconChevronRightOutlineRegular size={14} aria-hidden="true" className={css.disclosure} />
             : <IconChevronDownOutlineRegular size={14} aria-hidden="true" className={css.disclosure} />}
-          <SourceMark spec={sourceMarkSpec(source)} />
-          <span className={css.groupName}>{title}</span>
+          {source === undefined ? null : <SourceMark spec={sourceMarkSpec(source)} />}
+          <span className={css.groupName}>{section.title}</span>
         </button>
-        <span className={css.groupKind}>{t(SOURCE_KINDS[source.kind])}</span>
-        <code className={css.groupPath} title={t('pathTooltip', { path: source.path })}>{source.displayPath}</code>
+        {source === undefined
+          ? null
+          : (
+            <>
+              <span className={css.groupKind}>{t(SOURCE_KINDS[source.kind])}</span>
+              <code className={css.groupPath} title={t('pathTooltip', { path: source.path })}>{source.displayPath}</code>
+            </>
+          )}
         <span className={css.groupEnd}>
-          <span className={css.count}>{source.skills.length}</span>
-          {source.kind === 'folder'
+          <span className={css.count}>{section.count}</span>
+          {source?.kind === 'folder'
             ? (
               <Tooltip label={t('removeFolderHint')} side="bottom" delayMs={500} focusDelayMs={500} portal>
                 <Button variant="ghost" size="sm" className={css.removeButton}
-                  aria-label={t('removeFolder', { name: title })} disabled={sourceBusy}
-                  icon={<IconTrashOutlineRegular size={14} />} onClick={onRemoveFolder} />
+                  aria-label={t('removeFolder', { name: section.title })} disabled={sourceBusy}
+                  icon={<IconTrashOutlineRegular size={14} />} onClick={() => { onRemoveFolder(source) }} />
               </Tooltip>
             )
             : null}
-          <Switch checked={source.enabled} disabled={sourceBusy}
-            label={t('sourceSwitch', { name: title, state: t(source.enabled ? 'switchOn' : 'switchOff') })}
-            onChange={onToggleSource} />
+          {source === undefined
+            ? null
+            : (
+              <Switch checked={source.enabled} disabled={sourceBusy}
+                label={t('sourceSwitch', { name: section.title, state: t(source.enabled ? 'switchOn' : 'switchOff') })}
+                onChange={(enabled) => { onToggleSource(source, enabled) }} />
+            )}
         </span>
       </div>
       <div className={css.groupRule} aria-hidden="true" />
       {collapsed
         ? null
         : (
-          <ul id={listId} className={css.rows}>
-            {skills.slice(0, limit).map((skill) => {
-                const key = skillKey(source.id, skill)
-                return (
-                  <SkillRow
-                    key={key}
-                    t={t}
-                    source={source}
-                    sourceTitle={title}
-                    shadowedTitle={skill.shadowedBy === undefined ? '' : labelFor(skill.shadowedBy)}
-                    skill={skill}
-                    state={skillState(skill, source.enabled)}
-                    selected={key === selected}
-                    busy={sourceBusy || busy.includes(key)}
-                    expanded={expanded.includes(key)}
-                    onSelect={() => { onSelectSkill(key) }}
-                    onToggleDescription={() => { onToggleDescription(key) }}
-                    onToggleEnabled={(name, enabled) => { onToggleSkill(name, enabled) }} />
-                )
-              })}
+          <ul id={section.listId} className={css.rows}>
+            {tiles.slice(0, limit).map(tile => (
+              <SkillRow
+                key={tile.key}
+                t={t}
+                source={tile.source}
+                sourceTitle={tile.sourceTitle}
+                shadowedTitle={tile.shadowedTitle}
+                skill={tile.skill}
+                state={tile.state}
+                selected={tile.key === selected}
+                busy={sourceBusy || busy.includes(tile.key)}
+                expanded={expanded.includes(tile.key)}
+                onSelect={() => { onSelectSkill(tile.key) }}
+                onToggleDescription={() => { onToggleDescription(tile.key) }}
+                onToggleEnabled={(name, enabled) => { onToggleSkill(tile.source, name, enabled) }} />
+            ))}
           </ul>
         )}
-      {collapsed || skills.length <= limit
+      {collapsed || tiles.length <= limit
         ? null
         : (
           <button type="button" className={css.more} onClick={onShowMore}>
-            {t('showMore', { count: String(skills.length - limit) })}
+            {t('showMore', { count: String(tiles.length - limit) })}
           </button>
         )}
     </section>
@@ -577,6 +624,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
   const [expanded, setExpanded] = useState<readonly string[]>([])
   const collapsed = useStore(state => state.collapsed)
   const selected = useStore(state => state.selected)
+  const grouping = useStore(state => state.grouping)
 
   const cwd = useSessions?.(state => Object.values(state.byId)
     .find(summary => (summary.retainedBy.mainView ?? 0) > 0)?.cwd)
@@ -651,8 +699,63 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
   }), [sources, needle, sourceFilter, stateFilter])
 
   // Added folders whose folder holds no skill are not tiles, but the reader must
-  // still be able to drop one, so they are listed in one quiet line.
+  // still be able to drop one, so source mode lists them in one quiet line.
   const emptyFolders = (sources ?? []).filter(source => source.kind === 'folder' && source.skills.length === 0)
+
+  const tileFor = (source: LocalSourceView, skill: LocalSkillView): CatalogTile => ({
+    key: skillKey(source.id, skill),
+    skill,
+    source,
+    sourceTitle: titleFor(source),
+    state: skillState(skill, source.enabled),
+    shadowedTitle: skill.shadowedBy === undefined ? '' : sourceTitleFor(skill.shadowedBy),
+  })
+
+  const sections = useMemo((): readonly CatalogSection[] => {
+    const tiles = (group: CatalogGroup): readonly CatalogTile[] =>
+      group.skills.map(skill => tileFor(group.source, skill))
+    if (grouping === 'sources') {
+      return groups.map(group => ({
+        key: group.source.id,
+        listId: `skills-group-${group.source.id}`,
+        title: titleFor(group.source),
+        count: group.source.skills.length,
+        source: group.source,
+        tiles: tiles(group),
+      }))
+    }
+    // A category is not a folder: the board buckets the filtered tiles by the
+    // category the Host derived, and skills no rule claimed share one last group.
+    const buckets = new Map<string, { title: string; tiles: CatalogTile[] }>()
+    for (const group of groups) {
+      for (const tile of tiles(group)) {
+        const id = tile.skill.category ?? ''
+        const bucket = buckets.get(id)
+        if (bucket === undefined) {
+          buckets.set(id, {
+            title: tile.skill.category === undefined
+              ? t('categoryOther')
+              : categoryTitle(tile.skill.category, tile.skill.categoryTitle, t),
+            tiles: [tile],
+          })
+          continue
+        }
+        bucket.tiles.push(tile)
+      }
+    }
+    const entries = [...buckets.entries()].map(([id, bucket]) => ({ id, ...bucket }))
+    const named = entries.filter(entry => entry.id !== '').sort((left, right) => right.tiles.length - left.tiles.length)
+    const other = entries.filter(entry => entry.id === '')
+    return [...named, ...other].map((entry, index) => ({
+      key: entry.id === '' ? CATEGORY_OTHER_KEY : `category:${entry.id}`,
+      listId: `skills-category-${String(index)}`,
+      title: entry.title,
+      count: entry.tiles.length,
+      tiles: entry.tiles,
+    }))
+    // `groups` already follows every search and filter input; titleFor and t are
+    // read here so a locale or source-title change renames the sections.
+  }, [grouping, groups, sources, t])
 
   const totalSkills = (sources ?? []).reduce((sum, source) => sum + source.skills.length, 0)
   const emptyInventory = sources !== null && totalSkills === 0 && !filtering
@@ -670,6 +773,10 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
     }
     return null
   }, [sources, selected])
+  const selectedCategory = selectedSkill?.skill.category
+  const selectedCategoryTitle = selectedCategory === undefined
+    ? undefined
+    : categoryTitle(selectedCategory, selectedSkill?.skill.categoryTitle, t)
 
   return (
     <section className={css.tab}>
@@ -680,8 +787,13 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
             <Input type="search" className={css.search as string} icon={<IconSearchOutlineRegular size={14} />} value={query}
               placeholder={t('searchPlaceholder')} aria-label={t('search')}
               onChange={(event) => { setQuery(event.target.value) }} />
-            <AddSkillsMenu t={t} onAddFolder={() => { setNotice(null); setFolderDialog(true) }}
-              onBrowseCatalog={() => { setCatalogDialog(true) }} createWithAi={createWithAi} />
+            <span className={css.toolbarEnd}>
+              <SegmentedControl id="skills-grouping" label={t('groupingLabel')} value={grouping}
+                options={GROUPINGS.map(option => ({ value: option.value, label: t(option.key) }))}
+                onChange={(next) => { actions.setGrouping(next) }} />
+              <AddSkillsMenu t={t} onAddFolder={() => { setNotice(null); setFolderDialog(true) }}
+                onBrowseCatalog={() => { setCatalogDialog(true) }} createWithAi={createWithAi} />
+            </span>
           </div>
         )}
       {sources === null || emptyInventory
@@ -749,7 +861,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
                   </div>
                 )
                 : null}
-              {emptyFolders.length === 0
+              {emptyFolders.length === 0 || grouping !== 'sources'
                 ? null
                 : (
                   <div className={css.hiddenFolders}>
@@ -771,43 +883,37 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
                     ))}
                   </div>
                 )}
-              <div className={css.split} data-detail={selectedSkill !== null}>
+              <div className={css.split} role="tabpanel" id={`skills-grouping-${grouping}-panel`}
+                aria-labelledby={`skills-grouping-${grouping}`} data-detail={selectedSkill !== null}>
                 <div className={css.list}>
-                  {groups.map(group => (                    <Group
-                      key={group.source.id}
+                  {sections.map(section => (
+                    <BoardSection
+                      key={section.key}
                       t={t}
-                      group={group}
-                      title={titleFor(group.source)}
-                      labelFor={sourceTitleFor}
-                      collapsed={collapsed.includes(group.source.id)}
+                      section={section}
+                      collapsed={collapsed.includes(section.key)}
                       busy={busy}
                       selected={selected}
                       expanded={expanded}
-                      limit={limits[group.source.id] ?? PAGE_SIZE}
-                      onToggleGroup={() => { actions.toggleGroup(group.source.id) }}
+                      limit={limits[section.key] ?? PAGE_SIZE}
+                      onToggleSection={() => { actions.toggleGroup(section.key) }}
                       onSelectSkill={(key) => { actions.select(key === selected ? null : key) }}
                       onToggleDescription={(key) => {
                         setExpanded(previous => previous.includes(key)
                           ? previous.filter(entry => entry !== key)
                           : [...previous, key])
                       }}
-                      onToggleSkill={(name, next) => {
-                        void withBusy(skillIdentity(group.source.id, name), name,
-                          () => setSkill(group.source.id, name, next))
+                      onToggleSkill={(source, name, next) => {
+                        void withBusy(skillIdentity(source.id, name), name, () => setSkill(source.id, name, next))
                       }}
-                      onToggleSource={(next) => {
-                        void withBusy(group.source.id, titleFor(group.source),
-                          () => setSource(group.source.id, next))
+                      onToggleSource={(source, next) => {
+                        void withBusy(source.id, section.title, () => setSource(source.id, next))
                       }}
-                      onRemoveFolder={() => {
-                        void withBusy(group.source.id, titleFor(group.source),
-                          () => removeFolder(group.source.path))
+                      onRemoveFolder={(source) => {
+                        void withBusy(source.id, section.title, () => removeFolder(source.path))
                       }}
                       onShowMore={() => {
-                        setLimits(previous => ({
-                          ...previous,
-                          [group.source.id]: (previous[group.source.id] ?? PAGE_SIZE) + PAGE_SIZE,
-                        }))
+                        setLimits(previous => ({ ...previous, [section.key]: (previous[section.key] ?? PAGE_SIZE) + PAGE_SIZE }))
                       }} />
                   ))}
                 </div>
@@ -815,7 +921,8 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
                   ? null
                   : (
                     <SkillDetail t={t} sourceTitle={titleFor(selectedSkill.source)} skill={selectedSkill.skill}
-                      state={selectedSkill.state} />
+                      state={selectedSkill.state}
+                      {...selectedCategoryTitle === undefined ? {} : { categoryTitle: selectedCategoryTitle }} />
                   )}
               </div>
             </>

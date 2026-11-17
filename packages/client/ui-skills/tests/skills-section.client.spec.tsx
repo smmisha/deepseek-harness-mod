@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 /**
- * Skills tab: catalog rows, the description block, groups and filters, the
- * detail panel, the add menu, and every load and write state.
+ * Skills tab: catalog tiles, the description block, both grouping modes with
+ * their groups and filters, the detail panel, the add menu, and every load and
+ * write state.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { SkillsSection, type AddFolderOutcome, type SkillsSectionProps } from '../src/client/SkillsSection.tsx'
-import { createSkillsStore, type SkillsStoreHandle } from '../src/client/skills-store.ts'
+import { createSkillsStore, type SkillsGrouping, type SkillsStoreHandle } from '../src/client/skills-store.ts'
 import { en, type SkillsLocaleKey } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -137,6 +138,55 @@ const SOURCES: readonly LocalSourceView[] = [
   },
 ]
 
+/**
+ * Inventory for the category board: one harness source and one added folder,
+ * with built-in category ids, a rule id this package does not know, and skills
+ * no category claims. `beta-off` is a skill switched off inside a switched-on
+ * source.
+ */
+const CATEGORY_SOURCES: readonly LocalSourceView[] = [
+  {
+    id: 'alpha', kind: 'harness', title: 'Alpha', path: '~\\alpha', displayPath: '~\\alpha', exists: true, enabled: true,
+    skills: [
+      {
+        name: 'alpha-video-one', path: '~\\alpha\\alpha-video-one\\SKILL.md', description: 'First video skill',
+        status: 'available', category: 'video', categoryTitle: 'Video and animation',
+      },
+      {
+        name: 'alpha-video-two', path: '~\\alpha\\alpha-video-two\\SKILL.md', description: 'Second video skill',
+        status: 'available', category: 'video', categoryTitle: 'Video and animation',
+      },
+      {
+        name: 'alpha-design', path: '~\\alpha\\alpha-design\\SKILL.md', description: 'Design work',
+        status: 'available', category: 'design', categoryTitle: 'Design and Figma',
+      },
+    ],
+  },
+  {
+    id: 'folder:D:\\beta', kind: 'folder', title: 'beta', path: 'D:\\beta', displayPath: 'D:\\beta',
+    exists: true, enabled: true,
+    skills: [
+      {
+        name: 'beta-video', path: 'D:\\beta\\beta-video\\SKILL.md', description: 'Third video skill',
+        status: 'available', category: 'video', categoryTitle: 'Video and animation',
+      },
+      {
+        name: 'beta-plugin', path: 'D:\\beta\\beta-plugin\\SKILL.md', description: 'Plugin skill',
+        status: 'available', category: 'plugin-ckm', categoryTitle: 'ckm',
+      },
+      {
+        name: 'beta-raw', path: 'D:\\beta\\beta-raw\\SKILL.md', description: 'Rule this tab does not know',
+        status: 'available', category: 'rawword',
+      },
+      { name: 'beta-off', path: 'D:\\beta\\beta-off\\SKILL.md', description: 'Switched off', status: 'disabled' },
+    ],
+  },
+  {
+    id: 'folder:D:\\empty', kind: 'folder', title: 'empty', path: 'D:\\empty', displayPath: 'D:\\empty',
+    exists: true, enabled: true, skills: [],
+  },
+]
+
 /** Stub face over the fixture inventory. */
 type FaceStub = {
   load?: (cwd?: string) => Promise<readonly LocalSourceView[]>
@@ -149,12 +199,13 @@ type FaceStub = {
 }
 
 /** Props of one tab instance over its own store. */
-function catalogProps(overrides: FaceStub = {}, sources: readonly LocalSourceView[] = SOURCES): {
+function catalogProps(overrides: FaceStub = {}, sources: readonly LocalSourceView[] = SOURCES, grouping?: SkillsGrouping): {
   readonly store: SkillsStoreHandle
   readonly props: () => SkillsSectionProps
 } {
   const store = createSkillsStore()
   const instance = store.create()
+  if (grouping !== undefined) instance.actions.setGrouping(grouping)
   const props = (): SkillsSectionProps => ({
     t: translator(),
     useStore: bindSnapshotSelector(instance),
@@ -169,8 +220,22 @@ function catalogProps(overrides: FaceStub = {}, sources: readonly LocalSourceVie
   return { store, props }
 }
 
-/** Mount the tab over one store instance, so remounts keep its state. */
-function mount(overrides: FaceStub = {}, sources: readonly LocalSourceView[] = SOURCES): {
+/**
+ * Mount the tab over one store instance, so remounts keep its state. Source mode
+ * is the pre-category layout most specs describe; a spec that covers the
+ * category board passes `'categories'` or mounts through {@link mountDefault}.
+ */
+function mount(overrides: FaceStub = {}, sources: readonly LocalSourceView[] = SOURCES, grouping: SkillsGrouping = 'sources'): {
+  readonly store: SkillsStoreHandle
+  readonly props: () => SkillsSectionProps
+  readonly view: ReturnType<typeof render>
+} {
+  const mounted = catalogProps(overrides, sources, grouping)
+  return { ...mounted, view: render(<SkillsSection {...mounted.props()} />) }
+}
+
+/** Mount without presetting the store, so the tab's own default grouping applies. */
+function mountDefault(overrides: FaceStub = {}, sources: readonly LocalSourceView[] = CATEGORY_SOURCES): {
   readonly store: SkillsStoreHandle
   readonly props: () => SkillsSectionProps
   readonly view: ReturnType<typeof render>
@@ -393,6 +458,115 @@ describe('SkillsSection groups and filters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(await screen.findByText('app-skill')).toBeTruthy()
     expect(screen.getByRole('searchbox', { name: 'Search skills' })).toHaveProperty('value', '')
+  })
+})
+
+describe('SkillsSection category grouping', () => {
+  it('is the default view: largest category first, Other last, and no source controls', async () => {
+    const { view } = mountDefault()
+    await screen.findByText('alpha-video-one')
+
+    // The grouping switch names both modes and marks the one on screen.
+    expect(screen.getByRole('tab', { name: 'Categories' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Sources' }).getAttribute('aria-selected')).toBe('false')
+
+    // A category is not a folder: the unmatched tile sits in Other, the last group.
+    const titles = [...view.container.querySelectorAll('section[data-category] > div > button[aria-expanded]')]
+      .map(node => node.textContent)
+    expect(titles).toEqual(['Video and animation', 'Design and Figma', 'ckm', 'rawword', 'Other'])
+    const videoSection = screen.getByRole('button', { name: 'Video and animation' }).closest('section')
+    if (videoSection === null) throw new Error('expected the video section')
+    // The header carries the count; each tile still names the source it came from.
+    expect(within(videoSection).getByText('3')).toBeTruthy()
+    expect(within(videoSection).getAllByText('Alpha')).toHaveLength(2)
+    expect(within(videoSection).getAllByText('beta')).toHaveLength(1)
+    // No source switch and no folder control appear in this mode.
+    expect(screen.queryByRole('switch', { name: /^Source /u })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Remove folder /u })).toBeNull()
+    // A folder that holds no skill stays reachable in source mode only.
+    expect(screen.queryByText('Folders without skills')).toBeNull()
+    expect(screen.getByText('7 shown · 6 on')).toBeTruthy()
+  })
+
+  it('remembers the chosen grouping across remounts', async () => {
+    const { props, view } = mountDefault()
+    await screen.findByText('alpha-video-one')
+    fireEvent.click(screen.getByRole('tab', { name: 'Sources' }))
+    expect(await screen.findByRole('switch', { name: 'Source Alpha: on' })).toBeTruthy()
+
+    view.unmount()
+    render(<SkillsSection {...props()} />)
+    await screen.findByText('alpha-video-one')
+    // Source mode came back, with the switch and folder controls it owns.
+    expect(screen.getByRole('switch', { name: 'Source Alpha: on' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove folder beta' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Categories' }))
+    await waitFor(() => { expect(screen.queryByRole('switch', { name: /^Source /u })).toBeNull() })
+    expect(screen.getByRole('tab', { name: 'Categories' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('keeps the source and state filters and the search working', async () => {
+    mount({}, CATEGORY_SOURCES, 'categories')
+    await screen.findByText('alpha-video-one')
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by source' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'beta' }))
+    await waitFor(() => { expect(screen.queryByText('alpha-video-one')).toBeNull() })
+    expect(screen.getByText('beta-video')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by state' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Off' }))
+    expect(await screen.findByText('beta-off')).toBeTruthy()
+    expect(screen.queryByText('beta-video')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by state' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Any state' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by source' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'All sources' }))
+    expect(await screen.findByText('alpha-video-one')).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search skills' }), { target: { value: 'design' } })
+    expect(await screen.findByText('alpha-design')).toBeTruthy()
+    expect(screen.queryByText('alpha-video-one')).toBeNull()
+  })
+
+  it('shows the category beside the source in the detail panel', async () => {
+    mount({}, CATEGORY_SOURCES, 'categories')
+    await screen.findByText('alpha-video-one')
+    fireEvent.click(screen.getByRole('button', { name: 'alpha-video-one' }))
+    const panel = await screen.findByRole('complementary', { name: 'alpha-video-one' })
+    expect(within(panel).getByText('Alpha')).toBeTruthy()
+    expect(within(panel).getByText('Video and animation')).toBeTruthy()
+  })
+
+  it('collapses a category section and remembers it across remounts', async () => {
+    const { props, view } = mount({}, CATEGORY_SOURCES, 'categories')
+    await screen.findByText('alpha-video-one')
+    fireEvent.click(screen.getByRole('button', { name: 'Video and animation' }))
+    await waitFor(() => { expect(screen.queryByText('alpha-video-one')).toBeNull() })
+
+    view.unmount()
+    render(<SkillsSection {...props()} />)
+    await screen.findByRole('button', { name: 'Video and animation' })
+    expect(screen.queryByText('alpha-video-one')).toBeNull()
+  })
+
+  it('pages a category the same way a source pages', async () => {
+    const many: LocalSourceView = {
+      id: 'alpha', kind: 'harness', title: 'Alpha', path: '~\\alpha', displayPath: '~\\alpha', exists: true, enabled: true,
+      skills: Array.from({ length: 51 }, (_value, index) => ({
+        name: `skill-${String(index)}`,
+        path: `~\\alpha\\skill-${String(index)}\\SKILL.md`,
+        status: 'available' as const,
+        category: 'video',
+        categoryTitle: 'Video and animation',
+      })),
+    }
+    mount({}, [many], 'categories')
+    await screen.findByText('skill-0')
+    expect(screen.queryByText('skill-50')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show more (1 left)' }))
+    expect(screen.getByText('skill-50')).toBeTruthy()
   })
 })
 
