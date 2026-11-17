@@ -55,6 +55,7 @@ function mount(initiallyDone = false, initiallyLoading = false) {
   const setVisible = vi.fn()
   const element = () => <DesktopOnboardingEntry {...globals}
     setVisible={setVisible} useOnboarding={select => select(state)} useAccount={select => select(account)}
+    useLocale={select => select({ active: 'zh', locales: [], revision: 0 })}
     update={async () => true} complete={async () => true} retry={async () => true}
     t={key => key in zh ? zh[key as AccountKey] : key} />
   const view = render(element())
@@ -87,6 +88,8 @@ it('retains the last page while successful completion reveals the workspace', ()
   expect(appRoot.style.opacity).toBe('0')
   view.finish()
   expect(screen.getByRole('heading', { name: `${zh.onboardingWelcome} ${zh.onboardingBrand}` })).toBeTruthy()
+  // The page language follows the active UI language, never a duplicated dictionary value.
+  expect(document.querySelector('[data-desktop-onboarding]')?.getAttribute('lang')).toBe('zh')
   expect(document.querySelector('[data-exiting]')).not.toBeNull()
   expect(appRoot.style.opacity).toBe('')
   expect(appRoot.inert).toBe(true)

@@ -2,7 +2,6 @@
 export const ukSettingsAccount = {
   'modelSignInRequired': 'Модель недоступна. Увійдіть і повторіть спробу.',
   'sessionExpired': 'Ви вийшли з облікового запису. Увійдіть знову.',
-  'onboardingArtworkLocale': 'uk',
   'onboardingWelcome': 'Вітаємо в',
   'onboardingBrand': 'DeepSeek Harness',
   'onboardingIntroduction': 'DeepSeek Harness працює в локальній теці й використовує інструменти, щоб читати та записувати файли на вашому компʼютері. Він допомагає досліджувати й упорядковувати інформацію, створювати документи й таблиці, писати код, усувати проблеми та багато іншого.',

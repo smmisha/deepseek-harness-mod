@@ -1,6 +1,5 @@
 /** Chinese first-run copy from the onboarding requirements. */
 export const onboardingZh = {
-  onboardingArtworkLocale: 'zh',
   onboardingWelcome: '欢迎使用',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness 会以本地文件夹作为工作区，通过调用各种工具，读写本机文件，完成搜索整理资料、制作文档表格、编写代码、排查问题等各种任务。',
@@ -43,7 +42,6 @@ export const onboardingZh = {
 
 /** English first-run copy with the same keys as the Chinese dictionary. */
 export const onboardingEn: Record<keyof typeof onboardingZh, string> = {
-  onboardingArtworkLocale: 'en',
   onboardingWelcome: 'Welcome to',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness works in a local folder and uses tools to read and write files on your computer. It can help you research and organize information, create documents and spreadsheets, write code, troubleshoot issues, and more.',
@@ -86,7 +84,6 @@ export const onboardingEn: Record<keyof typeof onboardingZh, string> = {
 
 /** Japanese copy, checked against the English keys. */
 export const onboardingJa = {
-  'onboardingArtworkLocale': 'en',
   'onboardingWelcome': 'ようこそ',
   'onboardingBrand': 'DeepSeek Harness',
   'onboardingIntroduction': 'DeepSeek Harness はローカルフォルダで動作し、ツールを使ってお使いのコンピューター上のファイルを読み書きします。情報の調査や整理、ドキュメントやスプレッドシートの作成、コードの作成、問題のトラブルシューティングなどに役立ちます。',
@@ -129,7 +126,6 @@ export const onboardingJa = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const onboardingEs = {
-  onboardingArtworkLocale: 'en',
   onboardingWelcome: 'Bienvenido a',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness funciona en una carpeta local y utiliza herramientas para leer y escribir archivos en su computadora. Puede ayudarle a investigar y organizar información, crear documentos y hojas de cálculo, escribir código, solucionar problemas y más.',
@@ -172,7 +168,6 @@ export const onboardingEs = {
 
 /** French dictionary, checked against the English keys. */
 export const onboardingFr = {
-  onboardingArtworkLocale: 'en',
   onboardingWelcome: 'Bienvenue à',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness fonctionne dans un dossier local et utilise des outils pour lire et écrire des fichiers sur votre ordinateur. Il peut vous aider à rechercher et à organiser des informations, à créer des documents et des feuilles de calcul, à écrire du code, à résoudre des problèmes, etc.',
@@ -215,7 +210,6 @@ export const onboardingFr = {
 
 /** German dictionary, checked against the English keys. */
 export const onboardingDe = {
-  onboardingArtworkLocale: 'en',
   onboardingWelcome: 'Willkommen bei',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness arbeitet in einem lokalen Ordner und verwendet Tools zum Lesen und Schreiben von Dateien auf Ihrem Computer. Es kann Ihnen dabei helfen, Informationen zu recherchieren und zu organisieren, Dokumente und Tabellenkalkulationen zu erstellen, Code zu schreiben, Probleme zu beheben und vieles mehr.',
@@ -258,7 +252,6 @@ export const onboardingDe = {
 
 /** Russian dictionary, checked against the English keys. */
 export const onboardingRu = {
-  onboardingArtworkLocale: 'en',
   onboardingWelcome: 'Добро пожаловать в',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness работает в локальной папке и использует инструменты для чтения и записи файлов на вашем компьютере. Он может помочь вам исследовать и систематизировать информацию, создавать документы и таблицы, писать код, устранять неполадки и многое другое.',
@@ -288,7 +281,7 @@ export const onboardingRu = {
   onboardingBack: 'Назад',
   onboardingSkip: 'Пропустить',
   onboardingSkipTitle: 'Пропустить настройку?',
-  onboardingSkipDescription: 'Вы можете изменить способ отображения прогресса, производительности и использования или включить инструменты программирования в любое время в «Настройки» → «Основные».',
+  onboardingSkipDescription: 'Вы можете изменить способ отображения прогресса, производительности и использования или включить инструменты программирования в любое время в «Настройки» → «Общие».',
   onboardingKeepSetting: 'Продолжить настройку',
   onboardingNoCreditTitle: 'Пропустить добавление кредитов?',
   onboardingNoCreditDescription: 'DeepSeek Harness не может начинать новые задачи без кредитов. Вы можете добавить их позже в «Настройки» → «Аккаунт».',
@@ -301,7 +294,6 @@ export const onboardingRu = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const onboardingPt = {
-  onboardingArtworkLocale: 'en',
   onboardingWelcome: 'Bem-vindo ao',
   onboardingBrand: 'DeepSeek Harness',
   onboardingIntroduction: 'DeepSeek Harness funciona em uma pasta local e usa ferramentas para ler e gravar arquivos no seu computador. Ele pode ajudá-lo a pesquisar e organizar informações, criar documentos e planilhas, escrever códigos, solucionar problemas e muito mais.',

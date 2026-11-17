@@ -8,7 +8,7 @@ import { en, zh } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-function mount(step: DesktopOnboardingState['progress']['step'] = 'welcome', balance: 'zero' | 'positive' | 'bonus' | 'failed' | 'loading' = 'positive', status: DesktopOnboardingState['status'] = 'ready', copy: typeof zh = zh, creditFunded = false) {
+function mount(step: DesktopOnboardingState['progress']['step'] = 'welcome', balance: 'zero' | 'positive' | 'bonus' | 'failed' | 'loading' = 'positive', status: DesktopOnboardingState['status'] = 'ready', copy: typeof zh = zh, creditFunded = false, language = copy === zh ? 'zh' : 'en') {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const track = vi.fn()
   const complete = vi.fn(async () => true)
@@ -28,7 +28,7 @@ function mount(step: DesktopOnboardingState['progress']['step'] = 'welcome', bal
       progress: { version: 1, step, purpose: null, process: null, completion: null, usage: 'compact', developerTools: false },
     })
     changeStatus = (value) => { setState(current => ({ ...current, status: value })) }
-    return <DesktopOnboarding track={track} locale={copy === zh ? 'zh' : 'en'} state={state} t={key => copy[key]} complete={complete} retry={retry}
+    return <DesktopOnboarding track={track} language={language} state={state} t={key => copy[key]} complete={complete} retry={retry}
       update={async (change) => {
         setState(current => ({ ...current, status: 'saving' }))
         const saved = await update(change)
@@ -117,7 +117,7 @@ it('supports radio arrow keys and requires a process choice before finishing', a
   expect(operations.complete).toHaveBeenCalledWith('completed')
 })
 
-it.each(['purpose', 'process'] as const)('keeps the %s action mounted without native disabled dimming while a choice saves', async (step) => {
+it.each(['purpose', 'process'] as const)('disables the %s choices and action natively while a choice saves', async (step) => {
   const operations = mount(step)
   const choices = screen.getAllByRole(step === 'purpose' ? 'checkbox' : 'radio')
   await act(async () => { fireEvent.click(choices[0]!) })
@@ -125,15 +125,16 @@ it.each(['purpose', 'process'] as const)('keeps the %s action mounted without na
   let finish!: (saved: boolean) => void
   operations.update.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve }))
   fireEvent.click(choices[1]!)
-  expect(button.getAttribute('aria-disabled')).toBe('true')
-  expect(button.hasAttribute('disabled')).toBe(false)
+  expect(button.hasAttribute('disabled')).toBe(true)
+  expect(button.hasAttribute('aria-disabled')).toBe(false)
+  for (const choice of choices) expect(choice.hasAttribute('disabled')).toBe(true)
   const writes = operations.update.mock.calls.length
   fireEvent.click(button)
   expect(operations.update).toHaveBeenCalledTimes(writes)
   expect(operations.complete).not.toHaveBeenCalled()
   await act(async () => { finish(true) })
-  expect(screen.getByRole('button', { name: button.textContent })).toBe(button)
-  expect(button.getAttribute('aria-disabled')).toBe('false')
+  expect(button.hasAttribute('disabled')).toBe(false)
+  for (const choice of choices) expect(choice.hasAttribute('disabled')).toBe(false)
 })
 
 it('requires explicit skip confirmation and Escape only closes that dialog', async () => {
@@ -160,6 +161,21 @@ it.each(['welcome', 'credit', 'purpose', 'process'] as const)('records English %
   document.querySelectorAll('[data-desktop-onboarding] [aria-hidden="true"]').forEach((element) => { element.remove() })
   await expect(`${document.querySelector('[data-desktop-onboarding]')?.textContent}\n`)
     .toMatchFileSnapshot(`./expected/onboarding-${step}-en.txt`)
+})
+
+it('selects Chinese artwork only for a Chinese UI and falls back to the English set', () => {
+  const artwork = (language: string): string[] => {
+    mount('welcome', 'positive', 'ready', en, false, language)
+    const sources = [...document.querySelectorAll('[data-desktop-onboarding] img')].map(image => image.getAttribute('src') ?? '')
+    cleanup()
+    return sources
+  }
+  const zhArt = artwork('zh')
+  const deArt = artwork('de')
+  const enArt = artwork('en')
+  expect(zhArt).not.toHaveLength(0)
+  expect(zhArt).not.toEqual(deArt)
+  expect(deArt).toEqual(enArt)
 })
 
 it.each([zh, en])('offers Continue and recharge for a balance confirmed before entry', async (copy) => {
