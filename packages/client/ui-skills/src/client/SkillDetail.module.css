@@ -179,3 +179,13 @@
   font-size: 12px;
   line-height: 18px;
 }
+
+/* Under the single-column breakpoint the panel leads the catalog, so opening a
+   row is visible without scrolling past the rest of the list. */
+@media (max-width: 960px) {
+  .detail {
+    order: -1;
+    border-inline-start: 0;
+    border-block-end: 0.5px solid var(--dsw-alias-border-l2);
+  }
+}

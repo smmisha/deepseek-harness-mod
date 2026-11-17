@@ -520,7 +520,7 @@
 .skeletonBlock {
   display: block;
   border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-3);
+  background: var(--dsw-alias-bg-skeleton);
 }
 
 .skeletonMark {
