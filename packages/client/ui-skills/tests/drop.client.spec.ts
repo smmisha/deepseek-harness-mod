@@ -127,6 +127,16 @@ describe('readDrop', () => {
     await expect(readDrop(transfer([broken]))).rejects.toThrow('denied')
   })
 
+  it('wraps a listing failure the browser reported as a bare value', async () => {
+    const broken: DropEntry = {
+      isFile: false,
+      isDirectory: true,
+      name: 'pdf',
+      createReader: () => ({ readEntries: (_success, failure) => { failure('offline') } }),
+    }
+    await expect(readDrop(transfer([broken]))).rejects.toThrow('offline')
+  })
+
   it('refuses a directory without a reader', async () => {
     const outcome = await readDrop(transfer([{ isFile: false, isDirectory: true, name: 'pdf' }]))
     expect(outcome).toEqual({ kind: 'problem', problem: 'empty' })
