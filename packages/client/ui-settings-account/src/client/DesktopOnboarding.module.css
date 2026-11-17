@@ -120,7 +120,7 @@
 .creditIllustration { width: 100%; height: auto; aspect-ratio: 594 / 509; object-fit: contain; }
 .credit .copy { max-width: 400px; }
 .creditActions { display: flex; gap: 24px; margin-top: 60px; }
-.creditActions > button { flex: 1; max-width: 160px; }
+.creditActions > button { flex: 1 1 0; }
 .creditActions .laterAction { background: var(--dsw-alias-onboarding-secondary-fill); }
 @media (hover: hover) {
   .creditActions .laterAction:hover:not(:disabled) {
@@ -320,6 +320,7 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
+  white-space: nowrap;
 }
 
 .page .action:focus-visible {

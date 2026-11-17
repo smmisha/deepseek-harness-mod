@@ -28,6 +28,11 @@ it('lets translated confirmation labels wrap the row instead of the label', () =
   expect(rule(/\.dialogButton\s*\{([^{}]*)\}/)).toContain('white-space: nowrap;')
 })
 
+it('lets the credit actions use the copy column instead of a 160px cap', () => {
+  expect(rule(/\.creditActions > button\s*\{([^{}]*)\}/)).not.toContain('max-width')
+  expect(rule(/\.page \.action\s*\{([^{}]*)\}/)).toContain('white-space: nowrap;')
+})
+
 it('visibly and natively disables busy onboarding choices', () => {
   expect(rule(/\.card:disabled, \.card:has\(\.cardCheckbox input:disabled\)\s*\{([^{}]*)\}/))
     .toContain('opacity: 0.4;')
