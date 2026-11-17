@@ -82,6 +82,19 @@ A switched-off source or skill never reaches the model catalog or `/skill`: `lis
 
 Folders the reader adds from the Skills tab are `folder:<dir>` sources that rank `350`, between configured custom roots and the user roots, and start on. The `skillSources` namespace adds one through `addFolder(dir)`, which expands a leading `~`, answers `relative` for a path that is still not absolute and `missing` for a folder the Host cannot find, and otherwise returns `added` or `exists`; `removeFolder(dir)` drops a folder from the list and leaves its files. A listed folder that disappeared is still described, with `exists: false`, so the tab can offer its removal.
 
+### Skill rows for the Skills tab
+
+`describeSources()` collects what the Skills tab renders for every skill, beyond name, path, and status:
+
+| Field | Meaning |
+|---|---|
+| `description` | The parsed description with every whitespace run collapsed to one space, so a YAML block scalar renders as one paragraph. Catalog entries keep the author's original whitespace. |
+| `language` | `metadata.language` when it is a language tag; the tab sets `lang` from it and `dir="auto"` on author text always. |
+| `files` | Up to 100 files, three folder levels deep: the path relative to the skill folder, its byte size, and whether it is a script (a `scripts` or `bin` folder, or an interpreter or executable extension). Listing reads metadata only; nothing is opened or run. |
+| `provenance` | `metadata.repository` and, when present, `metadata.commit` and an ISO-8601 `metadata.installedAt`. Absent for a skill no installer recorded. |
+
+An `application` source row also carries `applicationId`, the configured application id (`claude-code`, `codex`, …), so the tab maps a source mark and a translated name; harness and added-folder rows carry none.
+
 ### Change detection
 
 Existing roots are watched, so adding, renaming, or deleting a skill (or editing its frontmatter) triggers a catalog refresh for the next model step; edits below `references`, `scripts`, `assets`, and other bundle resources do not. The first-party `write` and `edit` tools invalidate the provider directly when their target could affect a watched skill, so the model observes its own filesystem mutation without waiting for the host watcher. External IDE, Git, and shell changes are picked up by the host watcher, and a root that does not exist yet is probed until it appears.
@@ -156,6 +169,8 @@ These limits define when the provider is a poor fit or needs special operational
 - **I/O failures omit the whole root** — one unreadable skill also hides its readable siblings for that observation. Other roots remain available, so a lower-priority same-name skill can supply the description and loaded body. Discovery retries on each lookup and restores normal priority when the root recovers.
 - **Missing-root observation polls one path segment** — roots absent at startup use `fs.watchFile` at `watchPollIntervalMs` until Chokidar can attach, trading bounded detection latency for reliable creation detection across IDE, Git, and shell workflows.
 - **No body revision protocol** — a loaded body is ordinary retained tool history; later file edits affect later calls but neither rewrite old results nor announce that the body changed.
+- **Provenance is installer-written** — a row reports `repository`, `commit`, and `installedAt` only when an installer wrote them into the skill's frontmatter `metadata`; this package installs nothing, so a skill copied by hand carries no provenance.
+- **The file list is a bounded snapshot** — a bundle deeper than three folders or larger than 100 files is truncated, and the row does not say so.
 
 <a id="dev-note"></a>
 ### Dev Note

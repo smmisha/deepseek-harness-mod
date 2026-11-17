@@ -17,9 +17,13 @@ import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type { SkillVisibility } from '@deepseek-ai/dsh-skill-sources'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import type { AddSkillFolderResult, LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
+import type {
+  AddSkillFolderResult, LocalSkillFileView, LocalSkillProvenance, LocalSkillView, LocalSourceOptions, LocalSourceView,
+} from './types.ts'
 import { folderPathProblem } from './folder-path.ts'
-export type { AddSkillFolderResult, LocalSkillView, LocalSourceOptions, LocalSourceView } from './types.ts'
+export type {
+  AddSkillFolderResult, LocalSkillFileView, LocalSkillProvenance, LocalSkillView, LocalSourceOptions, LocalSourceView,
+} from './types.ts'
 import chokidar from 'chokidar'
 import z from '@deepseek-ai/schemastery'
 import { parse as parseYaml } from 'yaml'
@@ -377,12 +381,27 @@ function toDisplayPath(path: string, cwd: string | undefined): string {
   return path.split(/[\\/]/u).join(sep)
 }
 
+/** Where the Skills tab lists a skill's files from. */
+type SkillListing = { readonly directory: string } | { readonly file: string }
+
+/** A discovered filesystem skill plus the folder its files are listed from. */
+interface LocalCandidate extends SkillCandidate {
+  /** Bundle folder, or the single flat file that is the whole skill. */
+  readonly listing: SkillListing
+}
+
 /** One discovered skill row before switches and duplicate winners are applied. */
 interface DiscoveredCandidate {
   readonly name: string
   readonly path: string
   readonly displayPath: string
   readonly description: string
+  /** Author-declared language of `description`. */
+  readonly language?: string
+  /** Install record the installer wrote into the skill's frontmatter metadata. */
+  readonly provenance?: LocalSkillProvenance
+  /** Files in the skill's folder; absent when the folder could not be listed. */
+  readonly files?: readonly LocalSkillFileView[]
 }
 
 /** One frontmatter failure reported by discovery. */
@@ -413,6 +432,196 @@ interface DescribeCache {
 
 /** How long describe reuses discovery before a folder change can be observed. */
 const DESCRIBE_CACHE_TTL_MS = 2000
+
+/** Most files the detail panel lists for one skill; a bigger bundle is truncated at this count. */
+const MAX_SKILL_FILES = 100
+
+/** Directory levels listed inside one skill bundle. */
+const SKILL_FILE_DEPTH = 3
+
+/** Extensions whose files the agent may run instead of reading them as reference material. */
+const SCRIPT_EXTENSIONS = new Set([
+  'sh', 'bash', 'zsh', 'fish', 'ps1', 'psm1', 'bat', 'cmd', 'py', 'rb', 'pl', 'php', 'js', 'mjs', 'cjs', 'ts', 'lua', 'exe',
+  'com', 'jar',
+])
+
+/** A language tag a skill may declare, so the Skills tab can label author text it renders. */
+const LANGUAGE_TAG = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u
+
+/** An ISO-8601 date or instant an installer may record. */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/u
+
+/**
+ * Collapse every whitespace run in a description, so a YAML block scalar becomes
+ * the one paragraph the Skills tab clamps. The model-facing description keeps the
+ * author's original whitespace.
+ * @param value - parsed description from the skill's frontmatter.
+ * @returns the description on one line.
+ */
+function normalizeDescription(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim()
+}
+
+/**
+ * Read one non-empty string from a skill's free-form frontmatter metadata.
+ * @param metadata - parsed `metadata` object, when the skill declares one.
+ * @param key - metadata field to read.
+ * @returns the trimmed value, or undefined when absent or not a string.
+ */
+function metadataValue(metadata: Readonly<Record<string, unknown>> | undefined, key: string): string | undefined {
+  const value = metadata?.[key]
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+/**
+ * Language a skill declares for its description, as `metadata.language`.
+ * @param metadata - parsed `metadata` object, when the skill declares one.
+ * @returns the tag, or undefined when absent or not a language tag.
+ */
+function languageOf(metadata: Readonly<Record<string, unknown>> | undefined): string | undefined {
+  const value = metadataValue(metadata, 'language')
+  return value !== undefined && LANGUAGE_TAG.test(value) ? value : undefined
+}
+
+/**
+ * Install record an installer wrote into the skill's frontmatter metadata:
+ * `repository`, and optionally `commit` and `installedAt`. Installation is not
+ * implemented here, so a skill installed any other way carries none.
+ * @param metadata - parsed `metadata` object, when the skill declares one.
+ * @returns the provenance, or undefined for a skill with no record.
+ */
+function provenanceOf(metadata: Readonly<Record<string, unknown>> | undefined): LocalSkillProvenance | undefined {
+  const url = metadataValue(metadata, 'repository')
+  if (url === undefined) return undefined
+  const commit = metadataValue(metadata, 'commit')
+  const installedAt = metadataValue(metadata, 'installedAt')
+  return {
+    url,
+    ...(commit === undefined ? {} : { commit }),
+    ...(installedAt === undefined || !ISO_INSTANT.test(installedAt) ? {} : { installedAt }),
+  }
+}
+
+/**
+ * Whether a file is a script the agent could run, from its path inside the skill.
+ * @param path - path relative to the skill's folder, with `/` separators.
+ * @returns true for a `scripts` or `bin` file, or an interpreter/executable extension.
+ */
+function isScriptPath(path: string): boolean {
+  const segments = path.split('/')
+  if (segments.slice(0, -1).some(segment => segment === 'scripts' || segment === 'bin')) return true
+  const dot = path.lastIndexOf('.')
+  return dot >= 0 && SCRIPT_EXTENSIONS.has(path.slice(dot + 1).toLowerCase())
+}
+
+/**
+ * List one skill's files for the Skills tab's detail panel. Metadata only: no
+ * file is opened and no script is run.
+ * @param listing - bundle folder, or the single file of a flat skill.
+ * @param skillPath - instruction file the warning names when the listing fails.
+ * @param ctx - Host context; `ctx.fs` is used when mounted so a sandbox policy sees the listing.
+ * @param trustedHost - bundled roots skip `ctx.fs`, which does not cover the installed application.
+ * @returns the files, or undefined when the folder could not be listed.
+ */
+async function listSkillFiles(
+  listing: SkillListing, skillPath: string, ctx: Context, trustedHost: boolean,
+): Promise<readonly LocalSkillFileView[] | undefined> {
+  try {
+    const fs = optionalFileSystem(ctx)
+    return fs === undefined || trustedHost
+      ? await listSkillFilesFromNode(listing)
+      : await listSkillFilesFromFileSystem(listing, fs)
+  } catch (error) {
+    ctx.logger.warn(`skill files at ${skillPath} not listed: ${errorMessage(error)}`)
+    return undefined
+  }
+}
+
+/**
+ * List a skill's files through native filesystem calls.
+ * @param listing - bundle folder, or the single file of a flat skill.
+ * @returns the listed files.
+ */
+async function listSkillFilesFromNode(listing: SkillListing): Promise<readonly LocalSkillFileView[]> {
+  if ('file' in listing) {
+    const name = basename(listing.file)
+    return [{ path: name, size: (await stat(listing.file)).size, isScript: isScriptPath(name) }]
+  }
+  const files: LocalSkillFileView[] = []
+  await collectFilesFromNode(listing.directory, '', 0, files)
+  return files
+}
+
+/**
+ * Walk one skill folder, collecting files up to the depth and count limits.
+ * @param directory - absolute folder being listed.
+ * @param prefix - path of this folder relative to the skill's folder, with `/` separators.
+ * @param depth - levels between the skill folder and this one.
+ * @param files - collector holding the entries already found.
+ */
+async function collectFilesFromNode(
+  directory: string, prefix: string, depth: number, files: LocalSkillFileView[],
+): Promise<void> {
+  if (files.length >= MAX_SKILL_FILES || depth > SKILL_FILE_DEPTH) return
+  const entries = await readdir(directory, { withFileTypes: true, encoding: 'utf8' })
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (files.length >= MAX_SKILL_FILES) return
+    const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+    if (entry.isDirectory()) {
+      await collectFilesFromNode(join(directory, entry.name), path, depth + 1, files)
+      continue
+    }
+    // A symbolic link or special file is not listed: its size says nothing about the skill's text files.
+    /* v8 ignore next -- broken links and device files need a POSIX fixture; Windows refuses the link. */
+    if (!entry.isFile()) continue
+    files.push({ path, size: (await stat(join(directory, entry.name))).size, isScript: isScriptPath(path) })
+  }
+}
+
+/**
+ * List a skill's files through the mounted filesystem service.
+ * @param listing - bundle folder, or the single file of a flat skill.
+ * @param fs - mounted filesystem service.
+ * @returns the listed files.
+ */
+async function listSkillFilesFromFileSystem(
+  listing: SkillListing, fs: FileSystem,
+): Promise<readonly LocalSkillFileView[]> {
+  if ('file' in listing) {
+    const name = basename(listing.file)
+    const size = (await fs.stat(await fs.resolve(listing.file)))?.size ?? 0
+    return [{ path: name, size, isScript: isScriptPath(name) }]
+  }
+  const files: LocalSkillFileView[] = []
+  await collectFilesFromFileSystem(fs, listing.directory, '', 0, files)
+  return files
+}
+
+/**
+ * Walk one skill folder through the filesystem service, up to the depth and count limits.
+ * @param fs - mounted filesystem service.
+ * @param directory - absolute folder being listed.
+ * @param prefix - path of this folder relative to the skill's folder, with `/` separators.
+ * @param depth - levels between the skill folder and this one.
+ * @param files - collector holding the entries already found.
+ */
+async function collectFilesFromFileSystem(
+  fs: FileSystem, directory: string, prefix: string, depth: number, files: LocalSkillFileView[],
+): Promise<void> {
+  if (files.length >= MAX_SKILL_FILES || depth > SKILL_FILE_DEPTH) return
+  const entries = await fsListDir(fs, directory)
+  for (const entry of [...entries].sort((left, right) => left.name.localeCompare(right.name))) {
+    if (files.length >= MAX_SKILL_FILES) return
+    const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+    if (entry.type === 'directory') {
+      await collectFilesFromFileSystem(fs, entry.target.displayPath, path, depth + 1, files)
+      continue
+    }
+    if (entry.type !== 'file') continue
+    files.push({ path, size: entry.size ?? (await fs.stat(entry.target))?.size ?? 0, isScript: isScriptPath(path) })
+  }
+}
+
 
 /** Provider that maps local project/user skill roots into `ctx.skills`. */
 export class FileSystemSkillProvider implements SkillProvider {
@@ -543,13 +752,24 @@ export class FileSystemSkillProvider implements SkillProvider {
         const diagnostics = new Map<string, string>()
         const discovered = await discoverRoot(root, this.ctx, this.name, (path, message) => { diagnostics.set(path, message) })
         const discoveredPaths = new Set(discovered.map(candidate => candidatePath(candidate)))
-        candidates = [
-          ...discovered.map((candidate): DiscoveredCandidate => ({
+        const rows: DiscoveredCandidate[] = []
+        for (const candidate of discovered) {
+          const path = candidatePath(candidate)
+          const language = languageOf(candidate.metadata)
+          const provenance = provenanceOf(candidate.metadata)
+          const files = await listSkillFiles(candidate.listing, path, this.ctx, root.trustedHost === true)
+          rows.push({
             name: candidate.name,
-            path: candidatePath(candidate),
-            displayPath: toDisplayPath(candidatePath(candidate), options.cwd),
+            path,
+            displayPath: toDisplayPath(path, options.cwd),
             description: candidate.description,
-          })),
+            ...(language === undefined ? {} : { language }),
+            ...(provenance === undefined ? {} : { provenance }),
+            ...(files === undefined ? {} : { files }),
+          })
+        }
+        candidates = [
+          ...rows,
           ...([...diagnostics] as [string, string][])
             .filter(([path]) => !discoveredPaths.has(path))
             .map(([path, error]): InvalidCandidate => ({ path, displayPath: toDisplayPath(path, options.cwd), error })),
@@ -576,15 +796,23 @@ export class FileSystemSkillProvider implements SkillProvider {
     const views: LocalSourceView[] = []
     for (const { root, candidates } of entries) {
       const added = gate.folders.some(folder => folder.id === root.source)
-      const kind = added ? 'folder'
-        : gate.applications.some(application => application.id === root.source) ? 'application' : 'harness'
+      const application = gate.applications.find(entry => entry.id === root.source)
+      const kind = added ? 'folder' : application === undefined ? 'harness' : 'application'
       // An added folder is named by its last segment; a drive root has none and the tab shows its path instead.
-      const title = added ? basename(root.path)
-        : gate.applications.find(application => application.id === root.source)?.title ?? root.source
+      const title = added ? basename(root.path) : application?.title ?? root.source
       const enabled = gate.sourceEnabled(root.source)
       const displayPath = toDisplayPath(root.path, options.cwd)
+      const row: Omit<LocalSourceView, 'exists' | 'skills'> = {
+        id: root.source,
+        kind,
+        ...(application === undefined ? {} : { applicationId: application.id }),
+        title,
+        path: root.path,
+        displayPath,
+        enabled,
+      }
       if (root.missing === true) {
-        views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: false, enabled, skills: [] })
+        views.push({ ...row, exists: false, skills: [] })
         continue
       }
       const skills: LocalSkillView[] = candidates.map((candidate) => {
@@ -605,13 +833,16 @@ export class FileSystemSkillProvider implements SkillProvider {
           name: candidate.name,
           path: candidate.path,
           displayPath: candidate.displayPath,
-          description: candidate.description,
+          description: normalizeDescription(candidate.description),
+          ...(candidate.language === undefined ? {} : { language: candidate.language }),
+          ...(candidate.files === undefined ? {} : { files: candidate.files }),
+          ...(candidate.provenance === undefined ? {} : { provenance: candidate.provenance }),
           status: gate.skillEnabled(root.source, candidate.name) ? 'available' as const : 'disabled' as const,
           ...(winner === undefined ? {} : { shadowedBy: winner }),
         }
       })
       skills.sort((left, right) => (left.name ?? left.path).localeCompare(right.name ?? right.path))
-      views.push({ id: root.source, kind, title, path: root.path, displayPath, exists: true, enabled, skills })
+      views.push({ ...row, exists: true, skills })
     }
     return views
   }
@@ -1157,8 +1388,8 @@ function hasErrorCode(error: unknown, code: string): boolean {
 
 async function discoverRoot(
   root: SkillRoot, ctx: Context, provider: string, report?: (path: string, message: string) => void,
-): Promise<SkillCandidate[]> {
-  const skills: SkillCandidate[] = []
+): Promise<LocalCandidate[]> {
+  const skills: LocalCandidate[] = []
   const entries = await listSkillRootEntries(root, ctx)
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (root.skipSystem && entry.name === '.system') continue
@@ -1182,6 +1413,8 @@ async function discoverRoot(
       source: root.source,
       rank: root.rank,
       locator,
+      // A bundle lists its folder; a flat skill is one file inside the source root.
+      listing: entry.type === 'directory' ? { directory: entry.path } : { file: entry.path },
       resourceBase: { kind: 'directory', path: locator.directory },
       path: parsed.path,
       ...parsed.metadata !== undefined ? { metadata: parsed.metadata } : {},

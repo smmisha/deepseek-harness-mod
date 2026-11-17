@@ -32,6 +32,9 @@
 /deepseek-ai-dsh-skill-filesystem/use-this-package/switches-and-other-applications:
   en: a45b5da81262eebf
   zh: 437110646b19353e
+/deepseek-ai-dsh-skill-filesystem/use-this-package/skill-rows-for-the-skills-tab:
+  en: d765a691e1f19ba9
+  zh: 9b30432f415ee1b0
 /deepseek-ai-dsh-skill-filesystem/use-this-package/change-detection:
   en: 77acbd43e89b6043
   zh: 8169bbbc55f3f114
@@ -63,8 +66,8 @@
   en: 14ddbda337682082
   zh: 2e4dc3c26b45f62c
 /deepseek-ai-dsh-skill-filesystem/known-limitations-and-deferred-work:
-  en: 0d5a15f8442b1342
-  zh: b07748ab499971f8
+  en: ad47ff321f3d4014
+  zh: 3a079adc630f1b1f
 /deepseek-ai-dsh-skill-filesystem/known-limitations-and-deferred-work/dev-note:
   en: 53584bc8292df1f9
   zh: 921253cd64aa7511

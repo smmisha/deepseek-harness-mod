@@ -13,6 +13,12 @@ export interface LocalSourceView {
   readonly title: string
   /** Own folders are harness sources, `folder` rows are folders the reader added, the rest belong to other applications. */
   readonly kind: 'harness' | 'application' | 'folder'
+  /**
+   * Configured application id for an `application` source, such as `claude-code`;
+   * absent for harness folders and added folders. The Skills tab maps it to that
+   * application's source mark and to its translated name.
+   */
+  readonly applicationId?: string
   /** Absolute folder the source scans. */
   readonly path: string
   /** Shortened path for the row; `path` carries the full value. */
@@ -34,6 +40,30 @@ export interface LocalSourceView {
  */
 export type AddSkillFolderResult = 'added' | 'exists' | 'relative' | 'missing' | 'invalid'
 
+/** One file inside a skill's folder, as the Skills tab's detail panel lists it. */
+export interface LocalSkillFileView {
+  /** Path relative to the skill's folder with `/` separators; a flat skill lists only its own file name. */
+  readonly path: string
+  /** Byte size, or 0 when the filesystem backend reports no size for the file. */
+  readonly size: number
+  /**
+   * Whether the file is a script: an interpreter, shell, or executable extension, or any
+   * file under a `scripts` or `bin` folder. The Skills tab only reports this; no script
+   * from a skill is read or executed.
+   */
+  readonly isScript: boolean
+}
+
+/** Where an installed skill came from, as recorded by the installer that copied it. */
+export interface LocalSkillProvenance {
+  /** Repository the skill was copied from, rendered verbatim. */
+  readonly url: string
+  /** Commit the copy was taken from, when the installation pinned one. */
+  readonly commit?: string
+  /** ISO-8601 instant the installation completed. */
+  readonly installedAt?: string
+}
+
 /** One discovered skill row for the Skills tab. */
 export interface LocalSkillView {
   /** Parsed name; absent when the frontmatter could not be read. */
@@ -42,8 +72,14 @@ export interface LocalSkillView {
   readonly path: string
   /** Shortened path for the row; `path` carries the full value. */
   readonly displayPath?: string
-  /** Parsed description. */
+  /** Parsed description with every whitespace run collapsed to one space, so a YAML block scalar renders as one paragraph. */
   readonly description?: string
+  /** BCP-47 tag of the description's language, when the skill declares one; the tab sets `lang` from it and `dir="auto"` always. */
+  readonly language?: string
+  /** Files in the skill's folder; absent when the folder could not be listed. */
+  readonly files?: readonly LocalSkillFileView[]
+  /** Install provenance; absent unless an installer recorded where the skill came from. */
+  readonly provenance?: LocalSkillProvenance
   /** Row state the tab renders; the shadowed marker is separate. */
   readonly status: 'available' | 'disabled' | 'invalid'
   /** Frontmatter failure text for `invalid` rows. */

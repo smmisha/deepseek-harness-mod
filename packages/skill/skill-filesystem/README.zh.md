@@ -82,6 +82,19 @@ skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也�
 
 读者在技能页添加的文件夹是名为 `folder:<dir>` 的来源，优先级为 `350`，位于配置的自定义根目录与用户根目录之间，默认开启。`skillSources` 命名空间通过 `addFolder(dir)` 添加文件夹：展开开头的 `~`，对仍非绝对路径的输入返回 `relative`，对 Host 上找不到的文件夹返回 `missing`，否则返回 `added` 或 `exists`；`removeFolder(dir)` 将文件夹从列表移除并保留其文件。已列出但已消失的文件夹仍会被描述为 `exists: false`，以便技能页提供移除操作。
 
+### 技能页的数据行
+
+`describeSources()` 除名称、路径与状态之外，还会为技能页收集每个技能需要展示的字段：
+
+| 字段 | 含义 |
+|---|---|
+| `description` | 解析后的描述，所有连续空白折叠为一个空格，因此 YAML 块标量会渲染为一段文字。目录条目保留作者原始空白。 |
+| `language` | 当 `metadata.language` 是语言标签时取其值；技能页据此设置 `lang`，并始终对作者文本设置 `dir="auto"`。 |
+| `files` | 最多 100 个文件、三层目录：相对技能文件夹的路径、字节大小，以及是否为脚本（`scripts` 或 `bin` 目录，或解释器/可执行文件扩展名）。列出时只读取元数据，不打开、不运行任何文件。 |
+| `provenance` | `metadata.repository`，以及存在时的 `metadata.commit` 与 ISO-8601 的 `metadata.installedAt`。没有安装记录时为缺失。 |
+
+`application` 来源行还会携带 `applicationId`，即配置中的应用 id（`claude-code`、`codex` 等），技能页据此映射来源标记与译名；harness 与已添加文件夹的行则不带。
+
 ### 变更检测
 
 现有根目录会被监视，因此新增、改名或删除 skill（或编辑其 frontmatter）会在下一个模型步骤触发目录刷新；`references`、`scripts`、`assets` 等 bundle 资源下的编辑不会触发。当第一方 `write` 与 `edit` 工具的目标可能影响受监视的 skill 时，它们会直接使提供方失效，因此模型无需等待宿主 watcher 即可观察到自身的文件系统变更。外部 IDE、Git 与 shell 变更由宿主 watcher 捕获；尚不存在的根目录会被探测，直至其出现。
@@ -156,6 +169,8 @@ watcher 触发的失效可促使上述消费方在现有请求历史中追加替
 - **I/O 失败会省略整个根目录**——一个不可读 skill 会使该次观测同时隐藏同根下的可读 skill。其他根仍可用，因此较低优先级的同名 skill 可能提供描述与加载的正文。每次查询都会重试发现，根目录恢复后重新按正常优先级选择。
 - **缺失根观察每次轮询一个路径段**——启动时不存在的根会使用 `fs.watchFile` 按 `watchPollIntervalMs` 轮询，直至 Chokidar 可以附加；这以有界检测延迟换取跨 IDE、Git 与 shell 工作流的可靠创建检测。
 - **无正文修订协议**——已加载正文是普通的已保留工具历史；后续文件编辑会影响后续调用，但既不会改写旧结果，也不会通知正文已变化。
+- **来源信息由安装器写入**——只有在安装器把 `repository`、`commit` 与 `installedAt` 写入技能 frontmatter 的 `metadata` 时才会报告；本包不安装任何内容，因此手工复制的技能没有来源信息。
+- **文件列表是有界快照**——超过三层目录或 100 个文件的 bundle 会被截断，且该行不会说明。
 
 <a id="dev-note"></a>
 ### 开发备注

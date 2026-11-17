@@ -175,6 +175,7 @@ type SwitchConfig = {
   applications?: { id: string; dir: string; title: string }[]
   sources?: Record<string, { enabled: boolean }>
   skills?: Record<string, Record<string, boolean>>
+  folders?: { dir: string }[]
 }
 
 async function setupLocal(
@@ -1380,6 +1381,212 @@ describe('FileSystemSkillProvider', () => {
         process.env.DSH_BUNDLED_SKILL_DIR = previousBundledSkillDir
       }
     }
+  })
+})
+
+describe('Skills tab detail rows', () => {
+  it('reports files, script marks, a one-line description, language, and provenance', async () => {
+    const home = await tempDir('detail-rows')
+    const project = await tempDir('detail-rows-project')
+    const root = join(home, '.dsh', 'skills')
+    const bundle = join(root, 'audit-skill')
+    await mkdir(join(bundle, 'references'), { recursive: true })
+    await mkdir(join(bundle, 'scripts'), { recursive: true })
+    await writeFile(join(bundle, 'references', 'signs.md'), 'signs')
+    await writeFile(join(bundle, 'scripts', 'audit.sh'), '#!/bin/sh\necho hi\n')
+    await writeFile(join(bundle, 'LICENSE'), 'MIT')
+    await writeFile(join(bundle, 'SKILL.md'), [
+      '---',
+      'name: audit-skill',
+      'description: |',
+      '  First line of the description',
+      '  second line continues.',
+      'metadata:',
+      '  language: en-GB',
+      '  repository: https://github.com/anthropics/skills',
+      '  commit: 2c5958e',
+      '  installedAt: 2026-11-12T09:30:00Z',
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'))
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const skill = (await describeSources(ctx, project))
+      .find(row => row.id === 'user-dsh')?.skills.find(entry => entry.name === 'audit-skill')
+
+    // A YAML block scalar reaches the tab as one paragraph; the model-facing description keeps its lines.
+    expect(skill?.description).toBe('First line of the description second line continues.')
+    expect(skill?.language).toBe('en-GB')
+    expect(skill?.provenance).toEqual({
+      url: 'https://github.com/anthropics/skills',
+      commit: '2c5958e',
+      installedAt: '2026-11-12T09:30:00Z',
+    })
+    const files = [...skill?.files ?? []].sort((left, right) => left.path < right.path ? -1 : 1)
+    expect(files.map(file => [file.path, file.isScript])).toEqual([
+      ['LICENSE', false],
+      ['SKILL.md', false],
+      ['references/signs.md', false],
+      ['scripts/audit.sh', true],
+    ])
+    expect(files.every(file => file.size > 0)).toBe(true)
+  })
+
+  it('lists only the file of a flat skill', async () => {
+    const home = await tempDir('detail-flat')
+    await writeFlatSkill(join(home, '.dsh', 'skills'), 'flat-one', 'Flat skill description')
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const skill = (await describeSources(ctx))
+      .find(row => row.id === 'user-dsh')?.skills.find(entry => entry.name === 'flat-one')
+    expect(skill?.files).toHaveLength(1)
+    expect(skill?.files?.[0]?.path).toBe('flat-one.md')
+    expect(skill?.files?.[0]?.size).toBeGreaterThan(0)
+    expect(skill?.files?.[0]?.isScript).toBe(false)
+  })
+
+  it('leaves language and provenance absent for metadata that declares neither', async () => {
+    const home = await tempDir('detail-metadata')
+    const root = join(home, '.dsh', 'skills')
+    const write = async (name: string, frontmatter: string): Promise<void> => {
+      const dir = join(root, name)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${name}\n${frontmatter}---\n\nBody\n`)
+    }
+    await write('plain-skill', '')
+    await write('odd-metadata', 'metadata:\n  language: 42\n  repository: "   "\n  commit: 7\n')
+    await write('url-only', 'metadata:\n  repository: owner/repo\n  installedAt: yesterday\n')
+    await write('text-metadata', 'metadata: plain text\n')
+    const ctx = await setupLocal(home)
+    const skills = (await describeSources(ctx)).find(row => row.id === 'user-dsh')?.skills ?? []
+    const byName = (name: string) => skills.find(entry => entry.name === name)
+
+    expect(byName('plain-skill')?.language).toBeUndefined()
+    expect(byName('plain-skill')?.provenance).toBeUndefined()
+    // A language must be a tag, a repository a non-empty string, and a date an ISO-8601 value.
+    expect(byName('odd-metadata')?.language).toBeUndefined()
+    expect(byName('odd-metadata')?.provenance).toBeUndefined()
+    expect(byName('url-only')?.provenance).toEqual({ url: 'owner/repo' })
+    expect(byName('text-metadata')?.language).toBeUndefined()
+  })
+
+  it('reports no file list for a skill folder the filesystem service cannot list', async () => {
+    const home = await tempDir('detail-unreadable')
+    const root = join(home, '.dsh', 'skills')
+    await writeSkill(root, 'readable-bundle', 'Readable bundle')
+    await writeSkill(root, 'special-entry', 'Bundle with a special file')
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const fs = await ctx.plugin(class extends TestFileSystem {
+      // One backend reports a special file beside the bundle's own files.
+      override async listDir(target: FsTarget): Promise<FsDirEntry[]> {
+        const entries = await super.listDir(target)
+        if (target.displayPath !== join(root, 'special-entry')) return entries
+        const path = join(target.displayPath, 'fifo')
+        return [...entries, { name: 'fifo', type: 'other', target: { targetKey: path as never, displayPath: path } }]
+      }
+    })
+    const fake = ctx.fs as TestFileSystem
+    fake.failListDirPaths.add(join(root, 'readable-bundle'))
+    const warnings = vi.spyOn(ctx.logger, 'warn')
+    const skills = (await describeSources(ctx)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    expect(skills.find(entry => entry.name === 'readable-bundle')?.files).toBeUndefined()
+    expect(warnings).toHaveBeenCalledWith(expect.stringContaining(join(root, 'readable-bundle', 'SKILL.md')))
+    expect(skills.find(entry => entry.name === 'special-entry')?.files?.map(file => file.path)).toEqual(['SKILL.md'])
+    await fs.dispose()
+  })
+
+  it('lists files through the mounted filesystem service without a size on the entry', async () => {
+    const home = await tempDir('detail-fs-files')
+    const root = join(home, '.dsh', 'skills')
+    await writeSkill(root, 'fs-skill', 'Listed through the filesystem service')
+    await mkdir(join(root, 'fs-skill', 'scripts'), { recursive: true })
+    await writeFile(join(root, 'fs-skill', 'scripts', 'run.py'), 'print(1)\n')
+    await writeFlatSkill(root, 'fs-flat', 'Flat through the service')
+    await writeSkill(root, 'fs-big', 'Large bundle through the service')
+    await mkdir(join(root, 'fs-big', 'bulk'), { recursive: true })
+    await mkdir(join(root, 'fs-big', 'a1', 'a2', 'a3', 'a4'), { recursive: true })
+    await writeFile(join(root, 'fs-big', 'a1', 'a2', 'a3', 'a4', 'deep.md'), 'deep')
+    for (let index = 0; index < 130; index += 1) {
+      await writeFile(join(root, 'fs-big', 'bulk', `file-${String(index).padStart(3, '0')}.md`), 'x')
+    }
+    const ctx = new Context()
+    ctx.provide('settings', { update: async () => undefined })
+    // The backend reports no size per entry, so the tab's list falls back to stat.
+    // It also loses the size of the flat skill's own file after that file was read.
+    const flatPath = join(root, 'fs-flat.md')
+    let flatStats = 0
+    await ctx.plugin(class extends TestFileSystem {
+      override async listDir(target: FsTarget): Promise<FsDirEntry[]> {
+        return (await super.listDir(target)).map(entry => ({ name: entry.name, type: entry.type, target: entry.target }))
+      }
+
+      override async stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined> {
+        if (target.displayPath === flatPath) {
+          flatStats += 1
+          // The catalog lookup and discovery each read the file; only the listing probe loses its size.
+          if (flatStats > 2) return undefined
+        }
+        return await super.stat(target, signal)
+      }
+    })
+    ;(ctx.fs as TestFileSystem).statOverrides.set(join(root, 'fs-skill', 'scripts', 'run.py'), undefined)
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, { applications: [] })
+    await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    const skills = (await describeSources(ctx)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    const bundleFiles = [...skills.find(entry => entry.name === 'fs-skill')?.files ?? []]
+      .sort((left, right) => left.path < right.path ? -1 : 1)
+    expect(bundleFiles.map(file => [file.path, file.isScript])).toEqual([
+      ['SKILL.md', false],
+      ['scripts/run.py', true],
+    ])
+    // A backend that cannot size a file reports zero rather than dropping it.
+    expect(bundleFiles.map(file => file.size > 0)).toEqual([true, false])
+    const flatFiles = skills.find(entry => entry.name === 'fs-flat')?.files ?? []
+    expect(flatFiles.map(file => [file.path, file.size])).toEqual([['fs-flat.md', 0]])
+    // The service-backed walk shares the tab's limits.
+    const bigFiles = skills.find(entry => entry.name === 'fs-big')?.files ?? []
+    expect(bigFiles).toHaveLength(100)
+    expect(bigFiles.some(file => file.path === 'a1/a2/a3/a4/deep.md')).toBe(false)
+  })
+
+  it('stops listing a bundle at the file limit and the depth limit', async () => {
+    const home = await tempDir('detail-limits')
+    const root = join(home, '.dsh', 'skills')
+    const bundle = join(root, 'big-skill')
+    await writeSkill(root, 'big-skill', 'Bundle with many files')
+    await mkdir(join(bundle, 'd1', 'd2', 'd3', 'd4'), { recursive: true })
+    await writeFile(join(bundle, 'd1', 'd2', 'd3', 'd4', 'deep.md'), 'deep')
+    for (let index = 0; index < 130; index += 1) {
+      await writeFile(join(bundle, `file-${String(index).padStart(3, '0')}.md`), 'x')
+    }
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const files = (await describeSources(ctx))
+      .find(row => row.id === 'user-dsh')?.skills.find(entry => entry.name === 'big-skill')?.files ?? []
+
+    expect(files).toHaveLength(100)
+    expect(files.some(file => file.path === 'd1/d2/d3/d4/deep.md')).toBe(false)
+  })
+
+  it('marks an application source with its application id and leaves other kinds without one', async () => {
+    const home = await tempDir('detail-application')
+    const project = await tempDir('detail-application-project')
+    const appRoot = join(home, '.claude', 'skills')
+    const team = await tempDir('detail-application-team')
+    await writeSkill(appRoot, 'claude-skill', 'From Claude')
+    await writeSkill(team, 'team-skill', 'From an added folder')
+    const ctx = await setupLocal(home, {}, {
+      applications: [{ id: 'claude-code', dir: appRoot, title: 'Claude Code' }],
+      sources: { 'claude-code': { enabled: true } },
+      folders: [{ dir: team }],
+    })
+    const views = await describeSources(ctx, project)
+
+    expect(views.find(view => view.id === 'claude-code')?.applicationId).toBe('claude-code')
+    expect(views.find(view => view.id === `folder:${team}`)?.applicationId).toBeUndefined()
+    expect(views.find(view => view.id === 'user-dsh')?.applicationId).toBeUndefined()
   })
 })
 
