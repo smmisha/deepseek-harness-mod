@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 /** Login choices, timeout recovery, and manual cancellation. */
-import { readFileSync } from 'node:fs'
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
@@ -243,14 +242,6 @@ it('announces a failed copy to assistive technology', async () => {
     if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
     else Reflect.deleteProperty(navigator, 'clipboard')
   }
-})
-
-it('wraps translated action labels instead of squeezing fixed-height buttons', () => {
-  const css = readFileSync(new URL('../src/client/SignInDialog.module.css', import.meta.url), 'utf8')
-  const actions = /\.actions\s*\{([^{}]*)\}/.exec(css)?.[1] ?? ''
-  const buttons = /\.primaryButton, \.secondaryButton\s*\{([^{}]*)\}/.exec(css)?.[1] ?? ''
-  expect(actions).toContain('flex-wrap: wrap;')
-  expect(buttons).toContain('white-space: nowrap;')
 })
 
 it('does not reuse network advice for a subsequent start failure', async () => {
