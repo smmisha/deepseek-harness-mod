@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Installateur de compétences",
+    "description": "Télécharge des compétences depuis un dépôt GitHub ou une archive importée, les prévisualise, les installe désactivées et retire celles qu’il a installées."
+  }
+}

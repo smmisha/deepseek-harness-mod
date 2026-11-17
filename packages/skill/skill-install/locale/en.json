@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Skill installer",
+    "description": "Downloads skills from a GitHub repository or an imported archive, previews them, installs them switched off, and removes the ones it installed."
+  }
+}
