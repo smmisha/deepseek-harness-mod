@@ -58,7 +58,7 @@ type Phase =
     lastTurn: number
     wakeRequested: boolean
   }
-  | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean }
+  | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean; stopRequested: boolean }
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
@@ -169,12 +169,15 @@ export class ReactLoopAgent implements Agent {
   }
 
   send(message: UserMessage, target: InboxTarget, wakeup: boolean): void {
-    // Waking input cannot join an aborted activity, so it starts the next turn.
-    // Captured before the insertion so a reentrant cancel from a splice observer cannot reclassify it.
-    const wakingAfterAbort = wakeup && this.phase.kind !== 'idle' && this.phase.abort.signal.aborted
-    const resolvedTarget = wakingAfterAbort ? 'next-turn' : target
+    // Waking input cannot join an activity that is already ending (aborted or
+    // finishing a graceful stop), so it starts the next turn. Captured before
+    // the insertion so a reentrant cancel from a splice observer cannot
+    // reclassify it.
+    const wakingAfterEnding = wakeup && this.phase.kind !== 'idle'
+      && (this.phase.abort.signal.aborted || this.stopPending())
+    const resolvedTarget = wakingAfterEnding ? 'next-turn' : target
     this.inbox.splice(resolvedTarget, Infinity, 0, [message])
-    if (wakeup) this.wakeDriver(wakingAfterAbort)
+    if (wakeup) this.wakeDriver(wakingAfterEnding)
   }
 
   followup(input: UserMessage): void {
@@ -190,6 +193,13 @@ export class ReactLoopAgent implements Agent {
   }
 
   cancel(cause: AgentCancelCause, options: CancelOptions = {}): void {
+    if (options.mode === 'graceful') {
+      // A graceful stop never aborts the live activity or consumes pending
+      // work: the turn ends after its current step and the queue stays parked.
+      if (this.phase.kind !== 'running' || this.phase.stopRequested) return
+      this.phase.stopRequested = true
+      return
+    }
     try {
       if (!options.keepInbox) this.inbox.clear()
     } finally {
@@ -199,6 +209,11 @@ export class ReactLoopAgent implements Agent {
         this.phase.abort.abort(cause)
       }
     }
+  }
+
+  /** Whether the active running phase ends at its next step boundary instead of continuing. */
+  private stopPending(): boolean {
+    return this.phase.kind === 'running' && this.phase.stopRequested
   }
 
   runMaintenance<T>(job: (signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -225,21 +240,21 @@ export class ReactLoopAgent implements Agent {
   }
 
   /**
-   * Start one driver, or latch its wake behind maintenance or an aborted
+   * Start one driver, or latch its wake behind maintenance or an ending
    * activity. A wake sent while idle always opens its turn boundary, even
    * when its message was cleared; only a latched replay is suppressed when
    * the queue no longer holds the wake.
-   * @param wakeAfterAbort - the {@link send} classification, captured before
+   * @param wakeAfterEnding - the {@link send} classification, captured before
    *   the inbox insertion so a reentrant cancel cannot reclassify it.
    */
-  private wakeDriver(wakeAfterAbort = false): void {
+  private wakeDriver(wakeAfterEnding = false): void {
     if (this.lifetimeSignal.aborted) return
     if (this.phase.kind !== 'idle') {
-      // Maintenance and aborted drivers cannot deliver the wake: latch it for
+      // Maintenance and ending drivers cannot deliver the wake: latch it for
       // replay at convergence. Live drivers claim queued work themselves;
       // disposal never latches, so teardown waits on no model turn.
       const reason = abortedCancelCause(this.phase.abort.signal)
-      if (reason?.kind !== 'disposed' && (this.phase.kind === 'maintenance' || wakeAfterAbort)) {
+      if (reason?.kind !== 'disposed' && (this.phase.kind === 'maintenance' || wakeAfterEnding)) {
         this.phase.wakeRequested = true
       }
       return
@@ -252,6 +267,7 @@ export class ReactLoopAgent implements Agent {
       turn: this.phase.lastTurn,
       step: 0,
       wakeRequested: false,
+      stopRequested: false,
     })
     this.loopCtx.agents.withInitiator(this, () => this.kick()).then(driver.resolve, driver.reject)
   }
@@ -349,6 +365,10 @@ export class ReactLoopAgent implements Agent {
     try {
       while (true) {
         signal.throwIfAborted()
+        if (this.stopPending()) {
+          turnEnds = { kind: 'stopped' }
+          break
+        }
         const step = phase.step + 1
         const decision = await this.preStep(target, { turn, step })
         if (decision.kind === 'reject') {
@@ -398,6 +418,13 @@ export class ReactLoopAgent implements Agent {
           decision.toolSet.dispose()
         }
         signal.throwIfAborted()
+        // A graceful stop ends the turn at this settled step boundary: the
+        // assistant message and every requested tool result are recorded, and
+        // no later model request starts.
+        if (this.stopPending()) {
+          turnEnds = { kind: 'stopped' }
+          break
+        }
         if (turnEnds && this.inbox.nextStep.length === 0) {
           await this.dispatch.serial('agent/turn-stopping', { turn, signal })
           signal.throwIfAborted()
@@ -431,6 +458,9 @@ export class ReactLoopAgent implements Agent {
       }
     }
     if (!this.inbox.hasPending) return false
+    // A stopped turn leaves queued work pending for the wake that prompted it
+    // or the next delivery; it does not start another turn by itself.
+    if (phase.stopRequested) return false
     phase.abort = new AbortController()
     // A fresh controller makes a latch set on the old one stale: the live driver claims the queue itself.
     phase.wakeRequested = false
@@ -448,6 +478,9 @@ export class ReactLoopAgent implements Agent {
     const renderedPrompt = renderPrompt(assembly)
     let firstAttempt = true
     while (true) {
+      // A graceful stop armed while the failed attempt was being recovered ends
+      // the turn instead of starting another model request.
+      if (!firstAttempt && this.stopPending()) return null
       const { config, preparedCall } = await this.prepareRequest(turn, step, decision.selection, signal)
       const currentContext = this.loopCtx.systemPrompt.refreshContext(assembly, {
         ...assembleContextFor(this, signal), modelSelection: decision.selection,

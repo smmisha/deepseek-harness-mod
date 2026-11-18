@@ -350,6 +350,16 @@ export function apply(ctx: Context): void {
             disarm(state)
             return
           }
+          if (event.data.reason.kind === 'stopped') {
+            // A graceful operator stop ends the turn after its step; it stops
+            // automatic rounds exactly like the user abort it replaces, so the
+            // claimed round is cancelled and the idle transition pauses the goal.
+            if (state.attempt?.phase === 'claimed' || state.attempt?.phase === 'admitted') {
+              state.attempt.cancelled = true
+            }
+            else disarm(state)
+            return
+          }
           if (event.data.reason.kind !== 'aborted') return
           const abortReason = event.data.reason.reason
           // Agent disposal aborts the round without a pause decision, so continuation

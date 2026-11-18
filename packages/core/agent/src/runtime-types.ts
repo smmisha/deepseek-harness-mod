@@ -48,6 +48,16 @@ export interface CancelOptions {
    * later turn and no canceled inbox splice is logged.
    */
   keepInbox?: boolean | undefined
+  /**
+   * End boundary for the active turn. `'immediate'` (the default) aborts the
+   * activity now. `'graceful'` finishes the current step — the in-flight model
+   * response and the tool batch it requested — records the produced output as an
+   * ordinary assistant message, closes the turn as `stopped`, and leaves pending
+   * inbox work parked for a later wake, so `keepInbox` is implied. A graceful
+   * request with no running turn is a no-op that arms no later work; a
+   * maintenance task is unaffected because it owns no step boundary.
+   */
+  mode?: 'graceful' | 'immediate' | undefined
 }
 
 /** Agent-owned access to the model choice for future steps. */
@@ -203,12 +213,16 @@ declare module './types.ts' {
     readonly ctx: Context
 
     /**
-   * Clear queued and steering work — unless `keepInbox` — and abort the active
-   * turn or between-turn task. The first cause wins for that activity. With no
-   * active activity, cancellation is a no-op and does not arm later work.
-   * Queue-write failures still abort the activity and propagate to the caller.
+   * Stop the active turn or between-turn task. With the default `immediate`
+   * mode, queued and steering work is cleared unless `keepInbox` and the
+   * activity is aborted; the first cause wins for that activity. With
+   * `mode: 'graceful'`, the driver instead finishes the current step and closes
+   * the turn as `stopped`, preserving produced output and pending inbox work.
+   * With no active activity, cancellation is a no-op and does not arm later
+   * work. Queue-write failures still abort the activity and propagate to the
+   * caller.
    * @param cause - the stable caller intent carried by the active operation signal.
-   * @param options - cancellation options; `keepInbox` preserves pending work.
+   * @param options - cancellation options; `keepInbox` preserves pending work and `mode` selects the ending boundary.
    */
     cancel(cause: AgentCancelCause, options?: CancelOptions): void
 

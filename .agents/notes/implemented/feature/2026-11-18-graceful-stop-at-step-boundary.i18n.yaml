@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-18-graceful-stop-at-step-boundary.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-18-graceful-stop-at-step-boundary.md
+/agent-note-graceful-stop-at-the-step-boundary:
+  en: b607da435ed28549
+  zh: 864c694573fef375
+/agent-note-graceful-stop-at-the-step-boundary/problem:
+  en: 016b9fc7804813b5
+  zh: dfce736c13670852
+/agent-note-graceful-stop-at-the-step-boundary/decision:
+  en: f8bdba88688ce25e
+  zh: a5fb798dcbe6062d
+/agent-note-graceful-stop-at-the-step-boundary/alternatives-considered:
+  en: 04af460e139a436e
+  zh: ac1b78cfacf371e1
+/agent-note-graceful-stop-at-the-step-boundary/consequences:
+  en: ea7c3bb70f790f20
+  zh: b086d563a31c2276
