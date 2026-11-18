@@ -46,6 +46,14 @@ export function InlineEditor({ value, label, onChange, onSave, onCancel, classNa
     return () => { observer.disconnect() }
   }, [value])
 
+  useLayoutEffect(() => {
+    // Editing a saved draft continues it: the caret rests after its last character
+    // instead of before the first one, which is where an autofocused filled field starts.
+    const node = ref.current as HTMLTextAreaElement
+    const end = node.value.length
+    node.setSelectionRange(end, end)
+  }, [])
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key === 'Escape') {
       onCancel()
