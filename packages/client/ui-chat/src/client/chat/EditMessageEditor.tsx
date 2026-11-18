@@ -56,7 +56,7 @@ export function EditMessageEditor({ text, onChange, onSave, onCancel, t }: EditM
       />
       <div className={css.actions}>
         <Tooltip label={cancelLabel} side="bottom">
-          <button type="button" className={css.action} aria-label={cancelLabel} onClick={onCancel}>
+          <button type="button" className={`${css.action} ${css.cancel}`} aria-label={cancelLabel} onClick={onCancel}>
             <IconCloseOutlineRegular size={14} />
           </button>
         </Tooltip>
@@ -64,7 +64,7 @@ export function EditMessageEditor({ text, onChange, onSave, onCancel, t }: EditM
           {/* An empty edit has nothing to hand to the composer. */}
           <button
             type="button"
-            className={css.action}
+            className={`${css.action} ${css.save}`}
             aria-label={saveLabel}
             disabled={text.trim() === ''}
             onClick={save}

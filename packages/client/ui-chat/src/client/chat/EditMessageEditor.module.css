@@ -11,13 +11,12 @@
   max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
 }
 
-/* The message editor is a long draft: start at a comfortable height and grow
-   until three times that, then scroll inside InlineEditor's own cap. The text
-   metrics are the bubble's, not InlineEditor's compact draft size, so editing
-   does not shrink the message or reflow it into a different line count. */
+/* The field hugs the text: one line is the resting height, it grows with the
+   draft and scrolls at ten lines. The text metrics are the bubble's, not
+   InlineEditor's compact draft size, so editing does not reflow the message. */
 .editor .input {
   width: 100%;
-  min-height: 80px;
+  min-height: calc(28px + var(--dsh-content-font-delta, 0px));
   max-height: 240px;
   font-family: inherit;
   font-size: var(--dsh-content-font-size, 14px);
@@ -40,8 +39,17 @@
   border: none;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+}
+
+/* The pair states its meaning in colour: discarding takes the error ink and
+   applying takes the success ink, both from the theme's state aliases. */
+.cancel {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.save {
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .action svg {
@@ -52,7 +60,6 @@
 @media (hover: hover) {
   .action:hover {
     background: var(--dsw-alias-interactive-bg-hover);
-    color: var(--dsw-alias-label-secondary);
   }
 }
 
