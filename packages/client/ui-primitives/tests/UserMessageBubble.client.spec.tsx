@@ -21,4 +21,14 @@ describe('UserMessageBubble', () => {
     expect(screen.getByText('Plain user text').tagName).toBe('DIV')
     expect(screen.queryByRole('button')).toBeNull()
   })
+
+  it('takes its base direction from the user-authored text', () => {
+    render(<UserMessageBubble>مرحبا بالعالم</UserMessageBubble>)
+    expect(screen.getByText('مرحبا بالعالم').getAttribute('dir')).toBe('auto')
+  })
+
+  it('lets a caller override the automatic base direction', () => {
+    render(<UserMessageBubble dir="rtl">Plain user text</UserMessageBubble>)
+    expect(screen.getByText('Plain user text').getAttribute('dir')).toBe('rtl')
+  })
 })

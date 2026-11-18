@@ -5,7 +5,7 @@
  * unavailable with the reason exposed to assistive technology.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { FormEvent } from 'react'
+import { createRef, type FormEvent } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
@@ -49,5 +49,28 @@ describe('user message edit action', () => {
     expect(pencil.getAttribute('aria-describedby')).toBe(reason.id)
     fireEvent.click(pencil)
     expect(beginEdit).not.toHaveBeenCalled()
+  })
+
+  it('announces the unavailable reason once while its explanation tooltip is open', () => {
+    render(<EditMessageAction {...props({ editUnavailable: true })} />)
+    const pencil = screen.getByRole('button', { name: t('message.edit') })
+    const reasonId = screen.getByText(t('message.editUnavailable')).id
+    fireEvent.click(pencil)
+    const bubble = screen.getByRole('tooltip')
+    expect(bubble.textContent).toBe(t('message.editUnavailable'))
+    // The pinned bubble repeats the reason; associating it again would make a
+    // screen reader announce the same sentence twice.
+    const describedBy = pencil.getAttribute('aria-describedby') ?? ''
+    expect(describedBy.split(' ')).toHaveLength(1)
+    expect(describedBy).toBe(reasonId)
+    expect(bubble.id).not.toBe(reasonId)
+    expect(describedBy.split(' ').map(id => document.getElementById(id)?.textContent ?? '').join(' '))
+      .toBe(t('message.editUnavailable'))
+  })
+
+  it('hands its button to the row through the edit trigger ref', () => {
+    const editTriggerRef = createRef<HTMLButtonElement>()
+    render(<EditMessageAction {...props({ editTriggerRef })} />)
+    expect(editTriggerRef.current).toBe(screen.getByRole('button', { name: t('message.edit') }))
   })
 })

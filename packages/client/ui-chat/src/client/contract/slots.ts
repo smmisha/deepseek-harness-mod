@@ -1,5 +1,5 @@
 /** Chat-owned Slot declarations and composed component props. */
-import type { RefObject } from 'react'
+import type { Ref, RefObject } from 'react'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -77,6 +77,13 @@ export interface UserActionProps {
    * finishes. A queued message or one from an earlier Turn stays editable.
    */
   readonly editUnavailable: boolean
+  /**
+   * Attach this to the control that opens the editor. The row focuses that
+   * control again when the editor closes, so cancelling returns the keyboard to
+   * where the edit began; an entry that omits it leaves the row itself as the
+   * return target.
+   */
+  readonly editTriggerRef?: Ref<HTMLButtonElement> | undefined
 }
 
 /** Stable quota failure codes retained in the Session log; both raise the frame-wide notice. */

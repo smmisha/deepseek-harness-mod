@@ -1,4 +1,5 @@
 /** In-place editor for one sent user message, with explicit save and cancel. */
+import type { KeyboardEvent } from 'react'
 import {
   IconCheckOutlineRegular, IconCloseOutlineRegular, InlineEditor, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -22,7 +23,9 @@ export interface EditMessageEditorProps {
 /**
  * Render the message's text in a multi-line editor. Enter saves, Shift+Enter
  * breaks the line, Escape cancels, and the action pair repeats both gestures for
- * pointer users; an empty edit cannot be saved.
+ * pointer users; an empty edit cannot be saved. Escape cancels wherever focus
+ * sits inside the editor, including its Save and Cancel buttons, and is consumed
+ * there so no enclosing surface closes with it.
  * @param props - edited text, its callbacks, and the Chat copy seat.
  * @returns the editor field and its action pair.
  */
@@ -33,8 +36,16 @@ export function EditMessageEditor({ text, onChange, onSave, onCancel, t }: EditM
     if (text.trim() === '') return
     onSave()
   }
+  // Capture so the editor owns the key before the field handler or any ancestor
+  // sees it; Escape means "leave the editor" wherever its keyboard sits.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    onCancel()
+  }
   return (
-    <div className={css.editor} data-message-edit="">
+    <div className={css.editor} data-message-edit="" onKeyDownCapture={onKeyDown}>
       <InlineEditor
         value={text}
         label={t('message.edit')}

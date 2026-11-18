@@ -7,18 +7,20 @@ import css from './MessageIconActions.module.css'
 /** Props the official entry consumes from the row's Factory contract. */
 export type EditMessageActionProps = Pick<
   FactoryComponentPropsOf<'conversation.chat.user.actions'>,
-  'beginEdit' | 'editUnavailable' | 't'
+  'beginEdit' | 'editUnavailable' | 'editTriggerRef' | 't'
 >
 
 /**
  * Render the pencil beside one finalized user message. The click only opens the
  * row's editor: it never writes the composer draft and never submits, so the
  * message is not resent on opening. While the Session runs, the same entry stays
- * visible but unavailable, and its reason is programmatically associated.
- * @param props - the row's edit callbacks and the Chat copy seat.
+ * visible but unavailable, and its reason is programmatically associated. The
+ * button also carries the row's trigger ref, so closing the editor can return
+ * the keyboard to it.
+ * @param props - the row's edit callbacks, its focus-return ref, and the Chat copy seat.
  * @returns the pencil action and, when unavailable, its visually hidden reason.
  */
-export function EditMessageAction({ beginEdit, editUnavailable, t }: EditMessageActionProps) {
+export function EditMessageAction({ beginEdit, editUnavailable, editTriggerRef, t }: EditMessageActionProps) {
   const reasonId = useId()
   const label = t('message.edit')
   const reason = t('message.editUnavailable')
@@ -27,6 +29,7 @@ export function EditMessageAction({ beginEdit, editUnavailable, t }: EditMessage
       <Tooltip label={editUnavailable ? reason : label} side="bottom" openOnClick={editUnavailable}>
         {/* Native disabled buttons deliver no hover/focus events for the reason tooltip. */}
         <button
+          ref={editTriggerRef}
           type="button"
           className={css.action}
           aria-label={label}

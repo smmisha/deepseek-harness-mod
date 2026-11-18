@@ -44,6 +44,35 @@ describe('message editor', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it.each(['message.editSave', 'message.editCancel'] as const)(
+    'cancels on Escape from the %s button as well',
+    (key) => {
+      const { onSave, onCancel } = editor()
+      fireEvent.keyDown(screen.getByRole('button', { name: t(key) }), { key: 'Escape' })
+      expect(onCancel).toHaveBeenCalledOnce()
+      expect(onSave).not.toHaveBeenCalled()
+    },
+  )
+
+  it('consumes the Escape it cancels with and leaves the enclosing surface open', () => {
+    const onCancel = vi.fn()
+    const enclosing = vi.fn()
+    render(
+      <div onKeyDown={enclosing}>
+        <EditMessageEditor text="hello" onChange={() => {}} onSave={() => {}} onCancel={onCancel} t={t} />
+        <button type="button">outside</button>
+      </div>,
+    )
+    fireEvent.keyDown(screen.getByRole('button', { name: t('message.editCancel') }), { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalledOnce()
+    // The editor owns that Escape: an enclosing dialog or panel must not close too.
+    expect(enclosing).not.toHaveBeenCalled()
+    // An Escape outside the editor is not the editor's to consume.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'outside' }), { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(enclosing).toHaveBeenCalledOnce()
+  })
+
   it('saves and cancels through the action pair', () => {
     const { onSave, onCancel } = editor()
     fireEvent.click(screen.getByRole('button', { name: t('message.editSave') }))

@@ -1,5 +1,5 @@
-import { memo, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode, Ref } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PropsRenderFactories, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UserTextFacts } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -181,7 +181,7 @@ function UserStyleBubble({
   node, renderSlotChain, content, loadImage, renderFactorySlot, actions,
   pending = false, echo = false, batchStart = false,
   referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false,
-  editor,
+  editor, rowRef,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
@@ -189,6 +189,11 @@ function UserStyleBubble({
   actions?: (text: string) => ReactNode
   /** Replaces the bubble content and its actions while this row is being edited in place. */
   editor?: ReactNode
+  /**
+   * Row element for a caller that may have to return focus to this message when
+   * its edit affordance cannot take it; passing it also makes the row focusable.
+   */
+  rowRef?: Ref<HTMLDivElement> | undefined
   /** Row whose durable source the message-source seat elects above this bubble. */
   node: DecoratedRow
   /** Seat renderer; rows that do not own the seat pass {@link NO_MESSAGE_SOURCE}. */
@@ -222,7 +227,9 @@ function UserStyleBubble({
   }), [inputFacts, referenceLabels, skillNames])
   return (
     <div
+      ref={rowRef}
       className={css.userRow}
+      tabIndex={rowRef === undefined ? undefined : -1}
       data-pending-steering={pending || undefined}
       data-submission-echo={echo || undefined}
       data-chat-steering-batch={batchStart ? 'start' : undefined}
@@ -332,7 +339,9 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
  * Renders the durable-message chain seat above the bubble, the user-action row
  * below it, or the row's own editor while an edit is open. Opening the editor
  * touches neither the composer nor the transcript; saving hands the edited text
- * to the composer draft without submitting it.
+ * to the composer draft without submitting it. Closing the editor returns the
+ * keyboard to the pencil (the row when the entry offers no trigger), never to
+ * `<body>`, and never scrolls the transcript.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
   node, renderFactorySlot, loadImage, renderSlotChain, inputActions, useSession, t,
@@ -348,14 +357,37 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
   const turnOpen = (location.kind === 'turn' || location.kind === 'step') && location.turn.status === 'open'
   const readingThisMessage = running && turnOpen
   const [edit, setEdit] = useState<{ readonly text: string } | null>(null)
+  // The pencil unmounts with the rest of the action row while the editor is
+  // open, so the closed editor hands back both the row and the affordance that
+  // replaced it; the refs are re-attached before this commit's layout effects.
+  const row = useRef<HTMLDivElement>(null)
+  const editTrigger = useRef<HTMLButtonElement>(null)
+  const returningFocus = useRef(false)
   // A run that starts elsewhere hides the open editor instead of discarding what
   // was already typed; the editor returns when the run settles.
   const editing = readingThisMessage ? null : edit
+  const closeEdit = (): void => {
+    returningFocus.current = true
+    setEdit(null)
+  }
   const saveEdit = (text: string): void => {
     inputActions.setDraft(text)
     inputActions.focus()
+    returningFocus.current = true
     setEdit(null)
   }
+  useLayoutEffect(() => {
+    if (!returningFocus.current || editing !== null) return
+    returningFocus.current = false
+    // Save hands the keyboard to the composer; only a focus that fell out of the
+    // document (cancel, or a hand-off that could not claim it) needs restoring,
+    // and preventScroll keeps the transcript where the reader left it.
+    const active = document.activeElement
+    if (active !== null && active !== document.body && active.isConnected) return
+    const trigger = editTrigger.current
+    if (trigger !== null && !trigger.disabled) trigger.focus({ preventScroll: true })
+    else row.current?.focus({ preventScroll: true })
+  }, [editing])
   return (
     <UserStyleBubble
       node={node}
@@ -364,6 +396,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       interactive
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
+      rowRef={row}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
       editor={editing === null
@@ -373,7 +406,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
             text={editing.text}
             onChange={(text) => { setEdit({ text }) }}
             onSave={() => { saveEdit(editing.text) }}
-            onCancel={() => { setEdit(null) }}
+            onCancel={closeEdit}
             t={t}
           />
         )}
@@ -386,6 +419,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           extraActions={renderFactorySlot('conversation.chat.user.actions', {
             beginEdit: () => { setEdit({ text }) },
             editUnavailable: readingThisMessage,
+            editTriggerRef: editTrigger,
           })}
           t={t}
         />
