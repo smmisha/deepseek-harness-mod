@@ -46,14 +46,23 @@ export function EditMessageEditor({ text, onChange, onSave, onCancel, t }: EditM
   }
   return (
     <div className={css.editor} data-message-edit="" onKeyDownCapture={onKeyDown}>
-      <InlineEditor
-        value={text}
-        label={t('message.edit')}
-        onChange={onChange}
-        onSave={save}
-        onCancel={onCancel}
-        className={css.input}
-      />
+      <div className={css.field}>
+        {/*
+          * The field's width comes from the draft, not from the row: a textarea's
+          * intrinsic width follows its cols attribute rather than its value, so
+          * this hidden copy of the text carries the bubble's width family while
+          * the field itself overlays it. It holds no keyboard or pointer target.
+          */}
+        <span className={css.sizer} aria-hidden="true" dir="auto">{text}</span>
+        <InlineEditor
+          value={text}
+          label={t('message.edit')}
+          onChange={onChange}
+          onSave={save}
+          onCancel={onCancel}
+          className={css.input}
+        />
+      </div>
       <div className={css.actions}>
         <Tooltip label={cancelLabel} side="bottom">
           <button type="button" className={`${css.action} ${css.cancel}`} aria-label={cancelLabel} onClick={onCancel}>

@@ -16,6 +16,13 @@ import css from './MessageItem.module.css'
 
 const EMPTY_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {}
 
+/**
+ * Boolean `inert` attribute for read-only context beside an active editor.
+ * React 18's element props do not declare it; an empty value still sets the
+ * HTML attribute that removes the subtree from focus and hit testing.
+ */
+const INERT = { inert: '' } as const
+
 type UserImage = Extract<UserMessageNode['content'][number], { type: 'image' }>
 type UserFile = Extract<UserMessageNode['content'][number], { type: 'file' }>
 function contentParts(content: readonly unknown[]): {
@@ -235,12 +242,33 @@ function UserStyleBubble({
       data-chat-steering-batch={batchStart ? 'start' : undefined}
     >
       {renderSlotChain('conversation.chat.user.before', { source: node.data.source, kind: node.kind }, { fallback: null })}
-      {editor ?? renderFactorySlot('conversation.chat.user.content', {
-        content: prepared,
-        loadImage,
-        facts,
-        interactive,
-      })}
+      {editor === undefined
+        ? renderFactorySlot('conversation.chat.user.content', {
+          content: prepared,
+          loadImage,
+          facts,
+          interactive,
+        })
+        : (
+          <div className={css.editBlock} data-message-edit-block="">
+            {prepared.attachments.length > 0 && (
+              // Editing changes the text only: the message's own attachments
+              // stay in view above the editor, rendered by the Content Factory
+              // with the text suppressed. They are read-only context for the
+              // edit and stay out of the tab order; `inert` is untyped under
+              // React 18.
+              <div className={css.editAttachments} data-message-edit-attachments="" {...INERT}>
+                {renderFactorySlot('conversation.chat.user.content', {
+                  content: { ...prepared, text: '', extraBlocks: [] },
+                  loadImage,
+                  facts,
+                  interactive: false,
+                })}
+              </div>
+            )}
+            {editor}
+          </div>
+        )}
       {editor === undefined ? actions?.(prepared.text) : null}
     </div>
   )

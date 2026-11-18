@@ -81,6 +81,18 @@ describe('message editor', () => {
     expect(onCancel).toHaveBeenCalledOnce()
   })
 
+  it('sizes the field from a hidden twin of the draft instead of the row', () => {
+    const { field } = editor('sent text')
+    const sizer = field.parentElement?.querySelector('[aria-hidden="true"]')
+    expect(sizer?.tagName).toBe('SPAN')
+    // The field's width comes from the text; the twin carries it under the same
+    // base direction, contributes no text, and owns no keyboard target.
+    expect(sizer?.textContent).toBe('sent text')
+    expect(sizer?.getAttribute('dir')).toBe('auto')
+    expect(field.parentElement?.children).toHaveLength(2)
+    expect(screen.queryAllByRole('textbox')).toHaveLength(1)
+  })
+
   it('refuses an empty edit from both the button and Enter', () => {
     const { onSave, field } = editor('   ')
     expect(screen.getByRole('button', { name: t('message.editSave') })).toHaveProperty('disabled', true)

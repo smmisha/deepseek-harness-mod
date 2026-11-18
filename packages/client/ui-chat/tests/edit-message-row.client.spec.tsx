@@ -25,6 +25,14 @@ import { unusedImageLoader } from './reasoning-component-fixture.tsx'
 const t = makeTranslate(en, commonEn)
 const SID = SessionId('session-user-row')
 const SHARED = { kind: 'user', principal: { kind: 'share-viewer', shareId: 'share-1', actor: { subjectId: 'subject-42' } } }
+const IMAGE_BLOCK = {
+  type: 'image',
+  attachment: { attachmentId: 'sha256:aa', mediaType: 'image/png', bytes: 1_024, width: 640, height: 320, name: 'shot.png' },
+}
+const FILE_BLOCK = {
+  type: 'file',
+  attachment: { attachmentId: 'sha256:bb', name: 'notes.txt', bytes: 2_048 },
+}
 
 /** Minimal Session snapshot carrying the run bit the row reads. */
 function sessionSnapshot(running: boolean): SessionSnapshot {
@@ -59,6 +67,8 @@ interface RowOptions {
   readonly replacedAffordance?: boolean
   /** Stand-in for the composer's focus hand-off; omitted leaves the keyboard where it was. */
   readonly claimFocus?: () => void
+  /** Content blocks appended after the message text, in display order. */
+  readonly attachments?: readonly unknown[]
 }
 
 interface RowBench {
@@ -67,7 +77,18 @@ interface RowBench {
     focus: ReturnType<typeof vi.fn>
     submit: ReturnType<typeof vi.fn>
   }
+  /** Every prepared content the row handed to the user content Factory. */
+  readonly contentCalls: UserContentInput[]
   readonly setRunning: (running: boolean) => void
+}
+
+/** One attachment name the row's content probe rendered. */
+function attachmentNames(content: UserContentInput['content']): string[] {
+  return content.attachments.map(attachment => attachment.type === 'file'
+    ? attachment.file.name
+    : 'attachment' in attachment.image
+      ? attachment.image.attachment.name ?? ''
+      : attachment.image.preview.name ?? '')
 }
 
 function renderRow(text = 'hello', options: RowOptions = {}): RowBench {
@@ -86,10 +107,18 @@ function renderRow(text = 'hello', options: RowOptions = {}): RowBench {
     submit,
     focus,
   }
+  const contentCalls: UserContentInput[] = []
   const session = createSnapshotStore(sessionSnapshot(options.running ?? false))
   const renderFactorySlot: ChatNodeViewProps['renderFactorySlot'] = (name, input) => {
     if (name === 'conversation.chat.user.content') {
-      return <span data-content="">{(input as UserContentInput).content.text}</span>
+      const content = (input as UserContentInput).content
+      contentCalls.push(input as UserContentInput)
+      return (
+        <span data-content="">
+          {content.text}
+          {content.attachments.length > 0 && <span data-attachments="">{attachmentNames(content).join(',')}</span>}
+        </span>
+      )
     }
     if (name === 'conversation.chat.user.actions') {
       const action = input as UserActionProps
@@ -113,7 +142,7 @@ function renderRow(text = 'hello', options: RowOptions = {}): RowBench {
     kind: 'user',
     seq: 7,
     time: 7_000,
-    content: [{ type: 'text', text }] as never,
+    content: [{ type: 'text', text }, ...options.attachments ?? []] as never,
     source: SHARED,
   }
   const node = {
@@ -137,6 +166,7 @@ function renderRow(text = 'hello', options: RowOptions = {}): RowBench {
   render(<UserMessageNodeView {...props as ChatNodeViewProps<'user'>} renderSlotChain={renderSlotChain} />)
   return {
     inputActions: { setDraft, focus, submit },
+    contentCalls,
     setRunning: (running) => { act(() => { session.set(sessionSnapshot(running)) }) },
   }
 }
@@ -277,5 +307,53 @@ describe('user message row editing', () => {
     expect(document.querySelector('[data-content]')?.textContent).toBe('sent text')
     bench.setRunning(false)
     expect(screen.getByRole('textbox', { name: t('message.edit') })).toHaveProperty('value', 'half-typed')
+  })
+})
+
+describe('user message row editing context', () => {
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  it('keeps the message attachments visible above the editor, out of the tab order', () => {
+    const bench = renderRow('sent text', { attachments: [IMAGE_BLOCK, FILE_BLOCK] })
+    openEditor()
+    const context = document.querySelector('[data-message-edit-attachments]')
+    expect(context).not.toBeNull()
+    // Read-only context for the edit: the attachments stay in view but never
+    // join the keyboard order of the editor.
+    expect(context?.hasAttribute('inert')).toBe(true)
+    expect(context?.textContent).toContain('shot.png')
+    expect(context?.textContent).toContain('notes.txt')
+    const block = document.querySelector('[data-message-edit-block]')
+    expect(block?.firstElementChild).toBe(context)
+    expect(block?.lastElementChild?.hasAttribute('data-message-edit')).toBe(true)
+    // The attachments are context, so the row never asks the editor to carry them.
+    expect(screen.getByRole('textbox', { name: t('message.edit') })).toHaveProperty('value', 'sent text')
+    expect(bench.contentCalls.at(-1)?.content).toMatchObject({ text: '', extraBlocks: [] })
+    expect(bench.contentCalls.at(-1)?.content.attachments).toHaveLength(2)
+  })
+
+  it('edits only the text and leaves the message attachments in place', () => {
+    const bench = renderRow('sent text', { attachments: [IMAGE_BLOCK] })
+    const field = openEditor()
+    fireEvent.change(field, { target: { value: 'sent text, corrected' } })
+    fireEvent.click(screen.getByRole('button', { name: t('message.editSave') }))
+    expect(bench.inputActions.setDraft).toHaveBeenCalledExactlyOnceWith('sent text, corrected')
+    // The message keeps its own attachments: the resting row renders them with
+    // the unchanged text after the edit closes.
+    const restored = bench.contentCalls.at(-1)?.content
+    expect(restored?.text).toBe('sent text')
+    expect(restored?.attachments).toHaveLength(1)
+    expect(document.querySelector('[data-message-edit-attachments]')).toBeNull()
+    expect(document.querySelector('[data-attachments]')?.textContent).toBe('shot.png')
+  })
+
+  it('opens no attachment context for a message that has none', () => {
+    renderRow('sent text')
+    openEditor()
+    expect(document.querySelector('[data-message-edit-attachments]')).toBeNull()
+    expect(document.querySelector('[data-message-edit-block]')?.children).toHaveLength(1)
   })
 })
