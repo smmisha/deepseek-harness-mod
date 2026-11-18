@@ -245,6 +245,13 @@ describe('Session queue commands', () => {
     })), 'session/not-found')
     expect(controller.cancel({ sessionId: agent.id })).toEqual({ accepted: true })
     expect(cancel).toHaveBeenCalledWith({ kind: 'user' }, { keepInbox: true })
+
+    // A graceful request asks the loop to end at its step boundary instead of
+    // aborting the live turn; the omission default above stays immediate.
+    expect(controller.cancel({ sessionId: agent.id, mode: 'graceful' })).toEqual({ accepted: true })
+    expect(cancel).toHaveBeenLastCalledWith({ kind: 'user' }, { mode: 'graceful' })
+    expect(controller.cancel({ sessionId: agent.id, mode: 'immediate' })).toEqual({ accepted: true })
+    expect(cancel).toHaveBeenCalledTimes(3)
     await ctx.fiber.dispose()
   })
 

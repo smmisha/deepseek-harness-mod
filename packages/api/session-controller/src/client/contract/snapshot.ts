@@ -3,7 +3,7 @@ import type { FileAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
-import type { SessionRequestId } from '../../types.ts'
+import type { SessionStopMode, SessionRequestId } from '../../types.ts'
 
 /** One image displayed by a local submission echo before durable admission. */
 export interface PendingSubmissionImage {
@@ -71,6 +71,13 @@ export interface SessionSnapshot {
   /** Local prompt-submission echoes the Host accepted and that are not yet observed as durable events or queue occurrences. */
   readonly pendingSubmissions: readonly PendingSubmission[]
   readonly running: boolean
+  /**
+   * Operator stop request accepted by the Host and still waiting for its
+   * boundary: `graceful` shows the run is finishing its current step, while
+   * `immediate` is the brief window before the abort lands. Absent when no
+   * stop request is pending; cleared when the running bit drops.
+   */
+  readonly stopRequested?: SessionStopMode
   readonly subagent: {
     readonly address: SubagentAddress
   } | null

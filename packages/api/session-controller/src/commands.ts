@@ -519,9 +519,11 @@ export class SessionCommandController {
   }
 
   /**
-   * Cancel one live ordinary Agent while retaining pending inbox work.
-   * @param request - Session whose active Agent turn is cancelled.
-   * @returns acknowledgement that cancellation was requested.
+   * Stop one live ordinary Agent while retaining pending inbox work. A
+   * `graceful` request finishes the current step and closes the turn as
+   * `stopped`; `immediate` (the omission default) aborts the active turn.
+   * @param request - Session whose active Agent turn is stopped, and its mode.
+   * @returns acknowledgement that the stop was requested.
    */
   cancel(request: SessionCancelRequest): SessionCancelValue {
     const agent = this.ctx.agents.get(request.sessionId)
@@ -535,7 +537,8 @@ export class SessionCommandController {
     if (hasApiSessionSubagentOwner(agent.session)) {
       throw apiSessionSubagentOwnershipError(request.sessionId)
     }
-    agent.cancel({ kind: 'user' }, { keepInbox: true })
+    if (request.mode === 'graceful') agent.cancel({ kind: 'user' }, { mode: 'graceful' })
+    else agent.cancel({ kind: 'user' }, { keepInbox: true })
     return { accepted: true }
   }
 
