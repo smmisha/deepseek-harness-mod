@@ -165,6 +165,7 @@ export const ukChat = {
   'message.turnProcess.thoughtForAWhile': 'Міркував деякий час',
   'message.turnProcess.separator': ' · ',
   'message.stopped': 'Зупинено',
+  'message.stoppedAtStep': 'Зупинено після завершення поточного кроку',
   'message.branch': 'Відгалузити в нову розмову',
   'message.branchUnavailable': 'Доступно лише для останнього повідомлення завершеного ходу',
   'message.retry.active': 'Повторення запиту до моделі',
