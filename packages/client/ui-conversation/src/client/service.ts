@@ -24,7 +24,7 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   ComposerAttachment, ComposerFileAttachment, ComposerImageAttachment, DraftFileUpload,
 } from './contract/slots.ts'
-import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { QueueAction, SessionStopMode } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { ComposerBlocks } from './contract/composer-blocks.ts'
 import type {
@@ -59,10 +59,12 @@ export interface IConversation {
    */
   updateQueue(itemId: MessageId, action: QueueAction): Promise<void>
   /**
-   * Cancel the scoped session's in-flight turn while preserving its pending Queue.
+   * Stop the scoped session's in-flight turn while preserving its pending Queue.
+   * @param mode - `graceful` finishes the current step and then closes the turn;
+   *   `immediate` aborts it now. Omitted uses `graceful`.
    * @returns completion; failures reject as in send.
    */
-  cancel(): Promise<void>
+  cancel(mode?: SessionStopMode): Promise<void>
   /**
    * Pull one older history page for the scoped session.
    * @returns completion of the page pull.
@@ -545,10 +547,14 @@ export class ConversationController extends Service implements IConversation {
     }
   }
 
-  /** Cancel the scoped session's in-flight turn while preserving Queue (failures land in promptError and reject, as in send). */
-  async cancel(): Promise<void> {
+  /**
+   * Stop the scoped session's in-flight turn while preserving Queue (failures
+   * land in promptError and reject, as in send).
+   * @param mode - stop mode; omitted uses `graceful`.
+   */
+  async cancel(mode?: SessionStopMode): Promise<void> {
     const session = this.scopedSession('cancel')
-    const result = await session.cancel()
+    const result = await session.cancel(mode)
     if (!result.ok) throw new Error(`conversation.cancel failed: ${result.error.code}: ${result.error.message}`)
   }
 

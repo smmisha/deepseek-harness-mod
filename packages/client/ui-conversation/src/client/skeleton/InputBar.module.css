@@ -439,6 +439,47 @@
   cursor: progress;
 }
 
+/* An armed stop keeps the stop circle solid while it finishes the current step
+   or waits for the abort to land. */
+.primary[data-stopping]:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+/* Split stop seat: the main circle plus the mode caret, aligned as one control. */
+.stopSplit {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.stopCaret {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transform: translateY(-2px);
+}
+
+@media (hover: hover) {
+  .stopCaret:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.stopCaret:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .sendingSpinner {
   animation: input-sending 800ms linear infinite;
 }

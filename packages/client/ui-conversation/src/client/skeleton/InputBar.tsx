@@ -38,6 +38,7 @@ import { resolveSubmitMode } from '../input/submission-policy.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { isImageMediaType } from '../service.ts'
 import { ContextMeter } from './ContextMeter.tsx'
+import { StopControl, StopGlyph, StopOptionsMenu } from './StopControl.tsx'
 import { observeControlRow } from './control-row-layout.ts'
 import css from './InputBar.module.css'
 
@@ -70,6 +71,9 @@ export const InputBar = memo(function InputBar({
   useEffect(() => { setActivity(false) }, [sessionId])
   const promptError = useSession(s => s.promptError) ?? null
   const running = useSession(s => s.running) ?? false
+  // Host-accepted stop request still waiting for its ending: the run keeps its
+  // running bit through a graceful finish, so the stop control arms from this.
+  const stopRequested = useSession(s => s.stopRequested)
   const retryableFailure = useProjection('conversationContinuation') ?? undefined
   const pendingHumanInput = useProjection('inbox', inbox =>
     inbox?.['next-step'].some(message =>
@@ -384,7 +388,9 @@ export const InputBar = memo(function InputBar({
   const primarySubmitMode = resolveSubmitMode(busyEnter, running, 'enter', steeringAvailable)
   const plainMessageDraft = !empty && input?.phase === 'plain' && !draft.trimStart().startsWith('/')
   const primaryLabel = primaryStops
-    ? t('input.stop')
+    ? stopRequested === 'graceful' ? t('input.stop.armed')
+      : stopRequested === 'immediate' ? t('input.stop.armedImmediate')
+        : t('input.stop.graceful')
     : sending
       ? t('input.sending')
       : primaryRetries
@@ -394,7 +400,7 @@ export const InputBar = memo(function InputBar({
           : t('input.send')
   const onPrimary = (): void => {
     if (primaryStops) {
-      stopAction?.()
+      stopAction?.('graceful')
       return
     }
     if (primaryRetries) {
@@ -544,37 +550,53 @@ export const InputBar = memo(function InputBar({
               {renderSlot('conversation.input.activity', { locked, onActiveChange: setActivity })}
             </div>}
             {interruptible && !cancelDenied && (
-              <Tooltip label={t('input.stop')} shortcutKeys={stopKeys} side="top" delayMs={500} disabled={stopAction === undefined} portal>
-                <button
-                  type="button"
-                  className={css.primary}
-                  aria-label={t('input.stop')}
+              subagent === null ? (
+                <StopControl
+                  t={t}
+                  armed={stopRequested}
                   disabled={stopAction === undefined}
-                  onMouseDown={keepFocus}
-                  onClick={stopAction}
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
-                    <rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" />
-                  </svg>
-                </button>
-              </Tooltip>
+                  shortcutKeys={stopKeys}
+                  keepFocus={keepFocus}
+                  onStop={(mode) => { stopAction?.(mode) }}
+                />
+              ) : (
+                // Stopping a continuable child session is an activation-level
+                // interrupt shared with external backends, so it stays immediate.
+                <Tooltip label={t('input.stop')} shortcutKeys={stopKeys} side="top" delayMs={500} disabled={stopAction === undefined} portal>
+                  <button
+                    type="button"
+                    className={css.primary}
+                    aria-label={t('input.stop')}
+                    data-stop=""
+                    disabled={stopAction === undefined}
+                    onMouseDown={keepFocus}
+                    onClick={() => { stopAction?.('immediate') }}
+                  >
+                    <StopGlyph />
+                  </button>
+                </Tooltip>
+              )
             )}
             {(primaryStops ? cancelDenied : promptDenied) ? null : (
-              <Tooltip label={primaryStops ? t('input.stop') : primaryLabel} shortcutKeys={primaryStops ? stopKeys : undefined} side="top" delayMs={500} disabled={primaryDisabled} portal>
+              <Tooltip label={primaryLabel} shortcutKeys={primaryStops ? stopKeys : undefined} side="top" delayMs={500} disabled={primaryDisabled} portal>
                 <button
                   type="button"
                   className={css.primary}
                   aria-label={primaryLabel}
-                  aria-busy={sending}
+                  aria-busy={sending || (primaryStops && stopRequested !== undefined)}
                   data-sending={sending ? '' : undefined}
-                  disabled={primaryDisabled}
+                  data-stopping={primaryStops && stopRequested !== undefined ? '' : undefined}
+                  disabled={primaryDisabled || (primaryStops && stopRequested !== undefined)}
                   onMouseDown={keepFocus}
                   onClick={onPrimary}
                 >
                   {primaryStops ? (
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
-                      <rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" />
-                    </svg>
+                    stopRequested === undefined ? <StopGlyph /> : (
+                      <svg className={css.sendingSpinner} viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+                        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="2" />
+                        <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    )
                   ) : sending ? (
                     <svg className={css.sendingSpinner} viewBox="0 0 16 16" width="16" height="16" aria-hidden>
                       <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="2" />
@@ -589,6 +611,15 @@ export const InputBar = memo(function InputBar({
                   )}
                 </button>
               </Tooltip>
+            )}
+            {primaryStops && !cancelDenied && (
+              <StopOptionsMenu
+                t={t}
+                armed={stopRequested}
+                disabled={stopAction === undefined}
+                keepFocus={keepFocus}
+                onStop={(mode) => { stopAction?.(mode) }}
+              />
             )}
           </div>
         </div>
