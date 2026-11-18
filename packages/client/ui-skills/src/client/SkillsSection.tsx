@@ -10,9 +10,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Button, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconFolderOpenOutlineRegular,
-  IconNewChatOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular,
-  IconTrashOutlineRegular, IconWarningTriangleOutlineRegular, Input, Menu, MenuItemButton, Modal, SegmentedControl,
-  StateDot, Switch, Tooltip,
+  IconLayersOutlineRegular, IconNewChatOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular,
+  IconSearchOutlineRegular, IconTrashOutlineRegular, IconWarningTriangleOutlineRegular, Input, Menu, MenuItemButton,
+  Modal, SegmentedControl, StateDot, Switch, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AddSkillFolderResult, LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
@@ -359,6 +359,41 @@ function FilterMenu({ label, current, options, onSelect }: {
   )
 }
 
+/**
+ * The grouping switch's narrow form: one icon whose tooltip and accessible name
+ * state the mode in effect, opening the two modes as a menu. Two unnamed icons
+ * could not say "categories" against "sources"; the menu names both, and marks
+ * the current one the way the toolbar's filter menus do.
+ */
+function GroupingMenu({ t, grouping, onChange }: {
+  readonly t: SkillsTranslate
+  readonly grouping: SkillsGrouping
+  readonly onChange: (next: SkillsGrouping) => void
+}): ReactNode {
+  const [open, setOpen] = useState(false)
+  const dismiss = (): void => { setOpen(false) }
+  const name = t('groupingCompact', { mode: t(grouping === 'categories' ? 'groupCategories' : 'groupSources') })
+  return (
+    <Menu open={open} onClose={dismiss} align="end" portal autoFocus className={css.groupingCompact}
+      listClassName={css.groupingMenu}
+      anchor={(
+        <Tooltip label={name} side="bottom" delayMs={500} focusDelayMs={500} portal disabled={open}>
+          <Button variant="outline" size="sm" className={css.actionButton} aria-label={name}
+            aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
+            <IconLayersOutlineRegular size={13} aria-hidden="true" />
+          </Button>
+        </Tooltip>
+      )}>
+      {GROUPINGS.map(option => (
+        <MenuItemButton key={option.value} current={option.value === grouping}
+          onSelect={() => { dismiss(); onChange(option.value) }}>
+          {t(option.key)}
+        </MenuItemButton>
+      ))}
+    </Menu>
+  )
+}
+
 /** Props of one catalog row. */
 interface SkillRowProps {
   readonly t: SkillsTranslate
@@ -611,6 +646,7 @@ function EmptyState({ t, createWithAi, onAddFolder, onBrowseCatalog }: {
 export function SkillsSection(props: SkillsSectionProps): ReactNode {
   const { t, useSessions, load, setSource, setSkill, addFolder, removeFolder, pickFolder, createWithAi, useStore, actions } = props
   const [sources, setSources] = useState<readonly LocalSourceView[] | null>(null)
+  const [reloading, setReloading] = useState(false)
   const [folderDialog, setFolderDialog] = useState(false)
   const [catalogDialog, setCatalogDialog] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -639,6 +675,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
   const refresh = async (): Promise<void> => {
     const request = latestLoad.current + 1
     latestLoad.current = request
+    setReloading(true)
     try {
       const next = await load(currentCwd.current)
       if (latestLoad.current !== request) return
@@ -648,6 +685,9 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
       if (latestLoad.current !== request) return
       // A failed reload keeps the described rows on screen and says they are stale.
       setFailure(error instanceof Error ? error.message : String(error))
+    } finally {
+      // A superseded request leaves the newer one's busy state alone.
+      if (latestLoad.current === request) setReloading(false)
     }
   }
 
@@ -788,9 +828,17 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
               placeholder={t('searchPlaceholder')} aria-label={t('search')}
               onChange={(event) => { setQuery(event.target.value) }} />
             <span className={css.toolbarEnd}>
-              <SegmentedControl id="skills-grouping" label={t('groupingLabel')} value={grouping}
+              <Tooltip label={t('refresh')} side="bottom" delayMs={500} focusDelayMs={500} portal
+                disabled={sources === null || reloading}>
+                <Button variant="outline" size="sm" className={css.actionButton} aria-label={t('refresh')}
+                  aria-busy={reloading} disabled={sources === null || reloading}
+                  icon={reloading ? <StateDot state="ongoing" size={13} /> : <IconRefreshOutlineRegular size={13} />}
+                  onClick={() => { void refresh() }} />
+              </Tooltip>
+              <SegmentedControl id="skills-grouping" className={css.groupingWide} label={t('groupingLabel')} value={grouping}
                 options={GROUPINGS.map(option => ({ value: option.value, label: t(option.key) }))}
                 onChange={(next) => { actions.setGrouping(next) }} />
+              <GroupingMenu t={t} grouping={grouping} onChange={(next) => { actions.setGrouping(next) }} />
               <AddSkillsMenu t={t} onAddFolder={() => { setNotice(null); setFolderDialog(true) }}
                 onBrowseCatalog={() => { setCatalogDialog(true) }} createWithAi={createWithAi} />
             </span>

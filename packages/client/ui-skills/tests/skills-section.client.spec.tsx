@@ -1032,3 +1032,58 @@ describe('SkillsSection load and write states', () => {
     })
   })
 })
+
+describe('SkillsSection toolbar', () => {
+  it('refreshes the inventory and holds the action while the reload runs', async () => {
+    const pending: ((value: readonly LocalSourceView[]) => void)[] = []
+    const load = vi.fn()
+      .mockResolvedValueOnce(SOURCES)
+      .mockImplementationOnce(() => new Promise<readonly LocalSourceView[]>((resolve) => { pending.push(resolve) }))
+    mount({ load })
+    await screen.findByText('app-skill')
+    const control = screen.getByRole('button', { name: 'Refresh' })
+    expect(control).toHaveProperty('disabled', false)
+    expect(control.getAttribute('aria-busy')).toBe('false')
+
+    fireEvent.click(control)
+    await waitFor(() => { expect(load).toHaveBeenCalledTimes(2) })
+    // A reload in flight says so and cannot be started twice.
+    expect(screen.getByRole('button', { name: 'Refresh' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Refresh' }).getAttribute('aria-busy')).toBe('true')
+
+    await act(async () => { pending[0]?.(SOURCES) })
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Refresh' })).toHaveProperty('disabled', false) })
+    expect(screen.getByRole('button', { name: 'Refresh' }).getAttribute('aria-busy')).toBe('false')
+  })
+
+  it('keeps the refresh action inert until the first inventory answers', async () => {
+    const pending: ((value: readonly LocalSourceView[]) => void)[] = []
+    mount({ load: () => new Promise<readonly LocalSourceView[]>((resolve) => { pending.push(resolve) }) })
+    expect(await screen.findByRole('button', { name: 'Refresh' })).toHaveProperty('disabled', true)
+
+    await act(async () => { pending[0]?.(SOURCES) })
+    await screen.findByText('app-skill')
+    expect(screen.getByRole('button', { name: 'Refresh' })).toHaveProperty('disabled', false)
+  })
+
+  it('groups from the compact menu, naming the mode in effect', async () => {
+    mountDefault()
+    await screen.findByText('alpha-video-one')
+    const control = screen.getByRole('button', { name: 'Choose grouping, current Categories' })
+    expect(control.getAttribute('aria-haspopup')).toBe('menu')
+    expect(control.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(control)
+    expect(await screen.findByRole('menuitem', { name: 'Categories' })).toBeTruthy()
+    // The open menu marks the mode the board is in and leaves the other unmarked.
+    expect(screen.getByRole('menuitem', { name: 'Categories' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('menuitem', { name: 'Sources' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Choose grouping, current Categories' }).getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sources' }))
+    expect(await screen.findByRole('switch', { name: 'Source Alpha: on' })).toBeTruthy()
+    // The switch retires each mode it leaves, and its name states the new one.
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Choose grouping, current Sources' })).toBeTruthy()
+  })
+})

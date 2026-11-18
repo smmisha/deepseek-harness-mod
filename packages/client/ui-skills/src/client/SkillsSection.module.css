@@ -1,13 +1,21 @@
 /* Skills tab: a catalog of the skills the Host discovered. The toolbar is one
-   search field, the grouping switch, and the split add button; below it sit the
-   two filters and a quiet summary. The board groups skills by category or by
-   source; each section header carries a disclosure, the section name, and its
-   count, and a source header adds the mark, kind, folder, remove control, and
-   switch. Each skill is a catalog tile of mark, name and source, description,
-   state, and the quiet switch. Selecting a tile opens the detail panel the tab
-   renders beside the list. */
+   search field, the refresh action, the grouping switch, and the split add
+   button; below it sit the two filters and a quiet summary. The board groups
+   skills by category or by source; each section header carries a disclosure, the
+   section name, and its count, and a source header adds the mark, kind, folder,
+   remove control, and switch. Each skill is a catalog tile of mark, name and
+   source, description, state, and the quiet switch. Selecting a tile opens the
+   detail panel the tab renders beside the list.
+
+   Below the Plugins page's 600px bar width the toolbar collapses the way that
+   page's own actions do: the search takes its own line, every action becomes an
+   icon, and the grouping switch hands its two modes to one icon menu. The tab
+   column is the page bar minus its 20px inline insets below 768px, so the same
+   moment is `width < 560px` here; the tab folds with the page header, never after
+   it. */
 
 .tab {
+  container: skills-tab / inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--dsw-space-3, 12px);
@@ -35,6 +43,32 @@
   align-items: center;
   gap: 8px;
   margin-inline-start: auto;
+}
+
+/* The toolbar's icon actions: the Plugins page's 32px geometry, one step up from
+   the 28px sm capsule, so refresh and the compact grouping menu line up with the
+   add button's halves. */
+.actionButton {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--dsw-radius-md);
+}
+
+/* The grouping switch keeps its full trailing position above the collapse; the
+   menu that replaces it below is hidden until then. */
+.groupingWide {
+  flex: none;
+}
+
+.groupingCompact {
+  display: none;
+}
+
+.groupingMenu {
+  min-width: 180px;
+  max-width: min(320px, calc(100vw - 48px));
 }
 
 /* Add skills: the Plugins page's split button — a primary half and a chevron
@@ -101,9 +135,14 @@
 }
 
 /* Narrow panes keep the icon halves and drop the label; the button keeps its
-   accessible name from aria-label. The search takes its own line so the switch
-   and the add button never squeeze it. */
-@media (max-width: 560px) {
+   accessible name from aria-label. The search takes its own line so the actions
+   never squeeze it, and the grouping switch gives way to the icon menu. */
+@container skills-tab (width < 560px) {
+  .search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
   .addLabel {
     display: none;
   }
@@ -114,9 +153,19 @@
     padding-inline: 0;
   }
 
-  .search {
+  .groupingWide {
+    display: none;
+  }
+
+  .groupingCompact {
+    display: inline-flex;
+  }
+
+  /* The count keeps a whole line instead of trailing the two filters off the edge. */
+  .summary {
     flex: 1 1 100%;
-    max-width: none;
+    margin-inline-start: 0;
+    text-align: end;
   }
 }
 
