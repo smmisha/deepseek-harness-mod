@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -21,9 +22,15 @@ const QUEUE_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {
   trimWhitespace: true,
 }
 
-function textOf(content: InboxState['next-turn'][number]['content']): string | null {
-  if (!content.every(block => block.type === 'text')) return null
-  return content.map(block => block.text).join('')
+/**
+ * Literal text carried by one queued row. Image and file blocks stay with the
+ * row; the Host preserves them across an edit, so the editor works on the text
+ * alone and an attachment-only row starts from an empty draft.
+ * @param content - the row's durable content blocks.
+ * @returns the row's joined text blocks.
+ */
+function textOf(content: InboxState['next-turn'][number]['content']): string {
+  return content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
 }
 
 /** Queue operations injected by the session-scoped registration. */
@@ -127,11 +134,24 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
   const [busy, setBusy] = useState<MessageId | null>(null)
   const [collapsed, setCollapsed] = useState(true)
   const listId = useId()
+  // The edited row's pencil unmounts with its action group, so it is the focus
+  // return target once the editor closes.
+  const editTrigger = useRef<HTMLButtonElement | null>(null)
+  const returningFocus = useRef(false)
 
   useEffect(() => {
     if (rowCount === 0 && !collapsed) setCollapsed(true)
     if (editing !== null && (!queueMutable || !queue.some(row => row.id === editing.id))) setEditing(null)
   }, [collapsed, editing, queue, queueMutable, rowCount])
+
+  useLayoutEffect(() => {
+    if (!returningFocus.current || editing !== null) return
+    returningFocus.current = false
+    // The pencil is re-attached before this commit's layout effects run. A row
+    // the queue already retired has no affordance left to focus.
+    const trigger = editTrigger.current
+    if (trigger !== null && trigger.isConnected && !trigger.disabled) trigger.focus({ preventScroll: true })
+  }, [editing])
 
   if (rowCount === 0) return null
 
@@ -156,13 +176,28 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
     }
   }
 
+  const closeEdit = (): void => {
+    returningFocus.current = true
+    setEditing(null)
+  }
+
   const saveEdit = async (): Promise<void> => {
     if (editing === null || editing.text.trim() === '') return
+    // The Host keeps the row's own attachments; the payload carries text only.
     if (await applyAction(
       editing.id,
       { kind: 'edit', content: [{ type: 'text', text: editing.text }] },
       t('queue.editFailed'),
-    )) setEditing(null)
+    )) closeEdit()
+  }
+
+  // Escape cancels wherever focus sits in the editing row, including its Save
+  // and Cancel buttons, and stays out of the app's own Escape handling.
+  const handleEditorKeyDown = (event: KeyboardEvent<HTMLLIElement>): void => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    closeEdit()
   }
 
   return (
@@ -192,47 +227,51 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
             const attachments = queueAttachments(row.content)
             const text = textOf(row.content)
             return (
-              <li key={row.id} className={css.row}>
+              <li
+                key={row.id}
+                className={css.row}
+                onKeyDownCapture={editing?.id === row.id ? handleEditorKeyDown : undefined}
+              >
                 {/* Single-item strip has no count header, so the row itself carries the queue glyph. */}
                 {rowCount === 1 && <span className={css.lead} aria-hidden><IconQueueOutlineRegular /></span>}
+                {/* Attachments stay visible while the text is edited: the Host
+                    keeps them, so the editor never looks like it drops them. */}
+                {attachments.length > 0 && (
+                  <span className={css.attachments}>
+                    {attachments.map((item, index) => item.type === 'image'
+                      ? (
+                        <QueueThumb
+                          key={`${item.attachment.attachmentId}:${index}`}
+                          attachment={item.attachment}
+                          loadImage={loadImage}
+                          label={t('queue.image')}
+                        />
+                      )
+                      : (
+                        <QueueFile
+                          key={`${item.attachment.attachmentId}:${item.attachment.name}:${index}`}
+                          attachment={item.attachment}
+                          label={t('queue.file', { name: item.attachment.name })}
+                        />
+                      ))}
+                  </span>
+                )}
                 {editing?.id === row.id
                   ? (
                     <InlineEditor
                       value={editing.text}
                       label={t('queue.edit')}
-                      onChange={(text) => { setEditing({ id: row.id, text }) }}
+                      onChange={(edited) => { setEditing({ id: row.id, text: edited }) }}
                       onSave={() => { void saveEdit() }}
-                      onCancel={() => { setEditing(null) }}
+                      onCancel={closeEdit}
                     />
                   )
                   : (
-                    <>
-                      {attachments.length > 0 && (
-                        <span className={css.attachments}>
-                          {attachments.map((item, index) => item.type === 'image'
-                            ? (
-                              <QueueThumb
-                                key={`${item.attachment.attachmentId}:${index}`}
-                                attachment={item.attachment}
-                                loadImage={loadImage}
-                                label={t('queue.image')}
-                              />
-                            )
-                            : (
-                              <QueueFile
-                                key={`${item.attachment.attachmentId}:${item.attachment.name}:${index}`}
-                                attachment={item.attachment}
-                                label={t('queue.file', { name: item.attachment.name })}
-                              />
-                            ))}
-                        </span>
-                      )}
-                      <span className={css.preview}>{renderFactorySlot('conversation.user.text', {
-                        text: row.content.filter(block => block.type === 'text').map(block => block.text).join(''),
-                        facts: QUEUE_TEXT_FACTS,
-                        interactive: false, ellipsis: true,
-                      })}</span>
-                    </>
+                    <span className={css.preview}>{renderFactorySlot('conversation.user.text', {
+                      text,
+                      facts: QUEUE_TEXT_FACTS,
+                      interactive: false, ellipsis: true,
+                    })}</span>
                   )}
                 {queueMutable && <div className={css.actions}>
                   {editing?.id === row.id
@@ -255,7 +294,7 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
                             className={css.action}
                             aria-label={t('queue.cancelEdit')}
                             disabled={busy !== null}
-                            onClick={() => { setEditing(null) }}
+                            onClick={closeEdit}
                           >
                             <IconCloseOutlineRegular size={14} />
                           </button>
@@ -264,17 +303,15 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
                     )
                     : (
                       <>
-                        <Tooltip portal label={t('queue.edit')} side="bottom" delayMs={500} disabled={text === null}>
+                        <Tooltip portal label={t('queue.edit')} side="bottom" delayMs={500}>
                           <button
                             type="button"
                             className={css.action}
                             aria-label={t('queue.edit')}
-                            // Disabled buttons fire no hover events, so the
-                            // unsupported hint stays a native title.
-                            title={text === null ? t('queue.edit.unsupported') : undefined}
-                            disabled={busy !== null || text === null}
-                            onClick={() => {
-                              if (text !== null) setEditing({ id: row.id, text: text })
+                            disabled={busy !== null}
+                            onClick={(event) => {
+                              editTrigger.current = event.currentTarget
+                              setEditing({ id: row.id, text })
                             }}
                           >
                             <IconEditOutlineRegular size={14} />

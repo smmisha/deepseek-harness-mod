@@ -144,7 +144,11 @@ export interface ModelCatalog {
 export type QueueAction =
   | {
     readonly kind: 'edit'
-    /** Non-empty text-only replacement content. */
+    /**
+     * Non-empty text-only replacement content. The Host keeps the queued
+     * message's own image and file blocks, so editing never drops or re-uploads
+     * an attachment the caller cannot name here.
+     */
     readonly content: readonly TextBlock[]
   }
   | { readonly kind: 'remove' }
