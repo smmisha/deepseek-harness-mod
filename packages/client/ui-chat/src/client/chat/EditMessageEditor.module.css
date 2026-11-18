@@ -12,11 +12,16 @@
 }
 
 /* The message editor is a long draft: start at a comfortable height and grow
-   until three times that, then scroll inside InlineEditor's own cap. */
+   until three times that, then scroll inside InlineEditor's own cap. The text
+   metrics are the bubble's, not InlineEditor's compact draft size, so editing
+   does not shrink the message or reflow it into a different line count. */
 .editor .input {
   width: 100%;
   min-height: 80px;
   max-height: 240px;
+  font-family: inherit;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
 }
 
 .actions {
