@@ -83,7 +83,7 @@ class GatedStreamAdapter extends LlmAdapter {
     this.requests.push(options)
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: 'hel' }
-    this.firstDelta.resolve()
+    this.firstDelta.resolve(undefined)
     await Promise.race([this.release.promise, aborted(options.signal)])
     yield { type: 'text-delta', index: 0, text: 'lo' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: 'hello' } }
