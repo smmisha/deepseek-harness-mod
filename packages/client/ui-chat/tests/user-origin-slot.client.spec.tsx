@@ -7,14 +7,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type {
   ChatConversationViewNode, SteeringMessageNode, UserMessageNode,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ChatNodeViewProps, UserContentInput } from '../src/client/contract/slots.ts'
-import { UserMessageNodeView } from '../src/client/chat/MessageItem.tsx'
+import { SteeringMessageNodeView, UserMessageNodeView } from '../src/client/chat/MessageItem.tsx'
 import { zh } from '../src/client/locale.ts'
 import { createUserContentFixture } from './user-content-component-fixture.tsx'
 import { unusedImageLoader } from './reasoning-component-fixture.tsx'
@@ -36,8 +36,28 @@ let renderUserContent: ReturnType<typeof createUserContentFixture>
 beforeEach(() => { renderUserContent = createUserContentFixture() })
 
 const renderUserFactory: ChatNodeViewProps['renderFactorySlot'] = (name, input) => {
+  if (name === 'conversation.chat.user.actions') return null
   if (name !== 'conversation.chat.user.content') throw new Error(`Unexpected Chat Factory: ${name}`)
   return renderUserContent(input as UserContentInput, () => null, t)
+}
+
+// The row reads the Session run bit and the composer draft face; neither is
+// exercised through this seat, so an idle Session and an inert draft suffice.
+const useIdleSession: ChatNodeViewProps['useSession'] = bindSnapshotSelector({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ running: false }),
+} as never)
+const inertInputActions: ChatNodeViewProps['inputActions'] = {
+  insertQuote: () => false,
+  captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
+  insertText: () => false,
+  setDraft: () => {},
+  persistDraft: () => {},
+  addAttachments: () => true,
+  removeAttachment: () => {},
+  pruneAttachments: () => {},
+  submit: () => {},
+  focus: () => {},
 }
 
 function viewProps(data: UserMessageNode): ChatNodeViewProps<'user'>
@@ -55,6 +75,7 @@ function viewProps(data: UserMessageNode | SteeringMessageNode): ChatNodeViewPro
   } as ChatConversationViewNode
   const props: Partial<Omit<ChatNodeViewProps, 'node'>> & { node: ChatConversationViewNode } = {
     node, t, loadImage: unusedImageLoader, renderFactorySlot: renderUserFactory, openFile: vi.fn(),
+    useSession: useIdleSession, inputActions: inertInputActions,
   }
   return props as ChatNodeViewProps<'user' | 'steering'>
 }
@@ -124,7 +145,7 @@ describe('official user renderer origin seat', () => {
     const renderSlotChain = vi.fn(() => <span data-test-origin="" />)
     const view = render(<>
       <UserMessageNodeView {...viewProps(userData)} {...userSlots} renderSlotChain={renderSlotChain} />
-      <UserMessageNodeView {...viewProps(steeringData)} renderSlotChain={() => null} />
+      <SteeringMessageNodeView {...viewProps(steeringData)} />
     </>)
     const steeringRow = view.container.lastElementChild!
     expect(steeringRow.textContent).toContain('steer')

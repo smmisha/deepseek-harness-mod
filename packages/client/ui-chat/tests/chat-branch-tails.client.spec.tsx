@@ -12,10 +12,7 @@ import type { ChatNodeViewProps, UserContentInput } from '../src/client/contract
 import {
   formatMessageClock, msUntilNextLocalMidnight, startOfLocalDay,
 } from '../src/client/chat/message-chrome.ts'
-import {
-  CompactionNodeView, ContextMessageNodeView, RetryNodeView, UnknownNodeView,
-  UserMessageNodeView,
-} from '../src/client/chat/MessageItem.tsx'
+import { CompactionNodeView, ContextMessageNodeView, RetryNodeView, SteeringMessageNodeView, UnknownNodeView, UserMessageNodeView } from '../src/client/chat/MessageItem.tsx'
 import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
 import { useDetailedPresentation } from './presentation-fixture.client.ts'
 import { unusedImageLoader } from './reasoning-component-fixture.tsx'
@@ -49,6 +46,26 @@ const useDetachedChat: ChatNodeViewProps['useChat'] = bindSnapshotSelector({
   getSnapshot: () => ({ order: [], nodes: new Map() }),
 } as never)
 
+// The row reads the Session run bit and the composer draft face; these fixtures
+// render one detached row, so an idle Session and an inert draft suffice.
+const useIdleSession: ChatNodeViewProps['useSession'] = bindSnapshotSelector({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ running: false }),
+} as never)
+
+const inertInputActions: ChatNodeViewProps['inputActions'] = {
+  insertQuote: () => false,
+  captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
+  insertText: () => false,
+  setDraft: () => {},
+  persistDraft: () => {},
+  addAttachments: () => true,
+  removeAttachment: () => {},
+  pruneAttachments: () => {},
+  submit: () => {},
+  focus: () => {},
+}
+
 interface MessageItemProps {
   readonly node: ConversationNode
   readonly t: ChatNodeViewProps['t']
@@ -78,18 +95,19 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
         : node,
   }
   const renderUserFactory: ChatNodeViewProps['renderFactorySlot'] = (name, input) => {
+    if (name === 'conversation.chat.user.actions') return null
     if (name !== 'conversation.chat.user.content') throw new Error(`Unexpected user Factory: ${name}`)
     return renderUserContent(input as UserContentInput, renderUserImages, translate)
   }
   const props: Partial<Omit<ChatNodeViewProps, 'node'>> & { node: ChatConversationViewNode } = {
     node: viewNode, t: translate, loadImage: unusedImageLoader, renderFactorySlot: renderUserFactory,
-    openFile: vi.fn(), useChat: useDetachedChat,
+    openFile: vi.fn(), useChat: useDetachedChat, useSession: useIdleSession, inputActions: inertInputActions,
   }
   switch (node.kind) {
     case 'user':
       return <UserMessageNodeView {...props as ChatNodeViewProps<'user'>} {...userSlots} />
     case 'steering':
-      return <UserMessageNodeView {...props as ChatNodeViewProps<'steering'>} renderSlotChain={() => null} />
+      return <SteeringMessageNodeView {...props as ChatNodeViewProps<'steering'>} />
     case 'context':
       return <ContextMessageNodeView {...props as ChatNodeViewProps<'context'>} />
     case 'compaction':

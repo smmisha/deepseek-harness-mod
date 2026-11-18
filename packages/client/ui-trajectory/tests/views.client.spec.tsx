@@ -225,6 +225,7 @@ function standaloneProps(
     removeAttachment: () => {},
     pruneAttachments: () => {},
     submit: () => {},
+    focus: () => {},
   }
   return {
     sessionId: SID,
@@ -363,6 +364,7 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
     removeAttachment: vi.fn(),
     pruneAttachments: vi.fn(),
     submit: vi.fn(),
+    focus: vi.fn(),
   }
   const standardProps = {
     sessionId: SID,

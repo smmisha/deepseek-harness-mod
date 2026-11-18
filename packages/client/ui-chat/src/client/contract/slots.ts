@@ -1,5 +1,5 @@
 /** Chat-owned Slot declarations and composed component props. */
-import type { RefObject } from 'react'
+import type { Ref, RefObject } from 'react'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -66,6 +66,24 @@ export interface TurnTailOwnerProps {
 /** Owner currency of finalized-assistant actions. */
 export interface AssistantActionOwnerProps {
   messageId: MessageId
+}
+
+/** Factory props of the user-message action row. */
+export interface UserActionProps {
+  /** Open the in-place editor on this message row; the row owns the edited text until save. */
+  readonly beginEdit: () => void
+  /**
+   * The running agent is reading this message, so an edit must wait until it
+   * finishes. A queued message or one from an earlier Turn stays editable.
+   */
+  readonly editUnavailable: boolean
+  /**
+   * Attach this to the control that opens the editor. The row focuses that
+   * control again when the editor closes, so cancelling returns the keyboard to
+   * where the edit began; an entry that omits it leaves the row itself as the
+   * return target.
+   */
+  readonly editTriggerRef?: Ref<HTMLButtonElement> | undefined
 }
 
 /** Stable quota failure codes retained in the Session log; both raise the frame-wide notice. */
@@ -417,6 +435,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       props: UserContentInput
       locale: 'chat'
       children: { 'conversation.chat.user.images': { kind: 'single'; scope: 'session' } }
+    }
+    /** Action row beside one finalized user message; the official entry opens its in-place editor. */
+    'conversation.chat.user.actions': {
+      scope: 'session'
+      props: UserActionProps
+      locale: 'chat'
     }
     /** Session-independent reasoning Markdown with Chat labels and compact typography. */
     'conversation.chat.reasoning.content': {

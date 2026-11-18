@@ -23,7 +23,7 @@ import {
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { InputState } from '../src/client/contract/input.ts'
-import { zh } from '../src/client/locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 import { QueueDock, queueDockEntry, type QueueDockInjected, type QueueDockProps } from '../src/client/queue/QueueDock.tsx'
 import type { UserTextInput } from '../src/client/index.ts'
 import { createUserTextFixture } from './user-text-component-fixture.client.tsx'
@@ -503,26 +503,104 @@ describe('QueueDock', () => {
     })
   })
 
-  it('renders active actions and disables editing for mixed-content rows', () => {
+  it('offers editing to mixed-content rows and keeps their attachments across the round trip', async () => {
+    const loadImage = vi.fn(() => Promise.resolve('blob:kept-image'))
     const snap = snapshotWith([
-      row('i-1', '第一条排队消息'),
-      row('i-2', null, 'image [image]'),
+      row('i-first', '第一条排队消息'),
+      imageRow('i-att', 'att-keep', '带图消息'),
     ])
     const source = liveSession(snap)
-    const { container, getByRole } = render(
-      <QueueDock {...kitFor(snap)} useSession={source.useSession} useProjection={source.useProjection} />,
+    const updateQueue = vi.fn(() => Promise.resolve())
+    const view = render(
+      <QueueDock {...kitFor(snap, { updateQueue, loadImage })} useSession={source.useSession} useProjection={source.useProjection} />,
     )
-    fireEvent.click(getByRole('button', { name: '2 条排队消息' }))
-    expect([...container.querySelectorAll('li')].map(item => item.textContent))
-      .toEqual(['第一条排队消息', 'image'])
-    expect(container.querySelectorAll('button')).toHaveLength(7)
-    expect(container.querySelectorAll('[aria-label="编辑排队消息"]')).toHaveLength(2)
-    expect(container.querySelectorAll('[aria-label="删除排队消息"]')).toHaveLength(2)
-    expect(container.querySelectorAll('[aria-label="插话发送"]')).toHaveLength(2)
-    expect((container.querySelectorAll('[aria-label="编辑排队消息"]')[0] as HTMLButtonElement).disabled).toBe(false)
-    expect((container.querySelectorAll('[aria-label="编辑排队消息"]')[1] as HTMLButtonElement).disabled).toBe(true)
-    expect(container.querySelectorAll('[aria-label="编辑排队消息"]')[1]?.getAttribute('title'))
-      .toBe('包含非文本内容，暂不支持编辑')
+    fireEvent.click(view.getByRole('button', { name: '2 条排队消息' }))
+    await waitFor(() => { expect(view.container.querySelector('img')?.getAttribute('src')).toBe('blob:kept-image') })
+    const editButtons = view.getAllByLabelText('编辑排队消息') as HTMLButtonElement[]
+    expect(editButtons.map(button => button.disabled)).toEqual([false, false])
+    // The obsolete refusal hint is gone; the action carries only its own name.
+    expect(editButtons[1]?.hasAttribute('title')).toBe(false)
+
+    fireEvent.click(editButtons[1]!)
+    const editor = view.getByRole('textbox', { name: '编辑排队消息' }) as HTMLTextAreaElement
+    expect(editor.value).toBe('带图消息')
+    // The attachment stays visible while only the text is being edited.
+    expect(view.container.querySelector('img')?.getAttribute('src')).toBe('blob:kept-image')
+
+    fireEvent.change(editor, { target: { value: '改过的文字' } })
+    fireEvent.keyDown(editor, { key: 'Enter' })
+    await waitFor(() => {
+      expect(updateQueue).toHaveBeenCalledWith(iid('i-att'), {
+        kind: 'edit',
+        content: [{ type: 'text', text: '改过的文字' }],
+      })
+    })
+    expect(updateQueue).toHaveBeenCalledOnce()
+
+    // The Host replaces only the text; the same durable attachment returns with
+    // the row, and the queue keeps its order.
+    act(() => {
+      source.push(snapshotWith([
+        row('i-first', '第一条排队消息'),
+        imageRow('i-att', 'att-keep', '改过的文字'),
+      ]))
+    })
+    expect([...view.container.querySelectorAll('li')].map(item => item.textContent))
+      .toEqual(['第一条排队消息', '改过的文字'])
+    expect(view.container.querySelectorAll('img')).toHaveLength(1)
+    expect(loadImage).toHaveBeenLastCalledWith(expect.objectContaining({ attachmentId: 'att-keep' }))
+  })
+
+  it('cancels an attachment edit without changing its text or its image', async () => {
+    const loadImage = vi.fn(() => Promise.resolve('blob:cancel-image'))
+    const snap = snapshotWith([imageRow('i-cancel', 'att-cancel', '原文字')])
+    const source = liveSession(snap)
+    const updateQueue = vi.fn(() => Promise.resolve())
+    const view = render(
+      <QueueDock {...kitFor(snap, { updateQueue, loadImage })} useSession={source.useSession} useProjection={source.useProjection} />,
+    )
+    await waitFor(() => { expect(view.container.querySelector('img')).not.toBeNull() })
+
+    fireEvent.click(view.getByLabelText('编辑排队消息'))
+    fireEvent.change(view.getByRole('textbox', { name: '编辑排队消息' }), { target: { value: '放弃的修改' } })
+    fireEvent.click(view.getByLabelText('取消编辑'))
+    expect(view.getByText('原文字')).toBeTruthy()
+    expect(view.container.querySelector('img')?.getAttribute('src')).toBe('blob:cancel-image')
+
+    // Escape works from the editor's own action pair as well.
+    fireEvent.click(view.getByLabelText('编辑排队消息'))
+    fireEvent.change(view.getByRole('textbox', { name: '编辑排队消息' }), { target: { value: '放弃的修改' } })
+    fireEvent.keyDown(view.getByLabelText('保存排队消息'), { key: 'Escape' })
+    expect(view.getByText('原文字')).toBeTruthy()
+    expect(view.queryByRole('textbox')).toBeNull()
+    expect(updateQueue).not.toHaveBeenCalled()
+  })
+
+  it('returns focus to the row pencil after the editor closes', () => {
+    const snap = snapshotWith([row('i-focus', 'before')])
+    const source = liveSession(snap)
+    const view = render(<QueueDock {...kitFor(snap)} useSession={source.useSession} useProjection={source.useProjection} />)
+
+    fireEvent.click(view.getByLabelText('编辑排队消息'))
+    expect(document.activeElement).toBe(view.getByRole('textbox', { name: '编辑排队消息' }))
+    fireEvent.keyDown(view.getByRole('textbox', { name: '编辑排队消息' }), { key: 'Escape' })
+    expect(document.activeElement).toBe(view.getByLabelText('编辑排队消息'))
+
+    fireEvent.click(view.getByLabelText('编辑排队消息'))
+    fireEvent.click(view.getByLabelText('取消编辑'))
+    expect(document.activeElement).toBe(view.getByLabelText('编辑排队消息'))
+  })
+
+  it('drops the blanket non-text refusal from every conversation dictionary', () => {
+    for (const [locale, dictionary] of Object.entries({ zh, en, ja, es, fr, de, ru, pt })) {
+      expect(`${locale}:${'queue.edit.unsupported' in dictionary}`).toBe(`${locale}:false`)
+    }
+    const snap = snapshotWith([imageRow('i-no-hint', 'att-no-hint', '带图消息')])
+    const source = liveSession(snap)
+    const view = render(<QueueDock {...kitFor(snap)} useSession={source.useSession} useProjection={source.useProjection} />)
+    const editButton = view.getByLabelText('编辑排队消息') as HTMLButtonElement
+    expect(editButton.disabled).toBe(false)
+    expect(editButton.hasAttribute('title')).toBe(false)
   })
 
   it('renders queued image thumbnails from durable references beside the text preview', async () => {

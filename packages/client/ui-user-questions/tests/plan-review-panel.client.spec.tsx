@@ -142,6 +142,7 @@ const kit: Omit<QuestionComposerProps, 'matched'> = {
     removeAttachment: () => { throw new Error('unused') },
     pruneAttachments: () => { throw new Error('unused') },
     submit: () => { throw new Error('unused') },
+    focus: () => {},
   },
   useStore: selector => selector(questionDraftStore.getSnapshot()),
   actions: questionDraftStore.actions,

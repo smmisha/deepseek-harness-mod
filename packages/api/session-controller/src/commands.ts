@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-file-upload'
 import {
   ReasoningEffortId, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
-import type { MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageId, MessageSource, TextBlock } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -66,6 +66,35 @@ type PromptContentCandidate =
  */
 export function hasPromptContent(content: readonly PromptContentCandidate[]): boolean {
   return content.some(part => part.type !== 'text' || part.text.trim().length > 0)
+}
+
+/**
+ * Replace one pending message's text while keeping its durable attachments.
+ * The edit payload stays text-only, so a wire caller never names an attachment;
+ * the row's own image and file blocks keep their order and identity, and the
+ * replacement text takes the first text block's position.
+ * @param content - the pending message's current content blocks.
+ * @param replacement - the caller's non-empty text-only replacement blocks.
+ * @returns the replacement text with every original non-text block preserved.
+ */
+function replaceQueueText(
+  content: readonly ContentBlock[],
+  replacement: readonly TextBlock[],
+): ContentBlock[] {
+  const merged: ContentBlock[] = []
+  let placed = false
+  for (const block of content) {
+    if (block.type !== 'text') {
+      merged.push(block)
+      continue
+    }
+    if (!placed) {
+      merged.push(...replacement)
+      placed = true
+    }
+  }
+  if (!placed) merged.push(...replacement)
+  return merged
 }
 
 /**
@@ -450,7 +479,7 @@ export class SessionCommandController {
       if (request.action.content.some(block => block.type !== 'text')) {
         throw new RemoteError(
           'session/attachment-invalid',
-          'queue edits accept text content only',
+          'queue edits accept text content only; attachments are preserved from the queued message',
           { reason: 'QUEUE_EDIT_NON_TEXT' },
         )
       }
@@ -496,7 +525,7 @@ export class SessionCommandController {
       case 'edit':
         agent.inbox.replace(request.itemId, freezeMessage<UserMessage>({
           ...message,
-          content: [...request.action.content],
+          content: replaceQueueText(message.content, request.action.content),
         }))
         break
       case 'remove': {

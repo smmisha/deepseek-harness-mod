@@ -58,7 +58,9 @@ function clipped(anchor: HTMLElement): boolean {
  * @param props.maxWidth - bubble width cap in pixels, for labels long enough that the default
  * half-viewport cap would render a slab wider than the surface the anchor sits on; always bounded by viewport margins.
  * @param props.openOnClick - clicking or tapping also pins the bubble for reading; another click, Escape,
- * Tab, or an outside pointerdown dismisses it. Defaults to false for ordinary action tooltips.
+ * Tab, or an outside pointerdown dismisses it. Defaults to false for ordinary action tooltips. An anchor
+ * that already carries `aria-describedby` keeps it as its only description: the bubble repeats the same
+ * reason, so associating both would announce it twice.
  * @param props.onlyWhenClipped - show the bubble only when the anchor or an HTML element inside it
  * overflows horizontally, measured when the bubble is about to show; for labels that repeat
  * text an ellipsis may cut off. Defaults to false.
@@ -228,8 +230,10 @@ export function Tooltip({ label, shortcutKeys, side = 'right', align = 'center',
     <TooltipSuppression.Provider value={setSuppressed}>
       {cloneElement(children, {
         ref: mergedRef,
-        'aria-describedby': openOnClick && visible
-          ? [children.props['aria-describedby'], id].filter(Boolean).join(' ')
+        // The anchor's own description wins: the visible bubble repeats it, so
+        // appending the bubble id would announce the same reason twice.
+        'aria-describedby': openOnClick && visible && !children.props['aria-describedby']
+          ? id
           : children.props['aria-describedby'],
         onPointerEnter: (e) => {
           children.props.onPointerEnter?.(e)

@@ -581,7 +581,7 @@ describe('Tooltip', () => {
     }
   })
 
-  it('pins an informational tooltip on click and preserves the anchor description', () => {
+  it('pins an informational tooltip on click and keeps the anchor description as the only one', () => {
     const clicked = vi.fn()
     render(<>
       <p id="existing-description">Existing description</p>
@@ -597,7 +597,10 @@ describe('Tooltip', () => {
     expect(clicked).toHaveBeenCalledOnce()
     const bubble = screen.getByRole('tooltip')
     expect(bubble.textContent).toBe('Plugin information')
-    expect(anchor.getAttribute('aria-describedby')).toBe(`existing-description ${bubble.id}`)
+    // The visible bubble repeats the owner's description, so it must not be
+    // associated a second time: assistive technology would read it twice.
+    expect(anchor.getAttribute('aria-describedby')).toBe('existing-description')
+    expect(bubble.id).not.toBe('existing-description')
     fireEvent.pointerLeave(anchor)
     fireEvent.blur(anchor)
     expect(screen.getByRole('tooltip')).toBe(bubble)

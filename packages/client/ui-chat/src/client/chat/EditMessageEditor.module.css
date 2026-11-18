@@ -1,0 +1,80 @@
+/* In-place message editor: a right-aligned field as wide as the message bubble,
+   with the save/cancel pair beneath it. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  /* The pair hugs the field at the house rhythm; the field's border plus the
+     button's own inset carry the rest of the separation. */
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  /* Same cap as the message bubble stack, so the field lines up with it. */
+  max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
+}
+
+/* The field hugs the text: one line is the resting height, it grows with the
+   draft and scrolls at ten lines. The text metrics are the bubble's, not
+   InlineEditor's compact draft size, so editing does not reflow the message. */
+.editor .input {
+  width: 100%;
+  min-height: calc(28px + var(--dsh-content-font-delta, 0px));
+  max-height: 240px;
+  font-family: inherit;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 24px target leaves only 4px of inset around the 15px glyph, so the pair
+     reads as sitting on the field rather than in a band below it. */
+  width: calc(24px + var(--dsh-content-font-delta, 0px));
+  height: calc(24px + var(--dsh-content-font-delta, 0px));
+  padding: 4px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The pair states its meaning in colour: discarding takes the error ink and
+   applying takes the success ink, both from the theme's state aliases. */
+.cancel {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.save {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.action svg {
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.action:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .action:disabled:hover {
+    background: transparent;
+    color: var(--dsw-alias-label-caption);
+  }
+}

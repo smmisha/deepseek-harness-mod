@@ -159,6 +159,7 @@ export class SessionInputShell implements SessionInput {
     removeAttachment: (id) => { this.removeAttachment(id) },
     pruneAttachments: (ids) => { this.pruneAttachments(ids) },
     submit: () => { this.submit('queue') },
+    focus: () => { this.focus() },
   }
 
   private readonly core = new SubmitMachine()

@@ -1,4 +1,8 @@
-/** Multi-line inline editor for short saved-on-Enter drafts such as queued messages and goals. */
+/**
+ * Multi-line inline editor for short saved-on-Enter drafts such as queued
+ * messages and goals. The draft is user-authored, so the field takes its base
+ * direction from the text itself and the caret and alignment follow it.
+ */
 
 import { useLayoutEffect, useRef, type KeyboardEvent } from 'react'
 import clsx from 'clsx'
@@ -23,7 +27,7 @@ export function InlineEditor({ value, label, onChange, onSave, onCancel, classNa
   onChange: (value: string) => void
   onSave: () => void
   onCancel: () => void
-  className?: string
+  className?: string | undefined
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -58,6 +62,7 @@ export function InlineEditor({ value, label, onChange, onSave, onCancel, classNa
     <textarea
       ref={ref}
       autoFocus
+      dir="auto"
       rows={1}
       className={clsx(css.editor, className)}
       aria-label={label}

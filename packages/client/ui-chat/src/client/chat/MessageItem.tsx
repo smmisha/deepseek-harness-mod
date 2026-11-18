@@ -1,5 +1,5 @@
-import { memo, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode, Ref } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PropsRenderFactories, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UserTextFacts } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -10,6 +10,7 @@ import type {
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
+import { EditMessageEditor } from './EditMessageEditor.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import css from './MessageItem.module.css'
 
@@ -180,11 +181,19 @@ function UserStyleBubble({
   node, renderSlotChain, content, loadImage, renderFactorySlot, actions,
   pending = false, echo = false, batchStart = false,
   referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false,
+  editor, rowRef,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
   /** Optional IconActions (or similar) below the bubble; receives the joined text. */
   actions?: (text: string) => ReactNode
+  /** Replaces the bubble content and its actions while this row is being edited in place. */
+  editor?: ReactNode
+  /**
+   * Row element for a caller that may have to return focus to this message when
+   * its edit affordance cannot take it; passing it also makes the row focusable.
+   */
+  rowRef?: Ref<HTMLDivElement> | undefined
   /** Row whose durable source the message-source seat elects above this bubble. */
   node: DecoratedRow
   /** Seat renderer; rows that do not own the seat pass {@link NO_MESSAGE_SOURCE}. */
@@ -218,19 +227,21 @@ function UserStyleBubble({
   }), [inputFacts, referenceLabels, skillNames])
   return (
     <div
+      ref={rowRef}
       className={css.userRow}
+      tabIndex={rowRef === undefined ? undefined : -1}
       data-pending-steering={pending || undefined}
       data-submission-echo={echo || undefined}
       data-chat-steering-batch={batchStart ? 'start' : undefined}
     >
       {renderSlotChain('conversation.chat.user.before', { source: node.data.source, kind: node.kind }, { fallback: null })}
-      {renderFactorySlot('conversation.chat.user.content', {
+      {editor ?? renderFactorySlot('conversation.chat.user.content', {
         content: prepared,
         loadImage,
         facts,
         interactive,
       })}
-      {actions?.(prepared.text)}
+      {editor === undefined ? actions?.(prepared.text) : null}
     </div>
   )
 }
@@ -323,19 +334,60 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
 }
 
 /**
- * Official user and admitted-steering keyed Chat renderer.
+ * Official durable user keyed Chat renderer.
  *
- * Renders the durable-message chain seat directly above the bubble. The seat is
- * declared by the `user` registration alone, so a steering row renders the same
- * bubble without asking for it.
+ * Renders the durable-message chain seat above the bubble, the user-action row
+ * below it, or the row's own editor while an edit is open. Opening the editor
+ * touches neither the composer nor the transcript; saving hands the edited text
+ * to the composer draft without submitting it. Closing the editor returns the
+ * keyboard to the pencil (the row when the entry offers no trigger), never to
+ * `<body>`, and never scrolls the transcript.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, renderSlotChain, t,
-}: ChatNodeViewProps<'user' | 'steering'> & {
+  node, renderFactorySlot, loadImage, renderSlotChain, inputActions, useSession, t,
+}: ChatNodeViewProps<'user'> & {
   /** Bound by the `user` keyed registration, the only entry that declares the seat. */
   renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
 }) {
   const data = node.data
+  const running = useSession(snapshot => snapshot.running)
+  // The agent reads a message while its Turn is open; an earlier Turn is settled
+  // and a queued message has its own QueueDock editor, so neither is blocked.
+  const location = node.location
+  const turnOpen = (location.kind === 'turn' || location.kind === 'step') && location.turn.status === 'open'
+  const readingThisMessage = running && turnOpen
+  const [edit, setEdit] = useState<{ readonly text: string } | null>(null)
+  // The pencil unmounts with the rest of the action row while the editor is
+  // open, so the closed editor hands back both the row and the affordance that
+  // replaced it; the refs are re-attached before this commit's layout effects.
+  const row = useRef<HTMLDivElement>(null)
+  const editTrigger = useRef<HTMLButtonElement>(null)
+  const returningFocus = useRef(false)
+  // A run that starts elsewhere hides the open editor instead of discarding what
+  // was already typed; the editor returns when the run settles.
+  const editing = readingThisMessage ? null : edit
+  const closeEdit = (): void => {
+    returningFocus.current = true
+    setEdit(null)
+  }
+  const saveEdit = (text: string): void => {
+    inputActions.setDraft(text)
+    inputActions.focus()
+    returningFocus.current = true
+    setEdit(null)
+  }
+  useLayoutEffect(() => {
+    if (!returningFocus.current || editing !== null) return
+    returningFocus.current = false
+    // Save hands the keyboard to the composer; only a focus that fell out of the
+    // document (cancel, or a hand-off that could not claim it) needs restoring,
+    // and preventScroll keeps the transcript where the reader left it.
+    const active = document.activeElement
+    if (active !== null && active !== document.body && active.isConnected) return
+    const trigger = editTrigger.current
+    if (trigger !== null && !trigger.disabled) trigger.focus({ preventScroll: true })
+    else row.current?.focus({ preventScroll: true })
+  }, [editing])
   return (
     <UserStyleBubble
       node={node}
@@ -344,17 +396,56 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       interactive
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
-      batchStart={node.kind === 'steering' && node.data.batchStart === true}
+      rowRef={row}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+      editor={editing === null
+        ? undefined
+        : (
+          <EditMessageEditor
+            text={editing.text}
+            onChange={(text) => { setEdit({ text }) }}
+            onSave={() => { saveEdit(editing.text) }}
+            onCancel={closeEdit}
+            t={t}
+          />
+        )}
       actions={text => (
         <MessageIconActions
           text={text}
           time={data.time}
           clock="start"
           className={css.actions}
+          extraActions={renderFactorySlot('conversation.chat.user.actions', {
+            beginEdit: () => { setEdit({ text }) },
+            editUnavailable: readingThisMessage,
+            editTriggerRef: editTrigger,
+          })}
           t={t}
         />
+      )}
+    />
+  )
+})
+
+/** Admitted-steering keyed Chat renderer: the same bubble without the seat or user actions. */
+export const SteeringMessageNodeView = memo(function SteeringMessageNodeView({
+  node, renderFactorySlot, loadImage, t,
+}: ChatNodeViewProps<'steering'>) {
+  const data = node.data
+  return (
+    <UserStyleBubble
+      node={node}
+      renderSlotChain={NO_MESSAGE_SOURCE}
+      content={data.content}
+      interactive
+      batchStart={data.batchStart === true}
+      renderFactorySlot={renderFactorySlot}
+      loadImage={loadImage}
+      {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
+      {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+      actions={text => (
+        <MessageIconActions text={text} time={data.time} clock="start" className={css.actions} t={t} />
       )}
     />
   )
