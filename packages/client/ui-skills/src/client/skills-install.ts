@@ -35,8 +35,12 @@ export interface InstallFace {
     folderName: string,
     files: readonly { readonly path: string; readonly content: string }[],
   ) => Promise<FaceResult<InstallPreview>>
-  /** Write one confirmed preview. */
-  readonly install: (
+  /**
+   * Write one confirmed preview. Named `installSkill`, not `install`, because the
+   * Plugins page passes an owner prop named `install` to every tab entry and owner
+   * props are spread over the injected ones.
+   */
+  readonly installSkill: (
     previewId: string,
     name: string | undefined,
     replace: boolean,

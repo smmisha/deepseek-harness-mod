@@ -751,7 +751,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
     previewRepository: props.previewRepository,
     previewArchive: props.previewArchive,
     previewFolder: props.previewFolder,
-    install: props.install,
+    installSkill: props.installSkill,
     removeInstalled: props.removeInstalled,
   }
 

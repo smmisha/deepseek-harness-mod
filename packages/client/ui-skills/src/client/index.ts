@@ -26,7 +26,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Services the tab reads. */
-export const inject = ['slots', 'locale', 'remote', 'remote.skillSources']
+export const inject = ['slots', 'locale', 'remote', 'remote.skillSources', 'remote.skillInstall']
 
 /**
  * Contribute the Skills tab to the Plugins page.
@@ -88,7 +88,7 @@ export function apply(ctx: ClientContext): void {
     async previewFolder(folderName, files) {
       return settled(ctx.remote.skillInstall.previewFolder(folderName, files))
     },
-    async install(previewId, name, replace) {
+    async installSkill(previewId, name, replace) {
       return settled(ctx.remote.skillInstall.installSkill(previewId, name, replace))
     },
     async removeInstalled(name) {

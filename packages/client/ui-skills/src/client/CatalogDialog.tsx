@@ -93,7 +93,7 @@ export function CatalogDialog({
   const install = async (name: string | undefined, replace: boolean): Promise<void> => {
     /* v8 ignore next -- the footer only offers install while a preview is open. */
     if (step.kind !== 'preview') return
-    const result = await run(() => face.install(step.preview.id, name, replace))
+    const result = await run(() => face.installSkill(step.preview.id, name, replace))
     if (result === undefined) return
     const names = result.installed.map(skill => skill.name)
     setStep({ kind: 'installed', names })

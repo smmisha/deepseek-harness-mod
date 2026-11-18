@@ -170,6 +170,13 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'skillSources/setSkill': 'owner-only', // owner switches one local skill on or off
   'skillSources/addFolder': 'owner-only', // owner adds a local skill folder
   'skillSources/removeFolder': 'owner-only', // owner removes an added skill folder
+  'skillInstall/catalogs': 'owner-only', // owner installs skills from the configured catalogs
+  'skillInstall/repository': 'owner-only', // owner reads a repository's skill folders
+  'skillInstall/previewRepository': 'owner-only', // owner previews a repository skill folder
+  'skillInstall/previewArchive': 'owner-only', // owner previews an imported archive
+  'skillInstall/previewFolder': 'owner-only', // owner previews a dropped skill folder
+  'skillInstall/installSkill': 'owner-only', // owner writes a skill into the owner's harness home
+  'skillInstall/removeSkill': 'owner-only', // owner deletes a skill this app installed
   'officeKit/generation': 'owner-only', // owner document export
   'officeKit/render': 'owner-only', // owner document export
   'speech/cancelPreparation': 'owner-only', // owner voice input
