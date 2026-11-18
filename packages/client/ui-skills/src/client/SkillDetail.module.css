@@ -189,3 +189,8 @@
     border-block-end: 0.5px solid var(--dsw-alias-border-l2);
   }
 }
+
+/* The remove action sits under the install record it can delete. */
+.remove {
+  margin-top: 10px;
+}

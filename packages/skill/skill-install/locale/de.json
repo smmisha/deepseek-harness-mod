@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Skill-Installation",
+    "description": "Lädt Skills aus einem GitHub-Repository oder einem importierten Archiv, zeigt sie in der Vorschau, installiert sie ausgeschaltet und entfernt die selbst installierten."
+  }
+}

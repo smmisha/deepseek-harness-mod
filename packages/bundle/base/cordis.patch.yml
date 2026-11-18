@@ -53,6 +53,7 @@
       config:
         packages:
           - '@deepseek-ai/dsh-skill-filesystem'
+          - '@deepseek-ai/dsh-skill-install'
 
     - id: typert-gateway
       name: '@deepseek-ai/dsh-api-gateway'
@@ -326,6 +327,13 @@
 
     - id: skill-filesystem
       name: '@deepseek-ai/dsh-skill-filesystem'
+
+    # Downloads and installs skills into the harness home's skills folder. It
+    # writes the profile's switches through skill-sources, so it follows that
+    # entry and stays off where no profile is mounted.
+    - id: skill-install
+      name: '@deepseek-ai/dsh-skill-install'
+      disabled: !!js "!ctx.get('profileContext')"
 
     - id: tool-skill
       name: '@deepseek-ai/dsh-tool-skill'

@@ -9626,10 +9626,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
   },
   {
-    name: 'SkillFolder',
-    declaration: 'export interface SkillFolder {\n    readonly dir: string;\n}',
-  },
-  {
     name: 'SkillFolderSource',
     declaration: 'export interface SkillFolderSource {\n    readonly id: string;\n    readonly dir: string;\n}',
   },

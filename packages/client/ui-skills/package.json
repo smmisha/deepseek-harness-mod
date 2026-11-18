@@ -46,6 +46,7 @@
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-skill-install",
         "@deepseek-ai/dsh-api-remotes"
       ]
     }
@@ -65,6 +66,7 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:*",
     "@deepseek-ai/dsh-skill-filesystem": "workspace:*",
+    "@deepseek-ai/dsh-skill-install": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "@testing-library/react": "^16.3.3",
     "react": "^18.2.0",

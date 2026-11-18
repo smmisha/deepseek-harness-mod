@@ -9,13 +9,17 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  Button, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconFolderOpenOutlineRegular,
-  IconLayersOutlineRegular, IconNewChatOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular,
-  IconSearchOutlineRegular, IconTrashOutlineRegular, IconWarningTriangleOutlineRegular, Input, Menu, MenuItemButton,
-  Modal, SegmentedControl, StateDot, Switch, Tooltip,
+  Button, IconArchiveOutlineRegular, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular,
+  IconFolderOpenOutlineRegular, IconLayersOutlineRegular, IconNewChatOutlineRegular, IconPlusOutlineRegular,
+  IconRefreshOutlineRegular, IconSearchOutlineRegular, IconTrashOutlineRegular, IconWarningTriangleOutlineRegular,
+  Input, Menu, MenuItemButton, Modal, SegmentedControl, StateDot, Switch, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AddSkillFolderResult, LocalSkillView, LocalSourceView } from '@deepseek-ai/dsh-skill-filesystem/types'
+import type { InstallPreview } from '@deepseek-ai/dsh-skill-install/types'
+import { CatalogDialog } from './CatalogDialog.tsx'
+import { readArchive, readDrop, type DropOutcome, type DropProblem } from './drop.ts'
+import { failureSentence, type FaceFailure, type InstallFace } from './skills-install.ts'
 import { DETAIL_PANEL_ID, SkillDetail } from './SkillDetail.tsx'
 import { applicationMarkSpec, SourceMark, sourceMarkSpec } from './SourceMark.tsx'
 import type { SkillsLocaleKey } from './locales.ts'
@@ -30,7 +34,7 @@ import css from './SkillsSection.module.css'
 export type AddFolderOutcome = AddSkillFolderResult | { readonly error: string }
 
 /** Data and writes the tab reads from its Host namespace. */
-export interface SkillsFace {
+export interface SkillsFace extends InstallFace {
   /** Current source inventory with parsed skills and switch states. */
   load: (cwd?: string) => Promise<readonly LocalSourceView[]>
   /** Switch one source; resolves to a failure message when the write was refused. */
@@ -171,10 +175,24 @@ interface WriteFailure {
   readonly error: string
 }
 
+/** What the install dialog is showing while the tab reads a drop or an archive. */
+type ImportState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'busy' }
+  | { readonly kind: 'preview'; readonly preview: InstallPreview }
+  | { readonly kind: 'failure'; readonly failure: FaceFailure }
+
+/** Locale key of each reason a drop carried nothing installable. */
+function dropProblemKey(problem: DropProblem): SkillsLocaleKey {
+  if (problem === 'empty') return 'dropEmpty'
+  return problem === 'too-large' ? 'dropTooLarge' : 'dropTooMany'
+}
+
 /** The split add button: its primary half adds a folder, and its menu offers every way to add skills. */
-function AddSkillsMenu({ t, onAddFolder, onBrowseCatalog, createWithAi }: {
+function AddSkillsMenu({ t, onAddFolder, onImportArchive, onBrowseCatalog, createWithAi }: {
   readonly t: SkillsTranslate
   readonly onAddFolder: () => void
+  readonly onImportArchive: () => void
   readonly onBrowseCatalog: () => void
   readonly createWithAi: (() => void) | undefined
 }): ReactNode {
@@ -206,10 +224,17 @@ function AddSkillsMenu({ t, onAddFolder, onBrowseCatalog, createWithAi }: {
             <span className={css.addMenuDescription}>{t('addFolderDescription')}</span>
           </span>
         </MenuItemButton>
+        <MenuItemButton icon={<IconArchiveOutlineRegular size={16} />}
+          onSelect={() => { dismiss(); onImportArchive() }}>
+          <span className={css.addMenuItem}>
+            <span>{t('importArchive')}</span>
+            <span className={css.addMenuDescription}>{t('importArchiveDescription')}</span>
+          </span>
+        </MenuItemButton>
         <MenuItemButton icon={<IconNewChatOutlineRegular size={16} />} onSelect={() => { dismiss(); onBrowseCatalog() }}>
           <span className={css.addMenuItem}>
             <span>{t('browseCatalog')}</span>
-            <span className={css.addMenuDescription}>{t('catalogPending')}</span>
+            <span className={css.addMenuDescription}>{t('catalogDescription')}</span>
           </span>
         </MenuItemButton>
         <MenuItemButton icon={<IconNewChatOutlineRegular size={16} />} disabled={createWithAi === undefined}
@@ -302,24 +327,6 @@ function AddFolderDialog({ t, open, onClose, onAdded, addFolder, pickFolder }: {
         </div>
         {error === null ? null : <p id="skills-folder-error" className={css.alert} role="alert">{error}</p>}
       </form>
-    </Modal>
-  )
-}
-
-/**
- * The catalog dialog shell. Browsing and installing arrive with Stage 4's
- * installer, so this dialog only states that and can be dismissed.
- */
-function CatalogDialog({ t, open, onClose }: {
-  readonly t: SkillsTranslate
-  readonly open: boolean
-  readonly onClose: () => void
-}): ReactNode {
-  return (
-    <Modal open={open} onClose={onClose} title={t('catalogTitle')} closeLabel={t('cancel')}
-      footer={<Button variant="outline" size="sm" onClick={onClose}>{t('cancel')}</Button>}>
-      {/* TODO(stage-4): replace this notice with catalog search, preview, and install. */}
-      <p className={css.status} role="status">{t('catalogPending')}</p>
     </Modal>
   )
 }
@@ -649,6 +656,11 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
   const [reloading, setReloading] = useState(false)
   const [folderDialog, setFolderDialog] = useState(false)
   const [catalogDialog, setCatalogDialog] = useState(false)
+  const [importState, setImportState] = useState<ImportState>({ kind: 'idle' })
+  const [removeTarget, setRemoveTarget] = useState<LocalSkillView | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const archiveInput = useRef<HTMLInputElement>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [writeFailure, setWriteFailure] = useState<WriteFailure | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -711,6 +723,36 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
     } finally {
       setBusy(previous => previous.filter(entry => entry !== key))
     }
+  }
+
+  /**
+   * Open the install dialog on what the reader chose or dropped, previewing it
+   * first so nothing is written before they confirm.
+   * @param outcome - what the browser read from the drop or the archive picker.
+   */
+  const startImport = async (outcome: DropOutcome): Promise<void> => {
+    if (outcome.kind === 'problem') {
+      setImportState({ kind: 'failure', failure: { code: 'local/drop', message: t(dropProblemKey(outcome.problem)) } })
+      setCatalogDialog(true)
+      return
+    }
+    setImportState({ kind: 'busy' })
+    setCatalogDialog(true)
+    const value = outcome.value
+    const preview = value.kind === 'archive'
+      ? await props.previewArchive(value.fileName, value.content)
+      : await props.previewFolder(value.folderName, value.files)
+    setImportState(preview.ok ? { kind: 'preview', preview: preview.value } : { kind: 'failure', failure: preview.failure })
+  }
+
+  const installFace: InstallFace = {
+    catalogs: props.catalogs,
+    repository: props.repository,
+    previewRepository: props.previewRepository,
+    previewArchive: props.previewArchive,
+    previewFolder: props.previewFolder,
+    install: props.install,
+    removeInstalled: props.removeInstalled,
   }
 
   const titleFor = (source: LocalSourceView): string => {
@@ -818,8 +860,56 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
     ? undefined
     : categoryTitle(selectedCategory, selectedSkill?.skill.categoryTitle, t)
 
+  /**
+   * Remove the skill the confirmation names, then reload the catalog.
+   */
+  const confirmRemove = async (): Promise<void> => {
+    const target = removeTarget
+    /* v8 ignore next -- the panel only offers removal for a skill the Host named. */
+    if (target?.name === undefined) return
+    setRemoving(true)
+    try {
+      const error = await props.removeInstalled(target.name)
+      setRemoveTarget(null)
+      if (error !== undefined) {
+        setWriteFailure({ name: target.name, error })
+        return
+      }
+      setNotice(t('removedNotice', { name: target.name }))
+      actions.select(null)
+      await refresh()
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   return (
-    <section className={css.tab}>
+    <section className={css.tab} data-dragging={dragging}
+      onDragOver={(event) => {
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={() => { setDragging(false) }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        void readDrop(event.dataTransfer).then(startImport)
+      }}>
+      {dragging
+        ? (
+          <div className={css.dropOverlay} aria-hidden="true">
+            <IconArchiveOutlineRegular size={20} />
+            <span>{t('dropHint')}</span>
+          </div>
+        )
+        : null}
+      <input ref={archiveInput} type="file" accept=".zip,application/zip" className={css.fileInput}
+        aria-label={t('chooseArchive')}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file !== undefined) void readArchive(file).then(startImport)
+        }} />
       {emptyInventory
         ? null
         : (
@@ -840,6 +930,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
                 onChange={(next) => { actions.setGrouping(next) }} />
               <GroupingMenu t={t} grouping={grouping} onChange={(next) => { actions.setGrouping(next) }} />
               <AddSkillsMenu t={t} onAddFolder={() => { setNotice(null); setFolderDialog(true) }}
+                onImportArchive={() => { archiveInput.current?.click() }}
                 onBrowseCatalog={() => { setCatalogDialog(true) }} createWithAi={createWithAi} />
             </span>
           </div>
@@ -970,7 +1061,10 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
                   : (
                     <SkillDetail t={t} sourceTitle={titleFor(selectedSkill.source)} skill={selectedSkill.skill}
                       state={selectedSkill.state}
-                      {...selectedCategoryTitle === undefined ? {} : { categoryTitle: selectedCategoryTitle }} />
+                      {...selectedCategoryTitle === undefined ? {} : { categoryTitle: selectedCategoryTitle }}
+                      onRemove={selectedSkill.skill.provenance === undefined || selectedSkill.skill.name === undefined
+                        ? undefined
+                        : () => { setRemoveTarget(selectedSkill.skill) }} />
                   )}
               </div>
             </>
@@ -982,7 +1076,32 @@ export function SkillsSection(props: SkillsSectionProps): ReactNode {
           setNotice(t('folderAddedHint'))
           void refresh()
         }} addFolder={addFolder} pickFolder={pickFolder} />
-      <CatalogDialog t={t} open={catalogDialog} onClose={() => { setCatalogDialog(false) }} />
+      <CatalogDialog t={t} open={catalogDialog} face={installFace}
+        initialPreview={importState.kind === 'preview' ? importState.preview : undefined}
+        initialBusy={importState.kind === 'busy'}
+        initialFailure={importState.kind === 'failure' ? failureSentence(t, importState.failure) : undefined}
+        onClose={() => {
+          setCatalogDialog(false)
+          setImportState({ kind: 'idle' })
+        }}
+        onInstalled={(names) => {
+          setNotice(t('installedNotice', { names: names.join(', ') }))
+          void refresh()
+        }} />
+      <Modal open={removeTarget !== null} onClose={() => { setRemoveTarget(null) }}
+        title={t('removeTitle', { name: removeTarget?.name ?? '' })} description={t('removeBody')}
+        closeLabel={t('cancel')}
+        footer={(
+          <>
+            <Button variant="outline" size="sm" onClick={() => { setRemoveTarget(null) }}>{t('cancel')}</Button>
+            <Button variant="primary" size="sm" disabled={removing} aria-busy={removing}
+              onClick={() => { void confirmRemove() }}>
+              {t('remove')}
+            </Button>
+          </>
+        )}>
+        {null}
+      </Modal>
     </section>
   )
 }

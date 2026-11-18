@@ -561,6 +561,7 @@
       "@deepseek-ai/dsh-skill": ["./packages/skill/skill/src"],
       "@deepseek-ai/dsh-skill-badge": ["./packages/experimental/skill-badge/src"],
       "@deepseek-ai/dsh-skill-filesystem": ["./packages/skill/skill-filesystem/src"],
+      "@deepseek-ai/dsh-skill-install": ["./packages/skill/skill-install/src"],
       "@deepseek-ai/dsh-skill-office": ["./packages/skill/skill-office/src"],
       "@deepseek-ai/dsh-skill-sources": ["./packages/skill/skill-sources/src"],
       "@deepseek-ai/dsh-spill": ["./packages/spill/spill/src"],
