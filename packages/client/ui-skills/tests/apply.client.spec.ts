@@ -94,8 +94,8 @@ function makeContext(results: RemoteResults, workspace?: ReturnType<typeof makeW
     previewRepository: vi.fn(async () => results.previewRepository),
     previewArchive: vi.fn(async () => results.previewArchive),
     previewFolder: vi.fn(async () => results.previewFolder),
-    install: vi.fn(async () => results.install),
-    remove: vi.fn(async () => results.remove),
+    installSkill: vi.fn(async () => results.install),
+    removeSkill: vi.fn(async () => results.remove),
   }
   const skillSources = {
     describe: vi.fn(async () => results.describe),
@@ -158,8 +158,8 @@ describe('ui-skills browser half', () => {
     await expect(current.removeInstalled('pdf')).resolves.toBeUndefined()
     expect(skillInstall.previewRepository).toHaveBeenCalledWith('a/b', 'skills/pdf')
     expect(skillInstall.previewArchive).toHaveBeenCalledWith('pack.zip', 'emlw')
-    expect(skillInstall.install).toHaveBeenCalledWith('p', 'pdf-copy', false)
-    expect(skillInstall.remove).toHaveBeenCalledWith('pdf')
+    expect(skillInstall.installSkill).toHaveBeenCalledWith('p', 'pdf-copy', false)
+    expect(skillInstall.removeSkill).toHaveBeenCalledWith('pdf')
   })
 
   it('keeps the install failure code for the dialog to localize', async () => {

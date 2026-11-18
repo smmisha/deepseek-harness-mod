@@ -39,7 +39,10 @@ const REMOTE_CODES: Readonly<Record<SkillInstallCode, SkillInstallRemoteCode>> =
  * Host owner of the `skillInstall` Remote namespace.
  *
  * The installer itself is mounted beside this controller as `ctx.skillInstall`;
- * this class only translates the wire calls and the failures.
+ * this class only translates the wire calls and the failures. The write methods
+ * are `installSkill` and `removeSkill` because the Client gateway refuses the
+ * bare `install` and `remove` wire names: both collide with members every
+ * namespace service already owns.
  */
 export class SkillInstallController extends TypertRemoteService {
   /** Validated plugin configuration, shared with the installer. */
@@ -119,7 +122,7 @@ export class SkillInstallController extends TypertRemoteService {
    * @returns the skills written, each recorded switched off.
    */
   @Remote
-  async install(previewId: string, name: string | undefined, replace: boolean): Promise<InstallResult> {
+  async installSkill(previewId: string, name: string | undefined, replace: boolean): Promise<InstallResult> {
     return await this.translated(() => this.installer.install(previewId, name, replace))
   }
 
@@ -128,7 +131,7 @@ export class SkillInstallController extends TypertRemoteService {
    * @param name - installed skill name.
    */
   @Remote
-  async remove(name: string): Promise<void> {
+  async removeSkill(name: string): Promise<void> {
     await this.translated(() => this.installer.remove(name))
   }
 

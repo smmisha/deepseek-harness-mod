@@ -89,10 +89,10 @@ export function apply(ctx: ClientContext): void {
       return settled(ctx.remote.skillInstall.previewFolder(folderName, files))
     },
     async install(previewId, name, replace) {
-      return settled(ctx.remote.skillInstall.install(previewId, name, replace))
+      return settled(ctx.remote.skillInstall.installSkill(previewId, name, replace))
     },
     async removeInstalled(name) {
-      const response = await ctx.remote.skillInstall.remove(name)
+      const response = await ctx.remote.skillInstall.removeSkill(name)
       return response.ok ? undefined : response.error.message
     },
   }

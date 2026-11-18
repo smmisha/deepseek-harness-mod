@@ -71,7 +71,7 @@ The `anthropics/skills` folders are Apache-2.0 **per folder**, and not every fol
 
 <a id="understand-the-implementation"></a>
 
-`SkillInstallController` is the plugin entry: it owns the `skillInstall` Remote namespace and translates every `SkillInstallError` into the namespace's `skill-install/*` code. `SkillInstaller` is the service behind it.
+`SkillInstallController` is the plugin entry: it owns the `skillInstall` Remote namespace — `catalogs`, `repository`, `previewRepository`, `previewArchive`, `previewFolder`, `installSkill`, and `removeSkill` — and translates every `SkillInstallError` into the namespace's `skill-install/*` code. The two write methods carry the skill they act on because the Client gateway reserves the bare `install` and `remove` names. `SkillInstaller` is the service behind it.
 
 An install is one transaction over two folders. The files are written into `<harness home>/.skill-install-<uuid>`, the skill's switch is recorded off in `ctx.skillSources` **before** the folder appears, and only then is the staging folder renamed into `skills/<name>`; a replacement first renames the old folder aside and restores it if the publish fails. A failure therefore leaves the skills folder as it was.
 
