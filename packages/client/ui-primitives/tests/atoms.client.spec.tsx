@@ -194,6 +194,14 @@ describe('Menu', () => {
     expect(onSelect).toHaveBeenCalledWith('a')
   })
 
+  it('names the list from its localized label instead of its rows', () => {
+    const { rerender } = render(
+      <Menu open anchor={<span>trigger</span>} items={items} label="Stop options" onSelect={() => {}} onClose={() => {}} />)
+    expect(screen.getByRole('menu', { name: 'Stop options' })).toBeTruthy()
+    rerender(<Menu open anchor={<span>trigger</span>} items={items} onSelect={() => {}} onClose={() => {}} />)
+    expect(screen.getByRole('menu').hasAttribute('aria-label')).toBe(false)
+  })
+
   it('walks component rows with the data rows and returns focus to the trigger after one is activated', async () => {
     const onAction = vi.fn()
     function Harness() {

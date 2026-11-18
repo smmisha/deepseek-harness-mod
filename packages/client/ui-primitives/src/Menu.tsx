@@ -151,9 +151,11 @@ export function MenuItemButton({ onSelect, ...props }: MenuItemButtonProps) {
  * @param props.listClassName - extra class on the dropdown card itself; the
  * only style hook that reaches a portaled list, which renders under
  * document.body outside the owner's DOM subtree.
+ * @param props.label - localized accessible name for the list; omitted leaves
+ * the name computed from its rows.
  * @returns anchor wrapper with the conditional list.
  */
-export function Menu({ open, anchor, items = [], children, submenuBackLabel, selectedId, selectedIds, onSelect, onClose, align = 'start', side = 'bottom', portal = false, closeOnPointerLeave = false, dense = false, compact = false, autoFocus = false, selection = 'check', anchorRef, anchorPoint, minWidthFromAnchor = false, footer, className, listClassName, contextual = false, exiting, returnFocus, isExternalTrigger }: {
+export function Menu({ open, anchor, items = [], children, submenuBackLabel, selectedId, selectedIds, onSelect, onClose, align = 'start', side = 'bottom', portal = false, closeOnPointerLeave = false, dense = false, compact = false, autoFocus = false, selection = 'check', anchorRef, anchorPoint, minWidthFromAnchor = false, footer, className, listClassName, label, contextual = false, exiting, returnFocus, isExternalTrigger }: {
   open: boolean
   /** Pointer-positioned popup: cursor clearance, grouped icons, and context gestures. */
   contextual?: boolean
@@ -187,6 +189,8 @@ export function Menu({ open, anchor, items = [], children, submenuBackLabel, sel
   minWidthFromAnchor?: boolean
   className?: string | undefined
   listClassName?: string | undefined
+  /** Localized accessible name for the list; omitted derives it from the rows. */
+  label?: string | undefined
 }) {
   const rootRef = useRef<HTMLSpanElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -495,6 +499,7 @@ export function Menu({ open, anchor, items = [], children, submenuBackLabel, sel
       data-anchor-align={portal ? align : undefined}
       data-match-anchor-width={portal && minWidthFromAnchor ? '' : undefined}
       role={exiting === undefined && !submenu.page ? 'menu' : undefined}
+      aria-label={label}
       aria-hidden={exiting === undefined && !submenu.page ? undefined : true}
       data-context-menu={contextual ? '' : undefined}
       phase={contextual ? exiting ?? 'enter' : undefined}
