@@ -51,7 +51,7 @@ function BusyGlyph() {
 }
 
 /** Label for the main stop action in its current state. */
-function stopLabel(t: StopTranslate, armed: SessionStopMode | undefined): string {
+export function stopActionLabel(t: StopTranslate, armed: SessionStopMode | undefined): string {
   if (armed === 'immediate') return t('input.stop.armedImmediate')
   if (armed === 'graceful') return t('input.stop.armed')
   return t('input.stop.graceful')
@@ -83,6 +83,7 @@ export function StopOptionsMenu({ t, armed, disabled, keepFocus, onStop }: Omit<
       align="end"
       portal
       autoFocus
+      label={t('input.stop.options')}
       anchor={(
         <Tooltip label={t('input.stop.options')} side="top" delayMs={500} portal>
           <button
@@ -112,7 +113,7 @@ export function StopOptionsMenu({ t, armed, disabled, keepFocus, onStop }: Omit<
  * @returns the split stop button pair.
  */
 export function StopControl({ t, armed, disabled, shortcutKeys, keepFocus, onStop }: StopControlProps) {
-  const label = stopLabel(t, armed)
+  const label = stopActionLabel(t, armed)
   const busy = armed !== undefined
   return (
     <span className={css.stopSplit}>

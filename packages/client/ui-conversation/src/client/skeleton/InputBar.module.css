@@ -39,6 +39,8 @@
   padding: 0 var(--dsh-composer-side-clearance);
 }
 
+/* Composer status strip above the card. Information notices and the armed
+   stop's visible explanation share this quiet 12px line. */
 .notice {
   width: 100%;
   max-width: var(--dsh-composer-card-max-width);
@@ -455,6 +457,7 @@
 }
 
 .stopCaret {
+  position: relative;
   display: grid;
   place-items: center;
   width: 14px;
@@ -466,6 +469,16 @@
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   transform: translateY(-2px);
+}
+
+/* The 14x28 seat keeps the 10px glyph in place, and this transparent
+   extension raises the pointer target to the WCAG 2.5.8 minimum 24x28. Its
+   left edge stops at the 2px seat gap, so it never overlaps the primary stop
+   circle; its right edge stops at the row's 8px end padding. */
+.stopCaret::after {
+  content: '';
+  position: absolute;
+  inset: 0 -8px 0 -2px;
 }
 
 @media (hover: hover) {

@@ -1214,6 +1214,8 @@ describe('running and lock semantics', () => {
     expect(stop).toHaveBeenCalledExactlyOnceWith('graceful')
 
     fireEvent.click(view.getByRole('button', { name: '停止选项' }))
+    // The list is named by its localized purpose, not by its rows concatenated.
+    expect(view.getByRole('menu', { name: '停止选项' })).toBeTruthy()
     expect(view.getAllByRole('menuitem').map(item => item.textContent))
       .toEqual(['完成当前步骤后停止', '立即停止'])
     fireEvent.click(view.getByRole('menuitem', { name: '立即停止' }))
@@ -1236,6 +1238,22 @@ describe('running and lock semantics', () => {
     expect(pendingRow.disabled).toBe(true)
     fireEvent.click(view.getByRole('menuitem', { name: '立即停止' }))
     expect(stop).toHaveBeenLastCalledWith('immediate')
+  })
+
+  it('renders the armed stop as a visible composer status, not only as the disabled button name', () => {
+    const { session, view } = bench({ running: true })
+    act(() => { session.set(snapshotOf({ running: true, stopRequested: 'graceful' })) })
+    const status = view.getByRole('status')
+    expect(status.textContent).toBe('正在完成当前步骤…')
+    // The status sits above the card as composer chrome; no hover reveals it.
+    expect(status.closest('[data-composer-card]')).toBeNull()
+    expect(view.queryByRole('tooltip')).toBeNull()
+
+    act(() => { session.set(snapshotOf({ running: true, stopRequested: 'immediate' })) })
+    expect(view.getByRole('status').textContent).toBe('正在停止…')
+
+    act(() => { session.set(snapshotOf({ running: false })) })
+    expect(view.queryByRole('status')).toBeNull()
   })
 
   it('shows the armed immediate stop while the abort lands', () => {

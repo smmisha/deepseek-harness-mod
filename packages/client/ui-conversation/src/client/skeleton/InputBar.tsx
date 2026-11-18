@@ -38,7 +38,7 @@ import { resolveSubmitMode } from '../input/submission-policy.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { isImageMediaType } from '../service.ts'
 import { ContextMeter } from './ContextMeter.tsx'
-import { StopControl, StopGlyph, StopOptionsMenu } from './StopControl.tsx'
+import { StopControl, StopGlyph, StopOptionsMenu, stopActionLabel } from './StopControl.tsx'
 import { observeControlRow } from './control-row-layout.ts'
 import css from './InputBar.module.css'
 
@@ -388,9 +388,7 @@ export const InputBar = memo(function InputBar({
   const primarySubmitMode = resolveSubmitMode(busyEnter, running, 'enter', steeringAvailable)
   const plainMessageDraft = !empty && input?.phase === 'plain' && !draft.trimStart().startsWith('/')
   const primaryLabel = primaryStops
-    ? stopRequested === 'graceful' ? t('input.stop.armed')
-      : stopRequested === 'immediate' ? t('input.stop.armedImmediate')
-        : t('input.stop.graceful')
+    ? stopActionLabel(t, stopRequested)
     : sending
       ? t('input.sending')
       : primaryRetries
@@ -411,6 +409,10 @@ export const InputBar = memo(function InputBar({
     /* v8 ignore next -- defensive: the primary button is disabled for empty, disabled, and pending-upload states. */
     if (!empty && !disabled && !machineBusy && !uploadsPending) keyboard.submit(primarySubmitMode, 'click')
   }
+
+  // A pending stop disables the stop button, which suppresses its tooltip, so
+  // the same localized state renders as a visible status line above the card.
+  const stopPendingLabel = stopRequested === undefined ? undefined : stopActionLabel(t, stopRequested)
 
   // Claim ghost hint: rendered by CSS as generated content after the last
   // paragraph while the claim's args are blank (a hint implies a single-line
@@ -454,6 +456,11 @@ export const InputBar = memo(function InputBar({
       {notice?.level === 'info' && (
         <div className={css.notice} role="status">
           {notice.text}
+        </div>
+      )}
+      {stopPendingLabel !== undefined && (
+        <div className={css.notice} role="status" data-stop-pending={stopRequested}>
+          {stopPendingLabel}
         </div>
       )}
       {/* Trigger clicks land on the card, not the editor: the toolbar row's
