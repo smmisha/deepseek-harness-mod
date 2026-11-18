@@ -94,6 +94,8 @@ export const ukChat = {
   'chat.toBottom': 'До низу',
   'chat.deepDiving': 'Глибоке занурення',
   'chat.deepDivingFor': 'Глибоке занурення протягом {duration} ···',
+  'chat.stoppingAtStep': 'Завершується поточний крок, потім зупинка',
+  'chat.stoppingNow': 'Зупинення…',
   'chat.turnNavigation.label': 'Навігація за ходами',
   'chat.turnNavigation.jump': 'Перейти до ходу {turn}',
   'chat.turnNavigation.jumpLoad': 'Завантажити й перейти до ходу {turn}',

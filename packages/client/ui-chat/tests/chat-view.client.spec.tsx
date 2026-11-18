@@ -4894,6 +4894,24 @@ describe('ChatView', () => {
     expect(column.querySelector('[data-chat-running]')).toBeNull()
   })
 
+  it('names a pending stop in the running status row without adding transcript chrome', () => {
+    const h = makeHarness({ nodes: [user(1, 'do the thing'), assistant(2, 'working')] }, { running: true })
+    const view = render(<h.ChatView {...h.props} />)
+    const column = view.container.querySelector('[data-chat-flow]')!
+    const row = runningContent(view.container)
+    expect(row?.textContent).toBe('深度求索中')
+    act(() => { h.setSession({ stopRequested: 'graceful' }) })
+    // The same status row carries the pending ending: no second row and no
+    // banner joins the transcript.
+    expect(runningContent(view.container)).toBe(row)
+    expect(row?.textContent).toBe('正在完成当前步骤，随后停止')
+    expect(column.querySelectorAll('[data-chat-running]')).toHaveLength(1)
+    expect(within(column.querySelector<HTMLElement>('[data-chat-running]')!).getByRole('status').textContent)
+      .toBe('正在完成当前步骤，随后停止')
+    act(() => { h.setSession({ stopRequested: 'immediate' }) })
+    expect(row?.textContent).toBe('正在停止…')
+  })
+
   it('marks the steering row whose data carries a batch start, and no other input', () => {
     const batchStart = (seq: number, text: string) => ({ ...steering(seq, text, 1), batchStart: true as const })
     const h = makeHarness({
