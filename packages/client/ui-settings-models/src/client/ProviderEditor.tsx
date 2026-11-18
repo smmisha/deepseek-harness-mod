@@ -651,7 +651,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
           <div className={styles['editorHeader']}>
             <span className={styles['editorTitle']}>{props.displayName}</span>
             {props.provider !== props.displayName
-              ? <span className={styles['editorRoute']}>{props.provider}</span>
+              ? <span className={styles['editorRoute']} title={props.provider}>{props.provider}</span>
               : null}
           </div>
         )}
