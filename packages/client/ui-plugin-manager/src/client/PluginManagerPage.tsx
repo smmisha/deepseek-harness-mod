@@ -437,19 +437,38 @@ function packageStatus(pkg: PackageView): PackageStatus {
   return pkg.enabled ? 'running' : 'disabled'
 }
 
-/** The danger tag a status carries. */
+/** The danger tag a status carries on a bundle's page, where the title is large enough for a badge. */
 function StatusTag({ status, t }: { readonly status: PackageStatus; readonly t: Translate }): ReactNode {
   const key = STATUS_TAG_KEYS[status]
   return key === undefined ? null : <Tag className={css.statusTag} tone="danger">{t(key)}</Tag>
 }
 
-/** The head every card shares: the artwork, the name that opens the page beside its tags, its one-liner, and what sits at the end. */
-function CardHead({ title, t, onOpen, icon, tags, description, end }: {
+/** One quiet card caption: a dot and a word at caption size, never a filled badge competing with the title. */
+function CardCaption({ tone, children }: {
+  readonly tone?: 'danger' | 'info' | 'warning'
+  readonly children: ReactNode
+}): ReactNode {
+  return <span className={css.cardCaption} data-tone={tone}>{children}</span>
+}
+
+/** The quiet caption a status carries beside a card's title; running and off carry none. */
+function StatusCaption({ status, t }: { readonly status: PackageStatus; readonly t: Translate }): ReactNode {
+  const key = STATUS_TAG_KEYS[status]
+  return key === undefined ? null : <CardCaption tone="danger">{t(key)}</CardCaption>
+}
+
+/**
+ * The head every card shares: the artwork, the name that opens the page beside
+ * its captions, its one-liner, and what sits at the end. The icon, the title,
+ * and the description share one left axis; a caption shares the title's 20px
+ * line box, so a marker appearing never moves the title or grows the row.
+ */
+function CardHead({ title, t, onOpen, icon, captions, description, end }: {
   readonly title: string
   readonly t: Translate
   readonly onOpen: () => void
   readonly icon: ReactNode
-  readonly tags?: ReactNode
+  readonly captions?: ReactNode
   readonly description: ReactNode
   readonly end?: ReactNode
 }): ReactNode {
@@ -460,7 +479,7 @@ function CardHead({ title, t, onOpen, icon, tags, description, end }: {
       <div className={css.cardMain}>
         <div className={css.titleRow}>
           <button type="button" className={`${css.cardTitle} ${css.cardOpen}`} aria-label={t('openDetail', { name: title })} aria-describedby={description === undefined ? undefined : descriptionId} onClick={onOpen}>{title}</button>
-          {tags}
+          {captions}
         </div>
         {description === undefined ? null : <span className={css.cardDesc} id={descriptionId}>{description}</span>}
       </div>
@@ -478,6 +497,7 @@ function ListSkeleton({ label }: { readonly label: string }): ReactNode {
           <span className={`${css.skeletonFill} ${css.skeletonBar}`} />
         </span>
       </div>
+      <div className={css.groupRule} aria-hidden="true" />
       <ul className={css.cards} aria-hidden="true">
         {[0, 1, 2, 3].map(index => (
           <li key={index} className={css.card}>
@@ -576,12 +596,12 @@ function PackageCard({ pkg, t, resolveText, busy, highlighted, newer, onOpen, on
         t={t}
         onOpen={onOpen}
         icon={<PackageArtwork key={pkg.meta?.icon} src={pkg.meta?.icon} />}
-        tags={(
+        captions={(
           <>
-            {beta ? <Tag className={css.statusTag} tone="info">{t('statusBeta')}</Tag> : null}
-            <StatusTag status={status} t={t} />
-            {pkg.availability === 'missing' ? <Tag className={css.statusTag}>{t(pkg.installed ? 'statusMissingFiles' : 'statusNotInstalled')}</Tag> : null}
-            {updateAvailable(pkg) || newer !== undefined ? <Tag className={css.statusTag} tone="info">{t('statusUpdateAvailable')}</Tag> : null}
+            {beta ? <CardCaption>{t('statusBeta')}</CardCaption> : null}
+            <StatusCaption status={status} t={t} />
+            {pkg.availability === 'missing' ? <CardCaption tone="warning">{t(pkg.installed ? 'statusMissingFiles' : 'statusNotInstalled')}</CardCaption> : null}
+            {updateAvailable(pkg) || newer !== undefined ? <CardCaption tone="info">{t('statusUpdateAvailable')}</CardCaption> : null}
           </>
         )}
         description={description}
@@ -1668,13 +1688,19 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
       <section className={css.group} data-plugin-scope="global" data-plugin-group={id}>
         <div className={css.groupHead}>
           <h3 className={css.groupTitle}>{heading}</h3>
-          {offersMore ? (
-            <Button size="sm" className={css.groupMore} onClick={() => { setView({ kind: 'more' }) }}>
-              {t('moreAction')}<IconChevronRightOutlineRegular size={14} aria-hidden="true" />
-            </Button>
-          ) : null}
+          <span className={css.groupCount} data-plugin-count>{cards.length}</span>
         </div>
+        <div className={css.groupRule} aria-hidden="true" />
         {cards.length > 0 ? <ul className={css.cards}>{cards}</ul> : null}
+        {offersMore
+          ? (
+            <div className={css.groupFoot}>
+              <button type="button" className={css.groupMore} onClick={() => { setView({ kind: 'more' }) }}>
+                {t('moreAction')}<IconChevronRightOutlineRegular size={14} aria-hidden="true" />
+              </button>
+            </div>
+          )
+          : null}
       </section>
     )
   }

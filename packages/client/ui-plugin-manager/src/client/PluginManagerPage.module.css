@@ -12,10 +12,13 @@
   --plugin-page-top-inset: 28px;
   --bundle-progress-size: 14px;
   --bundle-toggle-gap: 8px;
-  /* A card head's inset, icon size, and gap after the icon; a card's reason lines align under its title from these. */
+  /* A card head's inset, icon frame, and gap after the icon; a card's reason lines align under its title from these. */
   --card-head-inset: 8px;
   --card-icon-size: 48px;
-  --card-head-gap: 14px;
+  --card-head-gap: 16px;
+  /* The description measure: at 13px a long one-liner would run the width of a
+     wide window, so the reading column stops at a comfortable character count. */
+  --card-description-measure: 68ch;
 
   display: flex;
   flex-direction: column;
@@ -275,45 +278,97 @@
   gap: 6px;
 }
 
+/* One installed group: a counted header over the rows it owns. The header rule
+   and the one between groups keep a long list of groups legible without making
+   every row look like a table row. */
 .group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  min-width: 0;
 }
 
+/* The header keeps one height and one baseline with or without a count, so the
+   groups do not step down the page unevenly. */
 .groupHead {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  min-height: 32px;
 }
 
 .groupTitle {
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
+  overflow-wrap: break-word;
+}
+
+/* The count is a fact beside the heading, not a second title. */
+.groupCount {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.groupRule {
+  height: 0.5px;
+  margin: 4px 0 8px;
+  background: var(--dsw-alias-border-l1);
+}
+
+/* Groups separate by one hairline with one 16px step on each side. */
+.group + .group {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  padding-top: 16px;
+}
+
+/* The More control closes its group instead of sharing the header line, where
+   it would read as a second heading. */
+.groupFoot {
+  display: flex;
+  margin-top: 8px;
 }
 
 .groupMore {
+  display: inline-flex;
   flex: none;
+  align-items: center;
   gap: 4px;
-  /* Like .card, the hover surface reaches 8px past the trailing content edge. */
-  margin-inline-end: -8px;
+  min-height: 28px;
+  /* The hover surface reaches 8px past the trailing content edge, as .card's does. */
+  margin-inline-start: -8px;
   padding: 0 8px;
-  font-size: 14px;
-  line-height: 22px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
   font-weight: 400;
-  color: color-mix(in srgb, var(--dsw-alias-label-secondary) 60%, var(--dsw-alias-label-tertiary));
+  cursor: pointer;
+}
+
+.groupMore:active {
+  background: var(--dsw-alias-interactive-bg-active);
 }
 
 .groupMore:focus-visible {
-  color: var(--dsw-alias-label-secondary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
 }
 
 @media (hover: hover) {
   .groupMore:hover {
-    color: var(--dsw-alias-label-secondary);
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
   }
 }
 
@@ -364,16 +419,16 @@
   outline-offset: 1px;
 }
 
-.cards {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
+/* Rows separate by one 8px step (two 4px units): each row is one clickable
+   target with its own rounded hover and press surface, so a hairline would cut
+   through that surface; the step keeps the rows apart without fencing them. */
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .card {
@@ -388,14 +443,20 @@
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
+/* One reading axis: the icon frame, the title, and the description start on the
+   same left edge; the switch keeps the trailing column and aligns with the
+   title's first line. */
 .cardHead {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: var(--card-icon-size) minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--card-head-gap);
+  min-width: 0;
   padding: var(--card-head-inset);
 }
 
 .cardIcon {
+  box-sizing: border-box;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -425,21 +486,26 @@
   gap: 4px;
 }
 
+/* The title keeps its 20px line box; a caption in the same line box never lifts
+   or lowers the title or grows the row. Both wrap at word boundaries when the
+   row is narrow. */
 .titleRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px 8px;
   min-width: 0;
 }
 
 .cardTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
 }
 
 /*
@@ -476,6 +542,8 @@
   font-weight: 500;
   text-align: left;
   cursor: pointer;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
 }
 
 .cardOpen::after {
@@ -485,23 +553,62 @@
   border-radius: var(--dsw-radius-xl);
 }
 
+/* The keyboard focus ring sits on the title itself, the control the ring names,
+   rather than on the card's invisible stretch target. */
 .cardOpen:focus-visible {
-  outline: none;
-}
-
-.cardOpen:focus-visible::after {
+  border-radius: var(--dsw-radius-xs);
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
+/* The description stays two lines of house prose at a readable measure; the
+   bundle's page carries the complete text. */
 .cardDesc {
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-tertiary);
   display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  max-width: var(--card-description-measure);
   overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* A quiet marker beside the title: a 6px dot and a 12/20 word. The dot carries
+   the tone; the word keeps secondary ink, so a status never reads as a badge.
+   The caption shares the title's 20px line box, so adding or removing one never
+   changes the row's height. */
+.cardCaption {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.cardCaption::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-idle-primary);
+  vertical-align: 1px;
+}
+
+.cardCaption[data-tone='danger']::before {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.cardCaption[data-tone='warning']::before {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.cardCaption[data-tone='info']::before {
+  background: var(--dsw-alias-state-business-primary);
 }
 
 /* Match Session search's pulse without coupling the two feature packages. */
@@ -525,7 +632,8 @@
 
 .skeletonHeading { width: 48px; }
 .skeletonTitle { width: min(144px, 60%); }
-.skeletonDescription { width: min(280px, 85%); }
+/* Two real description lines, so the cards do not grow taller when they land. */
+.skeletonDescription { width: min(280px, 85%); height: 2lh; }
 .skeletonIcon { border-color: transparent; }
 
 /* Switch.module.css owns the 36px switch; ongoing StateDot occupies the reserved progress size. */
@@ -550,6 +658,7 @@
   display: inline-flex;
   flex: none;
   align-items: center;
+  align-self: start;
   gap: 8px;
 }
 
@@ -1840,11 +1949,12 @@ label.registryOption {
   }
 }
 
-/* The Installed groups keep the page's row gap inside their tab panel. */
+/* The Installed groups keep one 16px step between them; the group rule adds the
+   visible separation inside that step. */
 .installedPanel {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 16px;
 }
 
 .tabPanel {
