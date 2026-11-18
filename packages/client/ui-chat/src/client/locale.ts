@@ -1521,7 +1521,7 @@ export const ru = {
   'duration.secondUnit': 'с',
   'duration.minuteUnit': 'м ',
   'duration.hourUnit': 'ч ',
-  'command.running': 'Бег…',
+  'command.running': 'Выполняется…',
   'command.failed': 'Команда не выполнена',
   'command.done': 'Завершено',
   'command.title': 'Команда',

@@ -2783,7 +2783,7 @@ export const ru = {
   'web.sourcesTruncated': 'Список источников сокращен',
   'web.http': 'HTTP',
   'web.contentTruncated': 'Содержание усечено',
-  'details.running': 'Бег…',
+  'details.running': 'Выполняется…',
   'queue.count': 'Сообщения в очереди {n}',
   'queue.sending': 'Отправка…',
   'queue.image': 'Изображение сообщения в очереди',

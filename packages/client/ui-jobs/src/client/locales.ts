@@ -280,7 +280,7 @@ export const ru = {
   'duration.seconds': '{seconds}s',
   'duration.minutes': '{minutes}m {seconds}s',
   'duration.hours': '{hours}h {minutes}m',
-  'duration.title.live': 'Бегу за {duration}',
+  'duration.title.live': 'Идёт {duration}',
   'duration.title.done': 'Взял {duration}',
   'output.gap': '… ранее объемы производства упали …',
   'output.error': 'поток вывода в реальном времени прерван: {error}',

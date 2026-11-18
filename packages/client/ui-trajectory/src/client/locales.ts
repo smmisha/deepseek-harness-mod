@@ -1358,7 +1358,7 @@ export const ru = {
   'code.copySource': 'Скопировать код',
   'code.copyOutput': 'Копировать вывод',
   'code.originalJson': 'Исходный JSON',
-  'code.running': 'Бег…',
+  'code.running': 'Выполняется…',
   'record.systemPromptMissing': 'В этом запросе нет системного запроса',
   'record.toolsMissing': 'В этом запросе нет инструментов',
   'record.systemPrompt': 'Системная подсказка',

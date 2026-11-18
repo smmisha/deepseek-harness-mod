@@ -378,7 +378,7 @@ export const ru = {
   'action.approveOnce': 'Разрешить только эту версию',
   'action.approvePlugin': 'Разрешить будущие версии этого плагина',
   'action.decline': 'Снижение',
-  'action.run': 'Беги',
+  'action.run': 'Запустить',
   'action.stop': 'Стоп',
   'action.remove': 'Удалить',
   'action.retry': 'Повторить',
