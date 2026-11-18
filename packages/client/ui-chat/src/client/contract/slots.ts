@@ -68,6 +68,12 @@ export interface AssistantActionOwnerProps {
   messageId: MessageId
 }
 
+/** Factory props of the user-message pencil action. */
+export interface UserActionProps {
+  /** Plain text of the sent message; the action seeds an editable draft from it. */
+  readonly text: string
+}
+
 /** Stable quota failure codes retained in the Session log; both raise the frame-wide notice. */
 export type QuotaNoticeCode = 'QUOTA' | 'ACCOUNT_QUOTA'
 
@@ -417,6 +423,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       props: UserContentInput
       locale: 'chat'
       children: { 'conversation.chat.user.images': { kind: 'single'; scope: 'session' } }
+    }
+    /** Pencil action beside one finalized user message; the official entry seeds the composer draft. */
+    'conversation.chat.user.actions': {
+      scope: 'session'
+      props: UserActionProps
+      locale: 'chat'
     }
     /** Session-independent reasoning Markdown with Chat labels and compact typography. */
     'conversation.chat.reasoning.content': {

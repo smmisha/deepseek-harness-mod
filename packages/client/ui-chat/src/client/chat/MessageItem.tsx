@@ -323,15 +323,14 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
 }
 
 /**
- * Official user and admitted-steering keyed Chat renderer.
+ * Official durable user keyed Chat renderer.
  *
- * Renders the durable-message chain seat directly above the bubble. The seat is
- * declared by the `user` registration alone, so a steering row renders the same
- * bubble without asking for it.
+ * Renders the durable-message chain seat and the user-action row directly
+ * above and below the bubble.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
   node, renderFactorySlot, loadImage, renderSlotChain, t,
-}: ChatNodeViewProps<'user' | 'steering'> & {
+}: ChatNodeViewProps<'user'> & {
   /** Bound by the `user` keyed registration, the only entry that declares the seat. */
   renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
 }) {
@@ -344,7 +343,6 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       interactive
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
-      batchStart={node.kind === 'steering' && node.data.batchStart === true}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
       actions={text => (
@@ -353,8 +351,32 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           time={data.time}
           clock="start"
           className={css.actions}
+          extraActions={renderFactorySlot('conversation.chat.user.actions', { text })}
           t={t}
         />
+      )}
+    />
+  )
+})
+
+/** Admitted-steering keyed Chat renderer: the same bubble without the seat or user actions. */
+export const SteeringMessageNodeView = memo(function SteeringMessageNodeView({
+  node, renderFactorySlot, loadImage, t,
+}: ChatNodeViewProps<'steering'>) {
+  const data = node.data
+  return (
+    <UserStyleBubble
+      node={node}
+      renderSlotChain={NO_MESSAGE_SOURCE}
+      content={data.content}
+      interactive
+      batchStart={data.batchStart === true}
+      renderFactorySlot={renderFactorySlot}
+      loadImage={loadImage}
+      {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
+      {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+      actions={text => (
+        <MessageIconActions text={text} time={data.time} clock="start" className={css.actions} t={t} />
       )}
     />
   )

@@ -7,8 +7,8 @@ import { AssistantNodeView, type AssistantNodeInjected } from './AssistantNodeVi
 import { sessionFilePath } from '../file-path.ts'
 import { CommandNodeView, ManualCompactionNodeView } from './CommandNodeView.tsx'
 import {
-  CompactionNodeView, ContextMessageNodeView, RetryNodeView, TurnErrorNodeView,
-  TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
+  CompactionNodeView, ContextMessageNodeView, RetryNodeView, SteeringMessageNodeView,
+  TurnErrorNodeView, TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
 } from './MessageItem.tsx'
 import { DefaultReasoningBody, ReasoningContent } from './ReasoningContent.tsx'
 import { SystemPromptNodeView } from './SystemPromptRow.tsx'
@@ -42,11 +42,9 @@ export function registerChatNodeRenderers(
     name: 'conversation.chat.node', key: 'user', locale: NS,
     children: { 'conversation.chat.user.before': { kind: 'chain', scope: 'session' } },
   }, UserMessageNodeView))
-  // Steering rows share the renderer without owning the message-source seat.
-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-    name: 'conversation.chat.node', key: 'steering', locale: NS,
-    inject: () => ({ renderSlotChain: () => null }),
-  }, UserMessageNodeView))
+  // Steering rows render the same bubble without the message-source seat or user actions.
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+    { name: 'conversation.chat.node', key: 'steering', locale: NS }, SteeringMessageNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'context', locale: NS }, ContextMessageNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(

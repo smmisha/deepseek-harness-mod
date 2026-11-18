@@ -26,7 +26,7 @@ const standard: GlobalStandardProps & SessionStandardProps = {
   ...allowAllAccess,
   useContextMenu: contextMenuHook(),
   inputActions: { insertQuote: () => false, captureInsertion: unused, insertText: unused, setDraft: unused, persistDraft: unused,
-    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
+    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused, focus: unused },
 }
 const choices: TerminalLaunchShells = {
   shells: [{ name: 'bash', path: '/bin/bash', args: ['-i'] }, { name: 'zsh', path: '/bin/zsh', args: ['-i'] }],

@@ -167,6 +167,7 @@ export const ukChat = {
   'message.stopped': 'Зупинено',
   'message.branch': 'Відгалузити в нову розмову',
   'message.branchUnavailable': 'Доступно лише для останнього повідомлення завершеного ходу',
+  'message.edit': 'Редагувати повідомлення',
   'message.retry.active': 'Повторення запиту до моделі',
   'message.retry.cancelled': 'Повторення запиту до моделі скасовано',
   'message.retry.started': 'Запит до моделі повторено',

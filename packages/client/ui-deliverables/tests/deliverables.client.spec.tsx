@@ -70,6 +70,7 @@ const standardProps: GlobalStandardProps & Omit<SessionStandardProps, 'sessionId
     removeAttachment: unusedStandardHook,
     pruneAttachments: unusedStandardHook,
     submit: unusedStandardHook,
+    focus: () => {},
   },
 }
 

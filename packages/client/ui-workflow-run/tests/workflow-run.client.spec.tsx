@@ -360,6 +360,7 @@ function panelProps(data: WorkflowRunChatData, sessions = listState(), openSessi
       removeAttachment: () => {},
       pruneAttachments: () => {},
       submit: () => {},
+      focus: () => {},
     },
     useWorkspaces: selector => selector(panelWorkspace),
     ...allowAllAccess,

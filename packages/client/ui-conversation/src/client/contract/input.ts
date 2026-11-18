@@ -290,6 +290,10 @@ export interface InputActions {
   pruneAttachments(ids: readonly DraftAttachmentId[]): void
   /** Enter submission (adjudication / claim transaction / default sink inside). */
   submit(): void
+  /**
+   * Return keyboard focus to the composer, e.g. after a programmatic draft write.
+   */
+  focus(): void
 }
 
 /** One surfaced notice (command results, adjudication failures). seq keys re-render of repeats. */

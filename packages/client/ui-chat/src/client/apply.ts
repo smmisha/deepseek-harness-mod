@@ -34,6 +34,7 @@ import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
 import { sessionFilePath } from './file-path.ts'
 import { ChatView } from './chat/ChatView.tsx'
 import { ChatFlow } from './chat/ChatFlow.tsx'
+import { EditMessageAction } from './chat/EditMessageAction.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { UserContent } from './chat/UserContent.tsx'
 import { ActivityPill, UsagePill } from './chat/StatsPills.tsx'
@@ -179,6 +180,11 @@ export function apply(ctx: Context): void {
     name: 'conversation.chat.user.content', scope: 'session', locale: NS,
     children: { 'conversation.chat.user.images': { kind: 'single', scope: 'session' } },
   }, UserContent)
+  // The pencil seeds the composer with one sent request so the human can edit
+  // and resubmit it; the original message remains in the transcript.
+  ctx.effect(() => ctx.slots.registerFactory({
+    name: 'conversation.chat.user.actions', scope: 'session', locale: NS,
+  }, EditMessageAction))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',

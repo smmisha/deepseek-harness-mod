@@ -30,7 +30,7 @@ const standard: GlobalStandardProps & SessionStandardProps = {
   ...allowAllAccess,
   useContextMenu: contextMenuHook(),
   inputActions: { insertQuote: () => false, captureInsertion: unused, insertText: unused, setDraft: unused, persistDraft: unused,
-    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
+    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused, focus: unused },
 }
 
 /** Test-local selector hook over a framework-neutral store instance. */

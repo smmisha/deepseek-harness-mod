@@ -148,6 +148,7 @@ const kitBase: Omit<QuestionComposerProps, 'matched' | 'useStore' | 'useQuestion
     removeAttachment: () => { throw new Error('unused') },
     pruneAttachments: () => { throw new Error('unused') },
     submit: () => { throw new Error('unused') },
+    focus: () => {},
   },
   // The seat's key domain is question ∪ common.
   t: seatOver(zh, commonZh),
