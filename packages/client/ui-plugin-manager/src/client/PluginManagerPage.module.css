@@ -595,6 +595,7 @@
   height: 6px;
   margin-inline-end: 6px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-idle-primary);
   vertical-align: 1px;
 }
