@@ -205,7 +205,7 @@ type FaceStub = {
   previewRepository?: InstallFace['previewRepository']
   previewArchive?: InstallFace['previewArchive']
   previewFolder?: InstallFace['previewFolder']
-  install?: InstallFace['install']
+  installSkill?: InstallFace['installSkill']
   removeInstalled?: InstallFace['removeInstalled']
 }
 
@@ -220,7 +220,7 @@ function installStubs(): InstallFace {
     previewRepository: async () => ({ ok: false, failure: { code: 'skill-install/not-found', message: 'gone' } }),
     previewArchive: async () => ({ ok: false, failure: { code: 'skill-install/archive-invalid', message: 'refused' } }),
     previewFolder: async () => ({ ok: false, failure: { code: 'skill-install/invalid-skill', message: 'refused' } }),
-    install: async () => ({ ok: true, value: { installed: [] } }),
+    installSkill: async () => ({ ok: true, value: { installed: [] } }),
     removeInstalled: async () => undefined,
   }
 }
@@ -1191,15 +1191,15 @@ describe('SkillsSection importing and removing', () => {
 
   it('installs the preview the tab read and says so', async () => {
     const previewArchive = vi.fn(async () => ({ ok: true as const, value: PREVIEW }))
-    const install = vi.fn(async () => ({
+    const installSkill = vi.fn(async () => ({
       ok: true as const,
       value: { installed: [{ name: 'pdf', path: 'C:\\skills\\pdf', replaced: false }] },
     }))
-    mount({ previewArchive, install })
+    mount({ previewArchive, installSkill })
     fireEvent.drop(await tabSection(), { dataTransfer: { files: [new File(['zip'], 'pack.zip')] } })
     const dialog = await screen.findByRole('dialog', { name: en.catalogTitle })
     fireEvent.click(within(dialog).getByRole('button', { name: en.install }))
-    await waitFor(() => { expect(install).toHaveBeenCalledWith('preview-1', undefined, false) })
+    await waitFor(() => { expect(installSkill).toHaveBeenCalledWith('preview-1', undefined, false) })
   })
 
   it('removes an installed skill after confirmation', async () => {

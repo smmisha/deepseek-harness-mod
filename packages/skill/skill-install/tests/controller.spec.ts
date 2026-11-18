@@ -90,9 +90,9 @@ describe('SkillInstallController', () => {
     const controller = await harness(repositoryRoutes())
     const preview = await controller.previewRepository('acme/skills', 'skills/pdf')
     expect(preview.skills[0]?.name).toBe('pdf')
-    const result = await controller.install(preview.id, undefined, false)
+    const result = await controller.installSkill(preview.id, undefined, false)
     expect(result.installed.map(skill => skill.name)).toEqual(['pdf'])
-    await controller.remove('pdf')
+    await controller.removeSkill('pdf')
   })
 
   it('previews an archive and installs it', async () => {
@@ -101,7 +101,7 @@ describe('SkillInstallController', () => {
       { name: 'pdf/SKILL.md', data: '---\nname: pdf\n---\n' },
     ])))
     expect(preview.source).toEqual({ kind: 'archive', fileName: 'pack.zip' })
-    expect((await controller.install(preview.id, 'pdf-copy', false)).installed[0]?.name).toBe('pdf-copy')
+    expect((await controller.installSkill(preview.id, 'pdf-copy', false)).installed[0]?.name).toBe('pdf-copy')
   })
 
   it('previews a dropped folder', async () => {
@@ -128,14 +128,14 @@ describe('SkillInstallController', () => {
   it('translates a conflict', async () => {
     const controller = await harness(repositoryRoutes())
     const first = await controller.previewRepository('acme/skills', 'skills/pdf')
-    await controller.install(first.id, undefined, false)
+    await controller.installSkill(first.id, undefined, false)
     const second = await controller.previewRepository('acme/skills', 'skills/pdf')
-    expect((await failureOf(controller.install(second.id, undefined, false))).code).toBe('skill-install/conflict')
+    expect((await failureOf(controller.installSkill(second.id, undefined, false))).code).toBe('skill-install/conflict')
   })
 
   it('translates a refused removal', async () => {
     const controller = await harness()
-    expect((await failureOf(controller.remove('missing'))).code).toBe('skill-install/not-installed')
+    expect((await failureOf(controller.removeSkill('missing'))).code).toBe('skill-install/not-installed')
   })
 
   it('translates a refused archive', async () => {

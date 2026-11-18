@@ -70,7 +70,7 @@ function face(overrides: Partial<InstallFace> = {}): InstallFace {
     previewRepository: async () => ({ ok: true, value: preview() }),
     previewArchive: async () => ({ ok: true, value: preview() }),
     previewFolder: async () => ({ ok: true, value: preview() }),
-    install: async () => ({ ok: true, value: { installed: [{ name: 'pdf', path: 'C:\\skills\\pdf', replaced: false }] } }),
+    installSkill: async () => ({ ok: true, value: { installed: [{ name: 'pdf', path: 'C:\\skills\\pdf', replaced: false }] } }),
     removeInstalled: async () => undefined,
     ...overrides,
   }
@@ -204,28 +204,28 @@ describe('CatalogDialog catalogs', () => {
 
 describe('CatalogDialog install', () => {
   it('installs after confirmation and reports the written names', async () => {
-    const install = vi.fn(async () => ({
+    const installSkill = vi.fn(async () => ({
       ok: true as const,
       value: { installed: [{ name: 'pdf', path: 'C:\\skills\\pdf', replaced: false }] },
     }))
     const onInstalled = vi.fn()
-    mount({ face: face({ install }), preview: preview(), onInstalled })
+    mount({ face: face({ installSkill }), preview: preview(), onInstalled })
     expect(await screen.findByText('Work with PDF files')).toBeTruthy()
     expect(screen.getByText(en.previewScripts)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en.install }))
-    await waitFor(() => { expect(install).toHaveBeenCalledWith('preview-1', undefined, false) })
+    await waitFor(() => { expect(installSkill).toHaveBeenCalledWith('preview-1', undefined, false) })
     expect(onInstalled).toHaveBeenCalledWith(['pdf'])
     expect(await screen.findByText(en.installedNotice.replace('{names}', 'pdf'))).toBeTruthy()
   })
 
   it('reports a refused install in place', async () => {
-    mount({ face: face({ install: async () => failed('skill-install/network') }), preview: preview() })
+    mount({ face: face({ installSkill: async () => failed('skill-install/network') }), preview: preview() })
     fireEvent.click(await screen.findByRole('button', { name: en.install }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining(en.installNetwork))
   })
 
   it('shows an unknown failure code with its own diagnostic', async () => {
-    mount({ face: face({ install: async () => failed('skill-install/unknown', 'boom') }), preview: preview() })
+    mount({ face: face({ installSkill: async () => failed('skill-install/unknown', 'boom') }), preview: preview() })
     fireEvent.click(await screen.findByRole('button', { name: en.install }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('boom'))
   })
@@ -246,28 +246,28 @@ describe('CatalogDialog install', () => {
 
 describe('CatalogDialog conflict', () => {
   it('asks before replacing a taken name', async () => {
-    const install = vi.fn(async () => ({
+    const installSkill = vi.fn(async () => ({
       ok: true as const,
       value: { installed: [{ name: 'pdf', path: 'C:\\skills\\pdf', replaced: true }] },
     }))
-    mount({ face: face({ install }), preview: preview(true) })
+    mount({ face: face({ installSkill }), preview: preview(true) })
     expect(await screen.findByRole('dialog', { name: en.conflictTitle.replace('{name}', 'pdf') })).toBeTruthy()
     expect(screen.getByText(en.conflictBody)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en.conflictReplace }))
-    await waitFor(() => { expect(install).toHaveBeenCalledWith('preview-1', undefined, true) })
+    await waitFor(() => { expect(installSkill).toHaveBeenCalledWith('preview-1', undefined, true) })
   })
 
   it('installs a taken name under a new one', async () => {
-    const install = vi.fn(async () => ({
+    const installSkill = vi.fn(async () => ({
       ok: true as const,
       value: { installed: [{ name: 'pdf-copy', path: 'C:\\skills\\pdf-copy', replaced: false }] },
     }))
-    mount({ face: face({ install }), preview: preview(true) })
+    mount({ face: face({ installSkill }), preview: preview(true) })
     const field = await screen.findByPlaceholderText(en.conflictNamePlaceholder)
     expect(screen.getByRole('button', { name: en.conflictRename })).toHaveProperty('disabled', true)
     fireEvent.change(field, { target: { value: ' pdf-copy ' } })
     fireEvent.click(screen.getByRole('button', { name: en.conflictRename }))
-    await waitFor(() => { expect(install).toHaveBeenCalledWith('preview-1', 'pdf-copy', false) })
+    await waitFor(() => { expect(installSkill).toHaveBeenCalledWith('preview-1', 'pdf-copy', false) })
   })
 })
 

@@ -32,7 +32,7 @@ type Face = {
   previewRepository: (input: string, folder: string) => Promise<unknown>
   previewArchive: (fileName: string, content: string) => Promise<unknown>
   previewFolder: (folderName: string, files: readonly { path: string; content: string }[]) => Promise<unknown>
-  install: (previewId: string, name: string | undefined, replace: boolean) => Promise<unknown>
+  installSkill: (previewId: string, name: string | undefined, replace: boolean) => Promise<unknown>
   removeInstalled: (name: string) => Promise<string | undefined>
   setSource: (id: string, enabled: boolean) => Promise<string | undefined>
   setSkill: (source: string, name: string, enabled: boolean) => Promise<string | undefined>
@@ -94,8 +94,8 @@ function makeContext(results: RemoteResults, workspace?: ReturnType<typeof makeW
     previewRepository: vi.fn(async () => results.previewRepository),
     previewArchive: vi.fn(async () => results.previewArchive),
     previewFolder: vi.fn(async () => results.previewFolder),
-    install: vi.fn(async () => results.install),
-    remove: vi.fn(async () => results.remove),
+    installSkill: vi.fn(async () => results.install),
+    removeSkill: vi.fn(async () => results.remove),
   }
   const skillSources = {
     describe: vi.fn(async () => results.describe),
@@ -154,12 +154,12 @@ describe('ui-skills browser half', () => {
     await expect(current.previewArchive('pack.zip', 'emlw')).resolves.toEqual({ ok: true, value: { id: 'p' } })
     await expect(current.previewFolder('pdf', [{ path: 'SKILL.md', content: 'eA==' }]))
       .resolves.toEqual({ ok: true, value: { id: 'p' } })
-    await expect(current.install('p', 'pdf-copy', false)).resolves.toEqual({ ok: true, value: { installed: [] } })
+    await expect(current.installSkill('p', 'pdf-copy', false)).resolves.toEqual({ ok: true, value: { installed: [] } })
     await expect(current.removeInstalled('pdf')).resolves.toBeUndefined()
     expect(skillInstall.previewRepository).toHaveBeenCalledWith('a/b', 'skills/pdf')
     expect(skillInstall.previewArchive).toHaveBeenCalledWith('pack.zip', 'emlw')
-    expect(skillInstall.install).toHaveBeenCalledWith('p', 'pdf-copy', false)
-    expect(skillInstall.remove).toHaveBeenCalledWith('pdf')
+    expect(skillInstall.installSkill).toHaveBeenCalledWith('p', 'pdf-copy', false)
+    expect(skillInstall.removeSkill).toHaveBeenCalledWith('pdf')
   })
 
   it('keeps the install failure code for the dialog to localize', async () => {
@@ -171,7 +171,7 @@ describe('ui-skills browser half', () => {
     await expect(current.previewRepository('a/b', 'f')).resolves.toHaveProperty('failure.code', 'skill-install/network')
     await expect(current.previewArchive('p.zip', 'x')).resolves.toHaveProperty('failure.code', 'skill-install/archive-invalid')
     await expect(current.previewFolder('f', [])).resolves.toHaveProperty('failure.code', 'skill-install/invalid-skill')
-    await expect(current.install('p', undefined, false)).resolves.toHaveProperty('failure.code', 'skill-install/io-failed')
+    await expect(current.installSkill('p', undefined, false)).resolves.toHaveProperty('failure.code', 'skill-install/io-failed')
     await expect(current.removeInstalled('pdf')).resolves.toBe('remove refused')
   })
 

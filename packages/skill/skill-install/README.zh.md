@@ -71,7 +71,7 @@ metadata:
 
 <a id="understand-the-implementation"></a>
 
-`SkillInstallController` 是插件入口：它拥有 `skillInstall` Remote 命名空间，并把每个 `SkillInstallError` 翻译成该命名空间的 `skill-install/*` 代码。`SkillInstaller` 是它背后的服务。
+`SkillInstallController` 是插件入口：它拥有 `skillInstall` Remote 命名空间——`catalogs`、`repository`、`previewRepository`、`previewArchive`、`previewFolder`、`installSkill` 和 `removeSkill`——并把每个 `SkillInstallError` 翻译成该命名空间的 `skill-install/*` 代码。两个写入方法带上所操作的技能，因为 Client gateway 保留了裸名 `install` 与 `remove`。`SkillInstaller` 是它背后的服务。
 
 一次安装是两个文件夹上的一次事务。文件先写入 `<harness home>/.skill-install-<uuid>`，技能的开关会在文件夹出现**之前**记录为关闭（写入 `ctx.skillSources`），然后才把暂存文件夹重命名到 `skills/<name>`；替换会先把旧文件夹改名移开，发布失败时再恢复。因此失败后 skills 文件夹与之前完全一样。
 
