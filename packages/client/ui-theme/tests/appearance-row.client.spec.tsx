@@ -62,26 +62,37 @@ function mount(preference: ThemePreference = 'system') {
   return { store, setTheme }
 }
 
-const pressed = (name: RegExp): string | null =>
-  screen.getByRole('button', { name }).getAttribute('aria-pressed')
+const checked = (name: RegExp): boolean => screen.getByRole<HTMLInputElement>('radio', { name }).checked
 
 describe('AppearanceRow', () => {
+  it('presents the three themes as one radio group labelled by the row title', () => {
+    mount('dark')
+    const group = screen.getByRole('radiogroup', { name: 'Appearance' })
+    expect(group).toBeDefined()
+    // One shared radio name puts the three choices in a single group, so the
+    // browser owns the arrow-key movement and the single tab stop.
+    const radios = screen.getAllByRole<HTMLInputElement>('radio')
+    expect(radios).toHaveLength(3)
+    expect(new Set(radios.map(radio => radio.name)).size).toBe(1)
+    expect(screen.getByText('Appearance')).toBeDefined()
+  })
+
   it('renders the title and three cubes with the preference cube selected', () => {
     mount('dark')
     expect(screen.getByText('Appearance')).toBeDefined()
-    expect(pressed(/Dark/)).toBe('true')
-    expect(pressed(/Light/)).toBe('false')
-    expect(pressed(/System/)).toBe('false')
+    expect(checked(/Dark/)).toBe(true)
+    expect(checked(/Light/)).toBe(false)
+    expect(checked(/System/)).toBe(false)
   })
 
   it('click drives setTheme; selection follows the store mirror, not the click echo', () => {
     const b = mount('dark')
-    fireEvent.click(screen.getByRole('button', { name: /Light/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /Light/ }))
     expect(b.setTheme).toHaveBeenCalledWith('light')
     // No store write yet: selection is unchanged.
-    expect(pressed(/Dark/)).toBe('true')
+    expect(checked(/Dark/)).toBe(true)
     act(() => { b.store.actions.sync('light', 1) })
-    expect(pressed(/Light/)).toBe('true')
-    expect(pressed(/Dark/)).toBe('false')
+    expect(checked(/Light/)).toBe(true)
+    expect(checked(/Dark/)).toBe(false)
   })
 })
