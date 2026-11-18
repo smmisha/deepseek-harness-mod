@@ -4,7 +4,9 @@
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* The pair hugs the field at the house rhythm; the field's border plus the
+     button's own inset carry the rest of the separation. */
+  gap: 4px;
   box-sizing: border-box;
   width: 100%;
   /* Same cap as the message bubble stack, so the field lines up with it. */
@@ -33,9 +35,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(28px + var(--dsh-content-font-delta, 0px));
-  height: calc(28px + var(--dsh-content-font-delta, 0px));
-  padding: 6px;
+  /* A 24px target leaves only 4px of inset around the 15px glyph, so the pair
+     reads as sitting on the field rather than in a band below it. */
+  width: calc(24px + var(--dsh-content-font-delta, 0px));
+  height: calc(24px + var(--dsh-content-font-delta, 0px));
+  padding: 4px;
   border: none;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
