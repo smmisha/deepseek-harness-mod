@@ -16,6 +16,7 @@
   - button "Jump to turn 2"
 - text: Explain event sourcing in one sentence.Your final answer is delivered automatically if your parent is still online. Include the result and relevant evidence in that answer; the parent does not receive your full transcript, tool output, or reasoning. If your last action is a message to your parent, the completion notice omits your final answer; include the result and relevant evidence in that message. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
@@ -25,6 +26,7 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Now give the same explanation to a human reader. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.

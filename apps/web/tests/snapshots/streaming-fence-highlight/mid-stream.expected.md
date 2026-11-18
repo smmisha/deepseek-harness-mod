@@ -9,6 +9,8 @@
   - button "More conversation views"
 - text: Stream one TypeScript fence for the highlighting snapshot. {{clock}}
 - button "Copy"
+- button "Edit message" [disabled]
+- text: Available after the current response finishes
 - button "Context injection runtime-context"
 - button "Context injection skill-catalog"
 - button "Context injection time-context"

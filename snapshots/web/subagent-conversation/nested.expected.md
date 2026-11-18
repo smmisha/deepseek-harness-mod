@@ -13,6 +13,7 @@
   - button "More conversation views"
 - text: Give one concrete event sourcing example. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - textbox "Message or run a task, / commands, @ files or sessions"
