@@ -137,7 +137,10 @@
 /* Narrow panes keep the icon halves and drop the label; the button keeps its
    accessible name from aria-label. The search takes its own line so the actions
    never squeeze it, and the grouping switch gives way to the icon menu. */
-@container skills-tab (width < 560px) {
+/* The page's own action row folds below a 767px viewport, which leaves the tab a
+   container of about 700px; the toolbar must fold at the same point instead of
+   squeezing the search and the grouping switch into one line. */
+@container skills-tab (width < 700px) {
   .search {
     flex: 1 1 100%;
     max-width: none;
