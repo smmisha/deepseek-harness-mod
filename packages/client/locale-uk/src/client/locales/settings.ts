@@ -49,6 +49,8 @@ export const ukSettings = {
   'openDocument': 'Відкрити файл конфігурації',
   'openDocument.error': 'Не вдалося відкрити файл конфігурації',
   'general.nav': 'Загальні',
+  'general.group.interface': 'Інтерфейс',
+  'general.group.work': 'Робота з агентом',
   'general.currentVersion': 'Поточна версія: {version}',
   'developerTools.title': 'Показувати режим коду',
   'developerTools.error': 'Не вдалося зберегти. Спробуйте ще раз.',

@@ -330,11 +330,18 @@ describe('PluginInventorySettingsTab', () => {
     // The preset group starts open with its rows while the larger global plane stays folded.
     expect(presetToggle().getAttribute('aria-expanded')).toBe('true')
     expect(screen.getAllByRole('listitem')).toHaveLength(6)
-    // Only the states that depart from plainly enabled carry a tag.
-    expect(screen.queryByText(en.enabledTag)).toBeNull()
-    expect(screen.getByText(en.conditionalTag)).toBeTruthy()
-    expect(screen.getByText(en.disabledTag)).toBeTruthy()
-    expect(screen.getByText(en.failedTag)).toBeTruthy()
+    // Only the states that depart from plainly enabled are stated, each as one
+    // quiet dot plus its word rather than a filled badge.
+    expect(screen.queryByText(en.enabledState)).toBeNull()
+    for (const [word, dot] of [
+      [en.conditionalState, 'warning'],
+      [en.disabledState, 'idle'],
+      [en.failedState, 'error'],
+    ] as const) {
+      const state = screen.getByText(word)
+      expect(state.querySelector(`[data-state="${dot}"]`)).not.toBeNull()
+      expect(state.closest('[data-tone]')).toBeNull()
+    }
     // A settled row carries no phase dot: an active fiber and a row with no live
     // fiber both render without one.
     expect(screen.queryByRole('img', { name: en.active })).toBeNull()
@@ -383,7 +390,7 @@ describe('PluginInventorySettingsTab', () => {
 
     fireEvent.click(globalToggle())
     expect(screen.getAllByRole('listitem')).toHaveLength(6)
-    expect(screen.queryByText(en.enabledTag)).toBeNull()
+    expect(screen.queryByText(en.enabledState)).toBeNull()
     expect(screen.getByRole('img', { name: en.loadingPhase })).toBeTruthy()
     expect(screen.getByRole('img', { name: en.pending })).toBeTruthy()
     expect(screen.getByRole('img', { name: en.unloading })).toBeTruthy()
@@ -442,10 +449,37 @@ describe('PluginInventorySettingsTab', () => {
     expect(typert?.getAttribute('title')).toBe('typert')
   })
 
+  it('reads one card as title, then description, then the machine identity', async () => {
+    await renderReady({
+      entries: [{
+        entryId: 'tool-bash' as PluginEntryId,
+        moduleName: '@acme/tool-bash',
+        enabled: false,
+        fiberPhase: null,
+        meta: { title: 'Shell tool', description: 'Runs shell commands.' },
+      }],
+    })
+    fireEvent.click(globalToggle())
+    const card = screen.getByRole('button', { name: 'Shell tool, tool-bash, Disabled' })
+    const title = card.querySelector('strong')
+    const description = document.getElementById(card.getAttribute('aria-describedby') ?? '')
+    const identity = card.querySelector('code')
+    expect(title?.textContent).toBe('Shell tool')
+    expect(description?.textContent).toBe('Runs shell commands.')
+    expect(identity?.textContent).toBe('tool-bash')
+    // The machine identity closes the card, so a reader passes what the plugin
+    // does before reaching the id.
+    const follows = (before: Element | null, after: Element | null): boolean =>
+      before !== null && after !== null
+      && (before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+    expect(follows(title, description)).toBe(true)
+    expect(follows(description, identity)).toBe(true)
+  })
+
   it('expands the global plane with failures first and preset-provided rows inline', async () => {
     const view = await renderReady()
 
-    expect(screen.queryByText(en.presetEnabledTag)).toBeNull()
+    expect(screen.queryByText(en.presetEnabledState)).toBeNull()
     fireEvent.click(globalToggle())
     expect(globalToggle().getAttribute('aria-expanded')).toBe('true')
     const failed = view.container.querySelector('[data-plugin-scope="global"] [data-failed="true"]')
@@ -453,8 +487,10 @@ describe('PluginInventorySettingsTab', () => {
     // Failures float above the Loader-ordered remainder.
     expect(view.container.querySelector('[data-plugin-scope="global"] li')).toBe(failed)
 
-    // Rows the presets took over sit inline, marked instead of plainly disabled.
-    expect(screen.getAllByText(en.presetEnabledTag)).toHaveLength(2)
+    // Rows the presets took over sit inline, marked instead of plainly disabled:
+    // the state is in effect per session, so its dot is the settled one.
+    expect(screen.getAllByText(en.presetEnabledState)).toHaveLength(2)
+    expect(screen.getAllByText(en.presetEnabledState)[0]?.querySelector('[data-state="done"]')).not.toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'tool-bash, bash-host, Via presets' }))
     expect(screen.getByText(en.presetProvidedDetail)).toBeTruthy()
@@ -475,7 +511,7 @@ describe('PluginInventorySettingsTab', () => {
 
     fireEvent.click(globalToggle())
     expect(globalToggle().getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByText(en.presetEnabledTag)).toBeNull()
+    expect(screen.queryByText(en.presetEnabledState)).toBeNull()
   })
 
   it('switches the inspected preset in place, including broken ones', async () => {
@@ -510,7 +546,7 @@ describe('PluginInventorySettingsTab', () => {
 
     fireEvent.change(screen.getByRole('searchbox', { name: en.search }), { target: { value: 'pwsh' } })
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByText(en.conditionalTag)).toBeTruthy()
+    expect(screen.getByText(en.conditionalState)).toBeTruthy()
 
     fireEvent.change(screen.getByRole('searchbox', { name: en.search }), { target: { value: '' } })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
@@ -552,7 +588,7 @@ describe('PluginInventorySettingsTab', () => {
     // Searching forces the collapsed global plane and drawer open.
     expect(view.container.querySelectorAll('[data-plugin-scope="preset"] li')).toHaveLength(1)
     expect(view.container.querySelectorAll('[data-plugin-scope="global"] li')).toHaveLength(1)
-    expect(screen.getByText(en.presetEnabledTag)).toBeTruthy()
+    expect(screen.getByText(en.presetEnabledState)).toBeTruthy()
     const hint = screen.getByText((text: string) => text.startsWith('2 more matches'))
     expect(hint).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'ptc' }))

@@ -1,12 +1,175 @@
-/* Feature-contributed rows own their chrome and separators; the section
- * strips the trailing separator wherever the column ends. */
+/* The General column: two groups of preference rows. This file owns the
+ * column's reading rhythm and the one row anatomy every feature row is laid
+ * out by; a row keeps its own copy, control and write path, and contributes
+ * only its markup (label block + control). Two item kinds opt out of the field
+ * anatomy with `data-settings-item`: `block` (a full-width choice such as the
+ * appearance tiles) and `note` (a quiet footnote such as the build version).
+ *
+ * The anatomy in one place: every field row is a two-column grid whose first
+ * row is the 36px control line. The label and the control share that line and
+ * its centre, so labels and controls sit on one horizontal axis from row to
+ * row; the description hangs below the label in the text column. The control
+ * is anchored to the first line, not centred on the row, so a description that
+ * wraps never moves it. Equal 16px padding above and below the row keeps the
+ * rhythm identical for a one-line and a two-line row. */
 
 .section {
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* Row geometry, one source: the control line is the height of the house
+     selector/stepper control (H36), the label shares it, and the description
+     hangs one 4px step below. The 24px gutter is the project's section step:
+     wide enough that the label and its control stay separate reading zones,
+     narrow enough that a translated description still wraps in two lines. */
+  --dsh-settings-row-pad: 16px;
+  --dsh-settings-control-height: 36px;
+  --dsh-settings-control-gap: 24px;
 }
 
-.section > :global([data-slot='settings.general.item']) > :last-child {
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Group separation is carried by one step above the heading (24px) over the
+   last row's own 16px padding, while the heading keeps 8px (plus the first
+   row's 16px padding) to its own rows: a heading is always closer to the rows
+   it names than to the group above it. */
+.group + .group {
+  margin-top: 24px;
+}
+
+/* The heading is quieter than the row labels it introduces: caption size, the
+   secondary ink, and the same reading axis as every label below it. */
+.groupLabel {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ---- field rows ------------------------------------------------------- */
+
+/* A field row root is either the item's own root (the anchor is
+   `display: contents`, so the root is the group's layout child) or a row
+   inside a container the item declares with `data-settings-rows` — the font
+   settings group renders its rows that way. */
+:is(
+  .group > [data-slot='settings.general.item'] > *:not([data-settings-item]):not([data-settings-rows]),
+  .group > [data-slot='settings.general.item'] > [data-settings-rows] > *:not([data-settings-item])
+) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(var(--dsh-settings-control-height), auto) auto;
+  align-items: start;
+  column-gap: var(--dsh-settings-control-gap);
+  row-gap: 4px;
+  min-height: 0;
+  padding: var(--dsh-settings-row-pad) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* The row's text block holds the label and its description; dissolving it
+   promotes both to grid items, which is what lets the label share the control
+   line while the description keeps the text column. */
+:is(
+  .group > [data-slot='settings.general.item'] > *:not([data-settings-item]):not([data-settings-rows]),
+  .group > [data-slot='settings.general.item'] > [data-settings-rows] > *:not([data-settings-item])
+) > :first-child {
+  display: contents;
+}
+
+/* The label takes the shared control line and shares its centre with the
+   control, so both read on one axis. Descendant rows keep the label primary and
+   at the established settings size; ink, not extra weight, carries the
+   hierarchy over the description. */
+:is(
+  .group > [data-slot='settings.general.item'] > *:not([data-settings-item]):not([data-settings-rows]),
+  .group > [data-slot='settings.general.item'] > [data-settings-rows] > *:not([data-settings-item])
+) > :first-child > :first-child {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: center;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: break-word;
+}
+
+:is(
+  .group > [data-slot='settings.general.item'] > *:not([data-settings-item]):not([data-settings-rows]),
+  .group > [data-slot='settings.general.item'] > [data-settings-rows] > *:not([data-settings-item])
+) > :first-child > :nth-child(2) {
+  grid-row: 2;
+  grid-column: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: break-word;
+}
+
+/* A row's own alert (a failed write) stays in the text column under its
+   description, at the caption size the other inline failures use. */
+:is(
+  .group > [data-slot='settings.general.item'] > *:not([data-settings-item]):not([data-settings-rows]),
+  .group > [data-slot='settings.general.item'] > [data-settings-rows] > *:not([data-settings-item])
+) > :first-child > [role='alert'] {
+  grid-column: 1;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The control keeps the row's inline end and the control line's centre: it is
+   centred inside the H36 first row instead of being stretched to it, so a 20px
+   switch and a 36px selector share one centre and one edge without either
+   changing its own size. */
+:is(
+  .group > [data-slot='settings.general.item'] > *:not([data-settings-item]):not([data-settings-rows]),
+  .group > [data-slot='settings.general.item'] > [data-settings-rows] > *:not([data-settings-item])
+) > :last-child:not(:first-child) {
+  grid-row: 1;
+  grid-column: 2;
+  justify-self: end;
+  align-self: center;
+  min-width: 0;
+}
+
+/* ---- the two item kinds that are not field rows ----------------------- */
+
+/* A full-width choice block (appearance tiles): it keeps the row rhythm and
+   separator but lays out its own label and control row. */
+.group > [data-slot='settings.general.item'] > *[data-settings-item='block'] {
+  padding: var(--dsh-settings-row-pad) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* A quiet footnote (the build version) closes the column rather than reading
+   as one more preference: caption size, secondary ink, no separator. */
+.group > [data-slot='settings.general.item'] > *[data-settings-item='note'] {
+  padding-top: var(--dsh-settings-row-pad);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: break-word;
+}
+
+/* A group closes with its last row: the last row of the column drops the
+   trailing hairline. */
+.group > [data-slot='settings.general.item']:last-child > :last-child {
   border-bottom: none;
+}
+
+@media (max-width: 767px) {
+  /* Narrow panels: the wide 48px gutter would only squeeze the label, so the
+     columns close up while the control keeps its line and its edge. */
+  .section {
+    --dsh-settings-control-gap: 16px;
+  }
 }

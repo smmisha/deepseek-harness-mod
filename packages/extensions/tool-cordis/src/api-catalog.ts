@@ -3703,6 +3703,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the application folders in configuration order.',
       },
       {
+        signature: 'categories(): readonly SkillCategory[]',
+        description: 'Configured category rules.',
+        parameters: [],
+        returns: 'the rules in configuration order.',
+      },
+      {
         signature: 'folders(): readonly SkillFolder[]',
         description: 'Folders the reader added.',
         parameters: [],
@@ -9604,6 +9610,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillCatalogSnapshot {\n    readonly skills: SkillSummary[];\n    readonly complete: boolean;\n}',
   },
   {
+    name: 'SkillCategory',
+    declaration: 'export interface SkillCategory {\n    readonly id: string;\n    readonly title: string;\n    readonly prefixes?: string[];\n    readonly namespaces?: string[];\n}',
+  },
+  {
     name: 'SkillDefinition',
     declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -9669,7 +9679,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillVisibility',
-    declaration: 'export interface SkillVisibility {\n    readonly applications: readonly SkillApplication[];\n    readonly folders: readonly SkillFolderSource[];\n    sourceEnabled(source: string): boolean;\n    skillEnabled(source: string, name: string): boolean;\n}',
+    declaration: 'export interface SkillVisibility {\n    readonly applications: readonly SkillApplication[];\n    readonly folders: readonly SkillFolderSource[];\n    readonly categories: readonly SkillCategory[];\n    sourceEnabled(source: string): boolean;\n    skillEnabled(source: string, name: string): boolean;\n}',
   },
   {
     name: 'SkillVisibilityState',

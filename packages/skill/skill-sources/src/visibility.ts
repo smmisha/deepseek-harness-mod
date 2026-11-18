@@ -8,6 +8,7 @@
  * @module
  */
 import { resolve } from 'node:path'
+import type { SkillCategory } from './categories.ts'
 
 /** Folders of another application whose skills may be shown. */
 export interface SkillApplication {
@@ -67,12 +68,14 @@ export interface SkillVisibilityState {
   readonly skills: Readonly<Record<string, Readonly<Record<string, boolean>>>>
 }
 
-/** One read of the switches and the application list, answering visibility questions. */
+/** One read of the switches, the application list, and the category rules, answering visibility questions. */
 export interface SkillVisibility {
   /** Configured other-application folders at the time of the read. */
   readonly applications: readonly SkillApplication[]
   /** Folders the reader added, in the order they were added. */
   readonly folders: readonly SkillFolderSource[]
+  /** Configured category rules; a provider groups the skills it describes by them. */
+  readonly categories: readonly SkillCategory[]
   /**
    * Whether a source's skills reach the model catalog and the user's `/` commands.
    * @param source - discovery source identity.
@@ -116,19 +119,25 @@ export function skillEnabled(
 }
 
 /**
- * Bind one read of the switches, applications, and added folders to the visibility rules.
+ * Bind one read of the switches, applications, added folders, and category rules
+ * to the visibility rules.
  * @param state - persisted switches.
  * @param applications - configured other-application folders.
  * @param folders - folders the reader added; their switches come from `state`, so a folder
  *   `addFolder` stored stays off until the reader turns it on.
+ * @param categories - configured category rules, read as they are.
  * @returns the bound visibility answers.
  */
 export function bindVisibility(
-  state: SkillVisibilityState, applications: readonly SkillApplication[], folders: readonly SkillFolder[] = [],
+  state: SkillVisibilityState,
+  applications: readonly SkillApplication[],
+  folders: readonly SkillFolder[] = [],
+  categories: readonly SkillCategory[] = [],
 ): SkillVisibility {
   return {
     applications,
     folders: folders.map(folder => ({ id: folderSourceId(folder.dir), dir: folder.dir })),
+    categories,
     sourceEnabled: source => sourceEnabled(state, source, applications),
     skillEnabled: (source, name) => skillEnabled(state, source, name, applications),
   }

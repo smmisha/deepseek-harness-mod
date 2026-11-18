@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "modules",
+    "title": "Modules",
     "description": "Gérez les modules de plug-in du navigateur et leurs dépendances de chargement."
   }
 }

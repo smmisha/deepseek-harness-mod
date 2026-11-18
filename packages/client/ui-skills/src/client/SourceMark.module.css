@@ -1,0 +1,44 @@
+/* One source mark: a 20px box in the secondary ink. Every kind shares the box,
+   so rows and group heads keep one column whether the source ships official
+   artwork, a monogram drawn here, or the folder line glyph. */
+
+.mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.small {
+  width: 16px;
+  height: 16px;
+}
+
+.small svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The asset supplies only the silhouette; the box supplies the single ink. */
+.official {
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+}
+
+.monogram {
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-xs);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.line {
+  display: inline-flex;
+}

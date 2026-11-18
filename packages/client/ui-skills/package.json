@@ -24,12 +24,14 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./assets/*": "./lib/assets/*"
   },
   "files": [
     "locale/*.json",
     "lib/index.js",
     "lib/client.js",
+    "lib/assets",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
     "lib/**/*.js.map",
@@ -55,6 +57,8 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-api-remotes": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",
+    "@deepseek-ai/dsh-client-store": "workspace:*",
+    "@deepseek-ai/dsh-client-test-runtime": "workspace:*",
     "@deepseek-ai/dsh-client-ui-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
     "@deepseek-ai/dsh-client-ui-renderer": "workspace:*",
@@ -62,6 +66,8 @@
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:*",
     "@deepseek-ai/dsh-skill-filesystem": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
-    "react": "^18.2.0"
+    "@testing-library/react": "^16.3.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   }
 }

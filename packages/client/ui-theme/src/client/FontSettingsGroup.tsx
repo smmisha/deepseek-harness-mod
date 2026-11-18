@@ -11,7 +11,6 @@ import type { FontRole } from '../theme-settings.ts'
 import type { createFontRowStore } from './settings-store.ts'
 import { FontFamilyRow } from './FontFamilyRow.tsx'
 import { FontSizeRow, type FontSizeRowExpander } from './FontSizeRow.tsx'
-import css from './FontSettingsGroup.module.css'
 
 /** Injected business face: font writes by role. */
 export interface FontSettingsInjected {
@@ -41,10 +40,10 @@ export function FontSettingsGroup({ setFontFamily, setFontSize, ...shared }: Fon
     <FontSizeRow {...shared} role={role} expander={expander} setFontSize={(px) => { setFontSize(role, px) }} />
   )
   return (
-    <div className={css.group}>
+    <>
       {size('text', { open, controls: regionId, onToggle: () => { setOpen(value => !value) } })}
       {open && (
-        <div id={regionId}>
+        <div id={regionId} data-settings-rows="">
           {family('text')}
           {family('code')}
           {size('code')}
@@ -52,6 +51,6 @@ export function FontSettingsGroup({ setFontFamily, setFontSize, ...shared }: Fon
           {size('terminal')}
         </div>
       )}
-    </div>
+    </>
   )
 }

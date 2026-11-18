@@ -105,6 +105,14 @@ describe('ui-skills browser half', () => {
     expect(skillSources.removeFolder).toHaveBeenCalledWith('D:\\skills')
   })
 
+  it('declares one store instance so the tab keeps its group and panel state', () => {
+    const { declaration } = makeContext(OK)
+    const store = declaration.store as { create: () => unknown }
+    expect(store).toBeDefined()
+    // Every render gets the same instance, which survives leaving the tab.
+    expect(store.create()).toBe(store.create())
+  })
+
   it('turns refused writes and failed reads into messages', async () => {
     const current = makeContext(REFUSED).face()
     await expect(current.load()).rejects.toThrow('describe refused')

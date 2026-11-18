@@ -13,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 // Type-only: the `ctx.uiWorkspace` merge used to open a chat and the Host folder chooser.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { SkillsSection, type SkillsFace } from './SkillsSection.tsx'
+import { createSkillsStore } from './skills-store.ts'
 import { de, en, es, fr, ja, pt, ru, zh, NS, type SkillsLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -71,11 +72,18 @@ export function apply(ctx: ClientContext): void {
       return response.ok ? undefined : response.error.message
     },
   }
-  ctx.slots.inject('plugins.tab', () => ctx.slots.register({
-    name: 'plugins.tab',
-    id: 'skills',
-    label: () => t('title'),
-    locale: NS,
-    inject: face,
-  }, SkillsSection))
+  ctx.slots.inject('plugins.tab', () => {
+    // One store instance for the tab's lifetime: group collapse and the open
+    // detail panel survive leaving and returning to the tab.
+    const handle = createSkillsStore(), instance = handle.create()
+    const store: typeof handle = { ...handle, create: () => instance }
+    return ctx.slots.register({
+      name: 'plugins.tab',
+      id: 'skills',
+      label: () => t('title'),
+      locale: NS,
+      store,
+      inject: face,
+    }, SkillsSection)
+  })
 }

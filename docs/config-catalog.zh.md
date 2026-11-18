@@ -3469,7 +3469,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-skill`
 
-- `source`: [`packages/skill/skill/src/index.ts:278`](../packages/skill/skill/src/index.ts)
+- `source`: [`packages/skill/skill/src/index.ts:285`](../packages/skill/skill/src/index.ts)
 
 ```ts config-catalog
 /** Skill registry configuration. */
@@ -3486,7 +3486,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-skill-filesystem`
 
 - `inject`: `skills`
-- `source`: [`packages/skill/skill-filesystem/src/index.ts:69`](../packages/skill/skill-filesystem/src/index.ts)
+- `source`: [`packages/skill/skill-filesystem/src/index.ts:74`](../packages/skill/skill-filesystem/src/index.ts)
 
 ```ts config-catalog
 /** Local filesystem skill provider configuration. */
@@ -3557,13 +3557,19 @@ export type PythonEnvironment = 'workspace-dependencies' | 'user'
 
 - `inject`: `settings`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/skill/skill-sources/src/index.ts:34`](../packages/skill/skill-sources/src/index.ts)
+- `source`: [`packages/skill/skill-sources/src/index.ts:37`](../packages/skill/skill-sources/src/index.ts)
 
 ```ts config-catalog
-/** Plugin configuration: the persisted switches and the application list. */
+/** Plugin configuration: the persisted switches, the application list, and the category rules. */
 export interface Config {
   /** Other applications' skill folders; every one starts switched off. */
   applications?: SkillApplication[]
+  /**
+   * Category rules a local provider applies to the skills it describes. Omitted
+   * ships the built-in categories; an empty list leaves only the categories
+   * authors declare, so every other skill falls to the Skills tab's "Other" group.
+   */
+  categories?: SkillCategory[]
   /** Source switches keyed by source id; absent keeps the source's default. */
   sources?: Volatile<Record<string, SkillSourceSwitch>>
   /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
@@ -3580,6 +3586,18 @@ export interface SkillApplication {
   readonly dir: string
   /** Reader-facing name, shown by the Skills tab. */
   readonly title: string
+}
+
+/** One configured skill category. */
+export interface SkillCategory {
+  /** Stable identity the Skills tab groups by; the client translates the ids it knows. */
+  readonly id: string
+  /** Reader-facing name, used when the client does not translate `id`. */
+  readonly title: string
+  /** Skill-name prefixes this category claims, matched against the part of a name after any namespace and before its first `-`. */
+  readonly prefixes?: string[]
+  /** Plugin namespaces this category claims, matched against the `plugin:` part of a namespaced skill name. */
+  readonly namespaces?: string[]
 }
 
 /** One source switch stored in this profile's settings. */

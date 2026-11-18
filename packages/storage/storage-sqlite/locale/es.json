@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "almacenamiento SQLite",
+    "title": "Almacenamiento SQLite",
     "description": "Almacene los datos clave-valor de Harness en SQLite."
   }
 }

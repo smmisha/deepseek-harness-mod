@@ -347,6 +347,12 @@ read(): SkillVisibilityState
 applications(): readonly SkillApplication[]
 
 /**
+ * Configured category rules.
+ * @returns the rules in configuration order.
+ */
+categories(): readonly SkillCategory[]
+
+/**
  * Folders the reader added.
  * @returns the added folders in the order they were added.
  */
