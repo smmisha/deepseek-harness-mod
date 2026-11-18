@@ -68,10 +68,15 @@ export interface AssistantActionOwnerProps {
   messageId: MessageId
 }
 
-/** Factory props of the user-message pencil action. */
+/** Factory props of the user-message action row. */
 export interface UserActionProps {
-  /** Plain text of the sent message; the action seeds an editable draft from it. */
-  readonly text: string
+  /** Open the in-place editor on this message row; the row owns the edited text until save. */
+  readonly beginEdit: () => void
+  /**
+   * The running agent is reading this message, so an edit must wait until it
+   * finishes. A queued message or one from an earlier Turn stays editable.
+   */
+  readonly editUnavailable: boolean
 }
 
 /** Stable quota failure codes retained in the Session log; both raise the frame-wide notice. */
@@ -424,7 +429,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       locale: 'chat'
       children: { 'conversation.chat.user.images': { kind: 'single'; scope: 'session' } }
     }
-    /** Pencil action beside one finalized user message; the official entry seeds the composer draft. */
+    /** Action row beside one finalized user message; the official entry opens its in-place editor. */
     'conversation.chat.user.actions': {
       scope: 'session'
       props: UserActionProps

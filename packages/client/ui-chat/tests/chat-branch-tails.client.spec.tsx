@@ -46,6 +46,26 @@ const useDetachedChat: ChatNodeViewProps['useChat'] = bindSnapshotSelector({
   getSnapshot: () => ({ order: [], nodes: new Map() }),
 } as never)
 
+// The row reads the Session run bit and the composer draft face; these fixtures
+// render one detached row, so an idle Session and an inert draft suffice.
+const useIdleSession: ChatNodeViewProps['useSession'] = bindSnapshotSelector({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ running: false }),
+} as never)
+
+const inertInputActions: ChatNodeViewProps['inputActions'] = {
+  insertQuote: () => false,
+  captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
+  insertText: () => false,
+  setDraft: () => {},
+  persistDraft: () => {},
+  addAttachments: () => true,
+  removeAttachment: () => {},
+  pruneAttachments: () => {},
+  submit: () => {},
+  focus: () => {},
+}
+
 interface MessageItemProps {
   readonly node: ConversationNode
   readonly t: ChatNodeViewProps['t']
@@ -81,7 +101,7 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
   }
   const props: Partial<Omit<ChatNodeViewProps, 'node'>> & { node: ChatConversationViewNode } = {
     node: viewNode, t: translate, loadImage: unusedImageLoader, renderFactorySlot: renderUserFactory,
-    openFile: vi.fn(), useChat: useDetachedChat,
+    openFile: vi.fn(), useChat: useDetachedChat, useSession: useIdleSession, inputActions: inertInputActions,
   }
   switch (node.kind) {
     case 'user':

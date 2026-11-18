@@ -1,0 +1,64 @@
+/* In-place message editor: a right-aligned field as wide as the message bubble,
+   with the save/cancel pair beneath it. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  /* Same cap as the message bubble stack, so the field lines up with it. */
+  max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
+}
+
+/* The message editor is a long draft: start at a comfortable height and grow
+   until three times that, then scroll inside InlineEditor's own cap. */
+.editor .input {
+  width: 100%;
+  min-height: 80px;
+  max-height: 240px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(28px + var(--dsh-content-font-delta, 0px));
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  padding: 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.action svg {
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.action:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .action:disabled:hover {
+    background: transparent;
+    color: var(--dsw-alias-label-caption);
+  }
+}

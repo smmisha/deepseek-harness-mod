@@ -23,7 +23,7 @@ export function InlineEditor({ value, label, onChange, onSave, onCancel, classNa
   onChange: (value: string) => void
   onSave: () => void
   onCancel: () => void
-  className?: string
+  className?: string | undefined
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
 

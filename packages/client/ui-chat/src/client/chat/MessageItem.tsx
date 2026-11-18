@@ -10,6 +10,7 @@ import type {
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
+import { EditMessageEditor } from './EditMessageEditor.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import css from './MessageItem.module.css'
 
@@ -180,11 +181,14 @@ function UserStyleBubble({
   node, renderSlotChain, content, loadImage, renderFactorySlot, actions,
   pending = false, echo = false, batchStart = false,
   referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false,
+  editor,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
   /** Optional IconActions (or similar) below the bubble; receives the joined text. */
   actions?: (text: string) => ReactNode
+  /** Replaces the bubble content and its actions while this row is being edited in place. */
+  editor?: ReactNode
   /** Row whose durable source the message-source seat elects above this bubble. */
   node: DecoratedRow
   /** Seat renderer; rows that do not own the seat pass {@link NO_MESSAGE_SOURCE}. */
@@ -224,13 +228,13 @@ function UserStyleBubble({
       data-chat-steering-batch={batchStart ? 'start' : undefined}
     >
       {renderSlotChain('conversation.chat.user.before', { source: node.data.source, kind: node.kind }, { fallback: null })}
-      {renderFactorySlot('conversation.chat.user.content', {
+      {editor ?? renderFactorySlot('conversation.chat.user.content', {
         content: prepared,
         loadImage,
         facts,
         interactive,
       })}
-      {actions?.(prepared.text)}
+      {editor === undefined ? actions?.(prepared.text) : null}
     </div>
   )
 }
@@ -325,16 +329,33 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
 /**
  * Official durable user keyed Chat renderer.
  *
- * Renders the durable-message chain seat and the user-action row directly
- * above and below the bubble.
+ * Renders the durable-message chain seat above the bubble, the user-action row
+ * below it, or the row's own editor while an edit is open. Opening the editor
+ * touches neither the composer nor the transcript; saving hands the edited text
+ * to the composer draft without submitting it.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, renderSlotChain, t,
+  node, renderFactorySlot, loadImage, renderSlotChain, inputActions, useSession, t,
 }: ChatNodeViewProps<'user'> & {
   /** Bound by the `user` keyed registration, the only entry that declares the seat. */
   renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
 }) {
   const data = node.data
+  const running = useSession(snapshot => snapshot.running)
+  // The agent reads a message while its Turn is open; an earlier Turn is settled
+  // and a queued message has its own QueueDock editor, so neither is blocked.
+  const location = node.location
+  const turnOpen = (location.kind === 'turn' || location.kind === 'step') && location.turn.status === 'open'
+  const readingThisMessage = running && turnOpen
+  const [edit, setEdit] = useState<{ readonly text: string } | null>(null)
+  // A run that starts elsewhere hides the open editor instead of discarding what
+  // was already typed; the editor returns when the run settles.
+  const editing = readingThisMessage ? null : edit
+  const saveEdit = (text: string): void => {
+    inputActions.setDraft(text)
+    inputActions.focus()
+    setEdit(null)
+  }
   return (
     <UserStyleBubble
       node={node}
@@ -345,13 +366,27 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       loadImage={loadImage}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+      editor={editing === null
+        ? undefined
+        : (
+          <EditMessageEditor
+            text={editing.text}
+            onChange={(text) => { setEdit({ text }) }}
+            onSave={() => { saveEdit(editing.text) }}
+            onCancel={() => { setEdit(null) }}
+            t={t}
+          />
+        )}
       actions={text => (
         <MessageIconActions
           text={text}
           time={data.time}
           clock="start"
           className={css.actions}
-          extraActions={renderFactorySlot('conversation.chat.user.actions', { text })}
+          extraActions={renderFactorySlot('conversation.chat.user.actions', {
+            beginEdit: () => { setEdit({ text }) },
+            editUnavailable: readingThisMessage,
+          })}
           t={t}
         />
       )}
