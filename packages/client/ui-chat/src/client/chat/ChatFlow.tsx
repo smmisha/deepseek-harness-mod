@@ -31,6 +31,9 @@ export const ChatFlow = memo(function ChatFlow({
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
   const running = useSession(snapshot => snapshot.running)
+  // A Host-accepted stop keeps the running bit until the ending lands; the tail
+  // status then names the requested ending instead of the clock.
+  const stopping = useSession(snapshot => snapshot.stopRequested)
   const disconnected = useConnectionState(state => state === 'disconnected' || state === 'connecting')
   const latestTurnAnchor = useChat(snapshot => snapshot.navigation.items().at(-1)?.anchorKey)
   const runningStartTime = useChatNode(latestTurnAnchor ?? '', (node) => {
@@ -94,7 +97,7 @@ export const ChatFlow = memo(function ChatFlow({
   return [
     ...rows, ...leadingRows, ...openingRows,
     ...running || holding ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected}
-      holding={holding} t={t} />] : [],
+      holding={holding} stopping={stopping} t={t} />] : [],
     ...pendingRows,
   ]
 })

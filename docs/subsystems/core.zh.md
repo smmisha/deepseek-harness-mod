@@ -79,12 +79,16 @@ interface Agent {
   readonly ctx: Context
 
   /**
-   * Clear queued and steering work — unless `keepInbox` — and abort the active
-   * turn or between-turn task. The first cause wins for that activity. With no
-   * active activity, cancellation is a no-op and does not arm later work.
-   * Queue-write failures still abort the activity and propagate to the caller.
+   * Stop the active turn or between-turn task. With the default `immediate`
+   * mode, queued and steering work is cleared unless `keepInbox` and the
+   * activity is aborted; the first cause wins for that activity. With
+   * `mode: 'graceful'`, the driver instead finishes the current step and closes
+   * the turn as `stopped`, preserving produced output and pending inbox work.
+   * With no active activity, cancellation is a no-op and does not arm later
+   * work. Queue-write failures still abort the activity and propagate to the
+   * caller.
    * @param cause - the stable caller intent carried by the active operation signal.
-   * @param options - cancellation options; `keepInbox` preserves pending work.
+   * @param options - cancellation options; `keepInbox` preserves pending work and `mode` selects the ending boundary.
    */
   cancel(cause: AgentCancelCause, options?: CancelOptions): void
 
@@ -358,6 +362,16 @@ interface CancelOptions {
    * later turn and no canceled inbox splice is logged.
    */
   keepInbox?: boolean | undefined
+  /**
+   * End boundary for the active turn. `'immediate'` (the default) aborts the
+   * activity now. `'graceful'` finishes the current step — the in-flight model
+   * response and the tool batch it requested — records the produced output as an
+   * ordinary assistant message, closes the turn as `stopped`, and leaves pending
+   * inbox work parked for a later wake, so `keepInbox` is implied. A graceful
+   * request with no running turn is a no-op that arms no later work; a
+   * maintenance task is unaffected because it owns no step boundary.
+   */
+  mode?: 'graceful' | 'immediate' | undefined
 }
 ```
 
@@ -370,7 +384,7 @@ type AgentCancelCause =
   | { readonly kind: 'disposed' }
 ```
 
-cause 是由 TypeScript 强制约束的同进程输入。活跃的取消持有者把同一个对象暴露为仅运行时的 `AbortSignal.reason`；signal 不授予协作监听器任何分类权限。持久 `turn/end` 以 `{ kind: 'aborted', reason: TurnEndCancelCause }` 记录结果，取消原因随终态结果一起持久化。
+cause 是由 TypeScript 强制约束的同进程输入。活跃的取消持有者把同一个对象暴露为仅运行时的 `AbortSignal.reason`；signal 不授予协作监听器任何分类权限。持久 `turn/end` 将立即取消记录为 `{ kind: 'aborted', reason: TurnEndCancelCause }`，取消原因随终态结果一起持久化。`CancelOptions.mode: 'graceful'` 不会中止 signal：循环结算当前步骤并记录 `{ kind: 'stopped' }`，因为完整的 assistant 消息与不存在的中断前缀构成中止词汇无法表达的可观察结果。
 
 [事件分类](../architecture.zh.md#events)负责 `agent/*` 生命周期、检查点与 waterfall（瀑布式事件）约定。轮次和步骤边界是持久会话事件，而不是 agent emit。
 

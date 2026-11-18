@@ -1151,6 +1151,47 @@ describe('remaining branches', () => {
     expect(session.getSnapshot().promptError).toBeNull()
   })
 
+  it('sends the chosen stop mode and arms the snapshot until the run ends', async ({ mock, start }) => {
+    const session = await sessionBench(mock, start, SID)
+    await session.open()
+    session.handleRunning(true)
+
+    expect(await session.cancel()).toEqual({ ok: true, value: { accepted: true } })
+    // Omission is the product default: finish the current step, then stop.
+    expect(mock.log.requests('session/cancel')).toEqual([{ sessionId: SID, mode: 'graceful' }])
+    expect(session.getSnapshot().stopRequested).toBe('graceful')
+    // Repeating the same request leaves the armed state unchanged.
+    expect(await session.cancel('graceful')).toEqual({ ok: true, value: { accepted: true } })
+    expect(session.getSnapshot().stopRequested).toBe('graceful')
+
+    expect(await session.cancel('immediate')).toEqual({ ok: true, value: { accepted: true } })
+    expect(mock.log.requests('session/cancel')).toEqual([
+      { sessionId: SID, mode: 'graceful' },
+      { sessionId: SID, mode: 'graceful' },
+      { sessionId: SID, mode: 'immediate' },
+    ])
+    expect(session.getSnapshot().stopRequested).toBe('immediate')
+
+    // The run ending retires the armed state; an idle stop request arms nothing.
+    session.handleRunning(false)
+    expect(session.getSnapshot().stopRequested).toBeUndefined()
+    expect(await session.cancel()).toEqual({ ok: true, value: { accepted: true } })
+    expect(session.getSnapshot().stopRequested).toBeUndefined()
+  })
+
+  it('takes a graceful request against a continuable child as its immediate interrupt', async ({ mock, start }) => {
+    const session = await sessionBench(mock, start, SID, {
+      address: { parentSessionId: PARENT, childSessionId: SID, mode: 'continuable' },
+    })
+    await session.open()
+    session.handleRunning(true)
+
+    expect(await session.cancel('graceful')).toEqual({ ok: true, value: { accepted: true } })
+    expect(mock.log.calls('subagents/interruptByUser').map(call => call.args)).toEqual([[SID]])
+    expect(mock.log.requests('session/cancel')).toEqual([])
+    expect(session.getSnapshot().stopRequested).toBe('immediate')
+  })
+
   it('carries raw history and follow events through the event feed', async ({ mock, start }) => {
     const session = await sessionBench(mock, start, SID)
     const historyCall = ev.toolCall(SessionSeq(6), 1, 'h1', 'bash', '{"cmd":"pwd"}')

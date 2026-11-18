@@ -366,9 +366,21 @@ export interface SessionUpdateQueueValue {
   readonly accepted: true
 }
 
+/**
+ * How an operator stop request ends the active turn: `graceful` finishes the
+ * current step — the in-flight model response and the tool batch it requested —
+ * and then closes the turn as `stopped`; `immediate` aborts the turn now.
+ */
+export type SessionStopMode = 'graceful' | 'immediate'
+
 /** Active-turn cancellation request. */
 export interface SessionCancelRequest {
   readonly sessionId: SessionId
+  /**
+   * Stop mode. Omission means `immediate`, preserving the behaviour of Clients
+   * that predate stop modes; new Clients always send the chosen mode.
+   */
+  readonly mode?: SessionStopMode
 }
 
 /** Receipt after cancellation is admitted to the live Agent. */

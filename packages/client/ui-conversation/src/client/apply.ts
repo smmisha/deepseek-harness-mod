@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ISessions, SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionStopMode } from '@deepseek-ai/dsh-api-session-controller/types'
 import { IconPaperclipOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createSnapshotStore, type BoundActions } from '@deepseek-ai/dsh-client-store'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
@@ -263,8 +264,8 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     }
   }, 'ui-conversation: View selection')
 
-  const stop = (sessionId: SessionId): void => {
-    scopedConversation(sessions, sessionId).cancel().catch((_error: unknown) => {
+  const stop = (sessionId: SessionId, mode: SessionStopMode): void => {
+    scopedConversation(sessions, sessionId).cancel(mode).catch((_error: unknown) => {
       // Stop failure is published through Session promptError.
     })
   }
@@ -288,11 +289,12 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       scope.effect(() => scope.shortcuts.registerFixed(command), `ui-conversation: ${command.id}`)
     }
     scope.effect(() => installStopShortcut(
-      scope.shortcuts, sessions, binding => uiConversation.binding(binding).openTurn, ctx.uiSession, stop,
+      scope.shortcuts, sessions, binding => uiConversation.binding(binding).openTurn, ctx.uiSession,
+      (sessionId) => { stop(sessionId, 'graceful') },
     ), 'ui-conversation: fixed stop input')
     scope.effect(() => {
       const command: ShortcutFixedCommand = {
-        id: 'response.stop' as ShortcutCommandId, label: () => t('input.stop'), keys: ['Esc', 'Esc'], bindings: [{ code: 'Escape', modifiers: [] }], group: 'input',
+        id: 'response.stop' as ShortcutCommandId, label: () => t('input.stop.graceful'), keys: ['Esc', 'Esc'], bindings: [{ code: 'Escape', modifiers: [] }], group: 'input',
       }
       const dispose = scope.shortcuts.registerFixed(command)
       stopShortcut.set(command.keys)
@@ -567,7 +569,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
               span: { ...selection, draftRev: snapshot.draftRev },
             })
           },
-        stop: () => { stop(sessionId) },
+        stop: (mode) => { stop(sessionId, mode) },
         retry: (failureSeq) => { inputHub.retry(sessionId, failureSeq) },
         hooks: {
           stopShortcut,

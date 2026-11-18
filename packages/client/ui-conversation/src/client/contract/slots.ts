@@ -2,6 +2,7 @@
 import type { ReactNode, RefObject } from 'react'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionStopMode } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload/client'
 import type { ImageLightboxLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -601,7 +602,8 @@ export interface ComposerBarInjected {
   /** Restart one failed file upload; absent without a session. */
   retryFileUpload: ((id: DraftAttachmentId) => void) | undefined
   toggleCommandMenu: ((selection: EditSelection) => void) | undefined
-  stop: (() => void) | undefined
+  /** Stop the addressed run; the mode chooses between finishing the current step and aborting it now. */
+  stop: ((mode: SessionStopMode) => void) | undefined
   /**
    * Submit empty input to retry the displayed failed generation.
    * @param failureSeq - sequence of the displayed failed turn/end.

@@ -219,6 +219,13 @@ export interface TurnEndReasonMap {
   /** At least one step reached its output-token ceiling, even if a plugin continued the turn. */
   'max-tokens': { kind: 'max-tokens' }
   /**
+   * A graceful stop request closed the turn at its current step boundary. The
+   * in-flight model response and the tool batch it requested settled and were
+   * recorded, so the step's assistant message is complete and never marked
+   * `interrupted`; no later step started. Only a live loop emits this ending.
+   */
+  stopped: { kind: 'stopped' }
+  /**
    * A crash-orphaned turn was closed after the fact: agent-loop resume appends
    * this closer for a stored log whose last turn never ended, and session-query
    * synthesizes it on cold reads. The loop never emits this marker live, and

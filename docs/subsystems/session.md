@@ -741,6 +741,13 @@ interface TurnEndReasonMap {
   /** At least one step reached its output-token ceiling, even if a plugin continued the turn. */
   'max-tokens': { kind: 'max-tokens' }
   /**
+   * A graceful stop request closed the turn at its current step boundary. The
+   * in-flight model response and the tool batch it requested settled and were
+   * recorded, so the step's assistant message is complete and never marked
+   * `interrupted`; no later step started. Only a live loop emits this ending.
+   */
+  stopped: { kind: 'stopped' }
+  /**
    * A crash-orphaned turn was closed after the fact: agent-loop resume appends
    * this closer for a stored log whose last turn never ended, and session-query
    * synthesizes it on cold reads. The loop never emits this marker live, and
@@ -757,7 +764,7 @@ interface TurnEndReasonMap {
 }
 ```
 
-`max-tokens` mirrors the model-call `FinishReason` of the same name: any `max-tokens` step in a turn makes the whole turn end `max-tokens` rather than `completed` (the cut-short fact wins over a later continuation), so a consumer can tell a clean stop from a truncated one. Cancellation and errors remain distinct outcomes. The loop emits neither `interrupted` nor `forked` live: crash recovery synthesizes `interrupted` (see [persistence.md](persistence.md)), while fork-seed construction synthesizes `forked`. The map is merge-extensible.
+`max-tokens` mirrors the model-call `FinishReason` of the same name: any `max-tokens` step in a turn makes the whole turn end `max-tokens` rather than `completed` (the cut-short fact wins over a later continuation), so a consumer can tell a clean stop from a truncated one. Cancellation, a graceful step-boundary stop, and errors remain distinct outcomes. The loop emits neither `interrupted` nor `forked` live: crash recovery synthesizes `interrupted` (see [persistence.md](persistence.md)), while fork-seed construction synthesizes `forked`. The map is merge-extensible.
 
 ## Execution enclosure and standalone events
 

@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
-import { turnProcessAlwaysOpen } from '../contract/turn-process.ts'
+import { stoppedTurnReason, turnProcessAlwaysOpen } from '../contract/turn-process.ts'
 import { formatRunDuration } from './message-chrome.ts'
 import a11yCss from './accessibility.module.css'
 import css from './TurnProcessNodeView.module.css'
@@ -18,17 +18,20 @@ export const TurnProcessNodeView = memo(function TurnProcessNodeView({
   if (turn?.status !== 'closed') return null
   const canCollapse = turnProcess.foldable && turnProcess.hasContent && !turnProcessAlwaysOpen(node)
   const reason = turn.end?.data.reason.kind
-  const stopped = reason === 'aborted' || reason === 'interrupted'
+  const stopped = stoppedTurnReason(reason)
   const elapsedMs = turn.start === undefined || turn.end === undefined ? undefined
     : Math.max(1000, turn.end.time - turn.start.time)
   const duration = elapsedMs === undefined || stopped || reason === 'error' ? undefined
     : formatRunDuration(elapsedMs, t)
+  // A graceful stop settled its last step, so its label names that boundary
+  // rather than the aborted-prefix wording.
+  const stopLabel = reason === 'stopped' ? t('message.stoppedAtStep') : t('message.stopped')
   // Other end reasons retain elapsed time; only stops and failure replace it.
-  const label = stopped ? t('message.stopped')
+  const label = stopped ? stopLabel
     : reason === 'error' ? t('message.turnProcess.failed')
       : duration === undefined ? t('message.turnProcess.worked')
         : t('message.turnProcess.took')
-  const announcement = stopped ? t('message.stopped')
+  const announcement = stopped ? stopLabel
     : reason === 'error' ? t('message.turnProcess.failed')
       : t('message.turnProcess.worked')
   return (
