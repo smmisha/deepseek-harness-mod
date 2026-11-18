@@ -285,6 +285,25 @@ describe('graceful stop mode', () => {
     }
   })
 
+  it('ignores a second graceful request while one is already pending', async () => {
+    const adapter = new GatedStreamAdapter()
+    const ctx = await harness(adapter)
+    try {
+      const agent = await ctx.agentLoop.create(SessionId('graceful-repeat'), { provider: 'mock', model: 'mock' })
+      send(agent, 'stop twice')
+      await adapter.firstDelta.promise
+      agent.cancel({ kind: 'user' }, { mode: 'graceful' })
+      agent.cancel({ kind: 'user' }, { mode: 'graceful' })
+      adapter.release.resolve(undefined)
+      await agent.whenIdle()
+
+      expect(turnEnds(agent)).toEqual([{ kind: 'stopped' }])
+      expect(adapter.requests).toHaveLength(1)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('still aborts immediately when cancel follows a graceful request', async () => {
     const adapter = new GatedStreamAdapter()
     const ctx = await harness(adapter)
