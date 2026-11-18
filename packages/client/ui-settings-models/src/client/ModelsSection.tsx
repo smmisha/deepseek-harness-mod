@@ -1,9 +1,12 @@
 /**
  * Models settings section: the provider rows joined from the configurable
  * directory, settings namespaces, and credential states, with one editor
- * card at a time. Rows retain the account-first order supplied by the store
- * and expose only confirmed API-key state through accessible
- * solid configured or missing dots. A whole-section provider without a
+ * card at a time. Rows retain the account-first order supplied by the store.
+ * Every row shares one reading order and one geometry: the human provider name
+ * (the custom tag riding beside it as an annotation), the state it reports as a
+ * dot plus its word, the route id as a quiet code chip, and the controls in one
+ * fixed trailing column, so a state word or a second control never moves the
+ * reading edge. A whole-section provider without a
  * configured key renders as its open setup card instead of a row, but only in
  * the first-run posture — no provider on the page can serve requests yet — and
  * only until the user closes that card. The add flow is one card behind one
@@ -23,7 +26,8 @@
 
 import { useId, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, IconPlusOutlineRegular, Modal, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconPlusOutlineRegular, Modal, SegmentedControl, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LlmNativeAuth, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: pulls this package's SlotMap merge (the two Models child slots).
@@ -34,7 +38,7 @@ import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
-import type { en } from './locales.ts'
+import type { ModelsKey, en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
 /** Injected dependencies of {@link ModelsSection} (slot `inject`). */
@@ -197,6 +201,33 @@ function keyConfiguredOf(row: ProviderRow): boolean {
     : row.derivedCredential?.configured === true
 }
 
+/** One provider row's state, named by the page's existing state vocabulary. */
+export interface ProviderRowStateLabel {
+  /** Semantic class of the state, used as the row's `data-state` hook. */
+  kind: 'signed-in' | 'configured' | 'missing' | 'unavailable'
+  /** The shared dot semantic that carries this state. */
+  dot: StateDotState
+  /** Copy key naming the state in the reader's language. */
+  key: ModelsKey
+}
+
+/**
+ * The state one provider row reports about itself. A directory failure outranks
+ * any credential fact, the account row states its sign-in, and a row whose
+ * profile names an API-key reference reports whether that reference is stored.
+ * A row carrying none of those facts states nothing rather than inventing a
+ * health it cannot see.
+ * @param row - one joined provider row.
+ * @returns the state, or undefined when the row has no state to report.
+ */
+export function providerRowState(row: ProviderRow): ProviderRowStateLabel | undefined {
+  if (row.entry.error !== undefined) return { kind: 'unavailable', dot: 'error', key: 'providerUnavailable' }
+  if (row.entry.provider === 'deepseek-account') return { kind: 'signed-in', dot: 'done', key: 'accountSignedIn' }
+  if (row.credential?.configured === true) return { kind: 'configured', dot: 'done', key: 'credentialConfigured' }
+  if (row.credential?.configured === false) return { kind: 'missing', dot: 'warning', key: 'credentialMissing' }
+  return undefined
+}
+
 function targetOf(row: ProviderRow): EditorTarget {
   const managedRef = deriveKeyRef(row.entry.provider)
   const credentialRef = row.apiKeyEnv === managedRef
@@ -347,6 +378,12 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
       <div className={styles['section']}>
         <h2 className={styles['title']}>{t('title')}</h2>
         <p className={styles['intro']}>{t('intro')}</p>
+        {/* The one state this posture owns: a spinner dot plus its word, so the
+            empty column never reads as "no providers exist". */}
+        <p className={styles['loadingState']} role="status">
+          <StateDot state="ongoing" />
+          {t('loadingProviders')}
+        </p>
       </div>
     )
   }
@@ -456,49 +493,40 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             )
           }
           const open = !addOpen && editing?.provider === row.entry.provider
-          const credentialConfigured = row.credential?.configured === true
-          const credentialMissing = !credentialConfigured
-            && row.apiKeyEnv !== undefined
-            && row.credential?.configured === false
+          const rowState = providerRowState(row)
           return (
-            <li key={row.entry.provider} className={styles['rowCard']}>
+            <li
+              key={row.entry.provider}
+              className={styles['rowCard']}
+              data-models-row={row.entry.provider}
+              data-provider-state={rowState?.kind}
+            >
               <div className={styles['rowHead']}>
-                <span className={styles['rowIdentity']}>
-                  <span className={styles['rowName']}>{row.entry.displayName}</span>
+                <div className={styles['rowTitleLine']}>
+                  <h3 className={styles['rowName']} title={row.entry.displayName}>{row.entry.displayName}</h3>
                   {/* Only the adapter can tell a hand-declared route from a
                       shipped one it also has a stored profile for, so the tag
                       follows its answer and stays off when it gives none. */}
                   {row.entry.declared === true
                     ? <span className={styles['rowTag']}>{t('customTag')}</span>
                     : null}
-                  {/* The store keeps the account row only while the account lists models. */}
-                  {row.entry.provider === 'deepseek-account'
-                    ? (
-                      <span className={styles['accountStatus']}>
-                        <span className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`} aria-hidden="true" />
-                        {t('accountSignedIn')}
+                </div>
+                <span className={styles['rowMeta']}>
+                  {rowState === undefined
+                    ? null
+                    : (
+                      <span className={styles['rowState']} data-state={rowState.kind}>
+                        <StateDot state={rowState.dot} />
+                        {t(rowState.key)}
                       </span>
-                    )
-                    : null}
-                  {credentialConfigured
-                    ? (
-                      <span
-                        className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
-                        role="img"
-                        aria-label={t('credentialConfigured')}
-                        title={t('credentialConfigured')}
-                      />
-                    )
-                    : credentialMissing
-                      ? (
-                        <span
-                          className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
-                          role="img"
-                          aria-label={t('credentialMissing')}
-                          title={t('credentialMissing')}
-                        />
-                      )
-                      : null}
+                    )}
+                  {/* The route id is the machine identity, so it reads as a
+                      quiet code chip beside the name instead of as a second
+                      name. A route whose display name is its id has nothing
+                      quieter to say and keeps the chip off. */}
+                  {row.entry.provider === row.entry.displayName
+                    ? null
+                    : <span className={styles['rowId']} title={row.entry.provider}>{row.entry.provider}</span>}
                 </span>
                 <span className={styles['rowActions']}>
                   {/* The account catalog comes from the account listing; its model overrides live in cordis.patch.yml. */}

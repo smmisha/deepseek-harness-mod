@@ -733,12 +733,13 @@ describe('ModelsSection', () => {
     // openai's key is stored, so the user is not blocked and nothing on the
     // page opens itself over them.
     expect(screen.queryByLabelText(en.keyInput)).toBeNull()
-    const configured = screen.getByRole('img', { name: en.credentialConfigured })
-    expect(configured.getAttribute('title')).toBe(en.credentialConfigured)
-    expect(configured.className).toContain('credentialDotConfigured')
-    expect(configured.closest('li')?.textContent).toContain('openai')
-    const missing = screen.getByRole('img', { name: en.credentialMissing })
-    expect(missing.closest('li')?.textContent).toContain('DeepSeek')
+    const configuredRow = screen.getByText('openai').closest('li')!
+    expect(within(configuredRow).getByText(en.credentialConfigured)).toBeTruthy()
+    // The model name is the row's title; the route id is the quiet chip beside it.
+    expect(within(configuredRow).getByTitle('openai')).toBeTruthy()
+    const missingRow = screen.getByText('DeepSeek').closest('li')!
+    expect(within(missingRow).getByText(en.credentialMissing)).toBeTruthy()
+    expect(within(missingRow).getByTitle('deepseek-official')).toBeTruthy()
     // The card is still one click away.
     fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
     expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
@@ -760,12 +761,13 @@ describe('ModelsSection', () => {
       renderSlot={() => null}
     />)
 
-    const missing = screen.getByRole('img', { name: en.credentialMissing })
-    expect(missing.getAttribute('title')).toBe(en.credentialMissing)
-    expect(missing.className).toContain('credentialDotMissing')
-    expect(missing.closest('li')?.textContent).toContain('openai')
-    expect(screen.queryByRole('img', { name: en.credentialConfigured })).toBeNull()
-    expect(screen.getByText('zombie').closest('li')?.querySelector('[role="img"]')).toBeNull()
+    const missingRow = screen.getByText('openai').closest('li')!
+    expect(within(missingRow).getByText(en.credentialMissing)).toBeTruthy()
+    expect(within(missingRow).queryByText(en.credentialConfigured)).toBeNull()
+    // A row whose profile names no reference reports no credential state at all.
+    const nativeRow = screen.getByText('zombie').closest('li')!
+    expect(within(nativeRow).queryByText(en.credentialMissing)).toBeNull()
+    expect(within(nativeRow).queryByText(en.credentialConfigured)).toBeNull()
   })
 
   it('turns the setup card into a row once the credential reports configured', async () => {
@@ -2043,10 +2045,10 @@ describe('ModelsSection', () => {
     fireEvent.click(screen.getAllByText(en.cancel)[0] as HTMLElement)
     // The add card kept its draft…
     expect(screen.getByLabelText(en.provider)).toBeTruthy()
-    // …and DeepSeek collapsed to an ordinary row carrying the missing-key dot.
+    // …and DeepSeek collapsed to an ordinary row carrying the missing-key state.
     expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
-    expect(screen.getAllByRole('img', { name: en.credentialMissing })
-      .some(dot => dot.closest('li')?.textContent?.includes('DeepSeek') === true)).toBe(true)
+    expect(screen.getAllByText(en.credentialMissing)
+      .some(state => state.closest('li')?.textContent?.includes('DeepSeek') === true)).toBe(true)
     // Its card reopens through Edit, which closes the add card as any row does.
     fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
     expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
@@ -2666,4 +2668,108 @@ it.each([es, fr, de, ru, pt])('keeps capacity examples in translated validation 
       expect(parseCapacity(token!)).toBeGreaterThan(0)
     }
   }
+})
+
+
+describe('Models provider rows', () => {
+  it('reads each row as name, then state, then the machine id, with the controls last', async () => {
+    await mountSection()
+    const row = screen.getByText('DeepSeek').closest('li')!
+    expect(row.getAttribute('data-models-row')).toBe('deepseek-official')
+    expect(row.getAttribute('data-provider-state')).toBe('missing')
+    const head = row.querySelector<HTMLElement>('[class*="rowHead"]')!
+    const [titleLine, meta, actions] = [...head.children] as [HTMLElement, HTMLElement, HTMLElement]
+    // Title line: the human name, and no machine id competing with it.
+    expect(titleLine.querySelector('h3')?.textContent).toBe('DeepSeek')
+    expect(titleLine.getAttribute('title')).toBeNull()
+    // Fact line: the state word first, then the route id as the quiet chip.
+    expect(meta.children[0]?.textContent).toBe(en.credentialMissing)
+    expect(meta.children[0]?.getAttribute('data-state')).toBe('missing')
+    expect(meta.children[1]?.getAttribute('title')).toBe('deepseek-official')
+    expect(meta.children[1]?.textContent).toBe('deepseek-official')
+    // Controls keep the trailing column and stay reachable by their own names.
+    expect(within(actions).getByRole('button', { name: deepSeekCopy(en.editProvider) })).toBeTruthy()
+  })
+
+  it('leaves the id chip off a route whose display name is its own id', async () => {
+    await mountSection()
+    const row = screen.getByText('openai').closest('li')!
+    const head = row.querySelector<HTMLElement>('[class*="rowHead"]')!
+    const meta = head.children[1] as HTMLElement
+    expect(meta.children[0]?.textContent).toBe(en.credentialConfigured)
+    expect(meta.querySelector('[title="openai"]')).toBeNull()
+    expect(meta.textContent).toBe(en.credentialConfigured)
+  })
+
+  it('states a declared route with the custom tag on the title line', async () => {
+    const scripted = scriptedFace()
+    const namespaces = wireNamespaces().map(view => view.ns === 'llm-pi-ai'
+      ? piAiNamespaceWith('acme', { apiKeyEnv: 'ACME_API_KEY' })
+      : view)
+    scripted.face.settings.describe.mockImplementation(() => Promise.resolve(remoteOk(
+      { writable: true, hasDocument: false, namespaces },
+    )))
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true },
+      {
+        provider: 'acme', displayName: 'Acme Gateway', settingsNs: 'llm-pi-ai',
+        settingsPath: ['providers', 'acme'], declared: true, active: true,
+      },
+      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
+    ])))
+    scripted.face.credentials.describe.mockImplementation((refs: string[]) => Promise.resolve(remoteOk(
+      Object.fromEntries(refs.map(ref => [ref, { configured: true, writable: true }])),
+    )))
+    await mountFace(scripted)
+    const row = screen.getByText('Acme Gateway').closest('li')!
+    const head = row.querySelector<HTMLElement>('[class*="rowHead"]')!
+    const titleLine = head.children[0] as HTMLElement
+    expect(within(titleLine).getByText(en.customTag)).toBeTruthy()
+    expect(titleLine.querySelector('h3')?.textContent).toBe('Acme Gateway')
+    expect((head.children[1] as HTMLElement).children[1]?.textContent).toBe('acme')
+    expect(row.getAttribute('data-provider-state')).toBe('configured')
+  })
+
+  it('states a directory failure as the unavailable row state above its message', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+      {
+        provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek',
+        settingsPath: [], active: true, error: 'route unavailable',
+      },
+      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
+    ])))
+    await mountFace(scripted)
+    const row = screen.getByText('DeepSeek').closest('li')!
+    expect(row.getAttribute('data-provider-state')).toBe('unavailable')
+    const meta = row.querySelector<HTMLElement>('[class*="rowHead"]')!.children[1] as HTMLElement
+    expect(meta.children[0]?.textContent).toBe(en.providerUnavailable)
+    expect(meta.children[0]?.getAttribute('data-state')).toBe('unavailable')
+    expect(within(row).getByRole('alert').textContent).toBe('route unavailable')
+  })
+
+  it('sets the model id field in the code face and leaves the display name in the reading face', async () => {
+    await mountDeepSeekCard()
+    fireEvent.click(screen.getByText(en.customized))
+    const id = screen.getAllByLabelText(new RegExp(en.modelId))[0] as HTMLInputElement
+    const name = screen.getAllByLabelText(new RegExp(en.modelName))[0] as HTMLInputElement
+    expect(id.className).toContain('modelIdInput')
+    expect(name.className).not.toContain('modelIdInput')
+  })
+  it('states the loading posture as a spinner dot plus its word', async () => {
+    const scripted = scriptedFace()
+    const ctx = ctxWith(scripted.face)
+    const controller = new ModelsSettingsStore(ctx, settingsSchema, new SettingsDescribeMirror(ctx))
+    render(<ModelsSection
+      controller={controller}
+      useSnapshot={bindSnapshotSelector(controller.store)}
+      operations={operationsWith(scripted.face)}
+      schema={settingsSchema}
+      t={t}
+      renderSlot={stubRenderSlot() as unknown as ModelsSectionProps['renderSlot']}
+    />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe(en.loadingProviders)
+    expect(status.querySelector('[data-state="ongoing"]')).toBeTruthy()
+  })
 })

@@ -3,12 +3,25 @@
  * render the light-mode literals written as their fallbacks and stay light
  * under the dark theme. */
 
+/* The Models column: the page title and its one-line purpose, then the
+ * provider cards. A card is one reading order — the human provider name, the
+ * state it reports as a dot plus its word, the quiet machine route id, and the
+ * controls in one fixed trailing column. Every part carries a `--dsw-*` token
+ * and a 4px step; nothing here invents a colour, face, or shadow. */
 .section {
+  /* The tab's own width, not the window's, decides the row anatomy below. */
+  container: models-section / inline-size;
   display: flex;
   flex-direction: column;
   gap: 12px;
   max-width: 720px;
   color: var(--dsw-alias-label-primary);
+  /* Row geometry, one source: the trailing column fits the widest shipped pair
+     of row controls (ru «Редактировать» + «Удалить» measure 170px), so the
+     controls start on one axis from row to row, and the head closes to one
+     column once that column would squeeze the name below its own measure. */
+  --dsh-models-action-column: 172px;
+  --dsh-models-head-gap: 16px;
 }
 
 .title {
@@ -19,11 +32,14 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* What the tab is for, in the description ink and size the rest of Settings
+   uses for prose, and free to wrap rather than end in an ellipsis. */
 .intro {
   margin: 0;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: break-word;
 }
 
 .notice {
@@ -38,6 +54,19 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-state-success-primary);
+}
+
+/* The loading state is stated once, above the space its rows will take: a dot
+   plus its word, as every other state on this page, so nothing needs to infer
+   progress from an empty column. */
+.loadingState {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .rows {
@@ -55,36 +84,51 @@
   border: 0.5px solid var(--dsw-alias-settings-card-stroke);
   background: var(--dsw-alias-settings-card-fill);
   border-radius: var(--dsw-radius-xl);
-  padding: 12px 14px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
+/* One head anatomy per provider row: the title line and the quiet fact line
+   share the text column, and the controls keep one fixed trailing column, so a
+   state word or a second control never moves the reading edge. The grid's rows
+   are the title line, the fact line, and — once the head closes to a single
+   column — the controls. */
 .rowHead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--dsh-models-action-column);
+  column-gap: var(--dsh-models-head-gap);
+  row-gap: 4px;
+  align-items: start;
+  min-width: 0;
 }
 
-.rowIdentity {
-  display: inline-flex;
+/* The name may wrap rather than lose characters; the custom tag rides the same
+   line as an annotation on the name. */
+.rowTitleLine {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 8px;
   min-width: 0;
 }
 
 .rowName {
+  margin: 0;
+  min-width: 0;
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
 }
 
 /* Reads as an annotation on the name, not as a second name: caption size and
-   the secondary label tone, so it never competes with the row's own title. It
-   sits inside `rowIdentity` with the credential dot, which is what keeps it
-   beside the name rather than drifting toward the actions. */
+   the secondary label tone, on a hairline rather than a filled pill, so it
+   never competes with the row's own title. */
 .rowTag {
   flex: none;
   padding: 1px 6px;
@@ -95,39 +139,81 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.credentialDot {
-  box-sizing: border-box;
-  display: inline-block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  corner-shape: round;
-}
-
-.credentialDotConfigured {
-  background: var(--dsw-alias-state-success-primary);
-}
-
-.credentialDotMissing {
-  background: var(--dsw-alias-state-error-primary);
-}
-
-.accountStatus {
+/* A row's state is a dot plus its word — the Skills tab's quiet state line,
+   never a filled badge. The word carries the meaning in secondary ink; only a
+   fault lifts to the error tone. */
+.rowState {
   display: inline-flex;
-  flex: none;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  min-width: 0;
+  font-size: 12px;
   line-height: 20px;
-  color: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: break-word;
 }
 
-.rowActions {
-  display: inline-flex;
+.rowState[data-state='unavailable'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The machine identity is a quiet code chip: monospace, tertiary ink, a
+   hairline on the card surface — the same material the plugin inventory uses
+   for its entry ids. It wraps instead of hiding characters. */
+.rowId {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+/* The quiet fact line: state and machine id on one axis under the name. Its
+   20px min height is the state line's own line box, so a row without a state
+   keeps the same reading rhythm. */
+.rowMeta {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  min-height: 20px;
+}
+
+/* Controls keep the trailing column's start, so adding Delete extends the
+   group rightward instead of moving Edit, and a row with one control keeps the
+   same column. */
+.rowActions {
+  grid-column: 2;
+  grid-row: 1;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
   gap: 4px;
-  margin-left: auto;
+  min-width: 0;
+}
+
+/* Below this width the fixed column would leave the name under its own
+   measure, so the head closes to one column and the controls take their own
+   line beneath the facts, keeping their start edge on the text axis. */
+@container models-section (max-width: 480px) {
+  .rowHead {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowActions {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }
 
 /* `box-sizing` on every control here: the app has no global border-box reset,
@@ -240,16 +326,21 @@
 .editor {
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-module-platform);
-  padding: 14px 16px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
+/* The editor names the same identity as its row: the human name in the reading
+   face and the route id as the quiet machine chip beside it, on one line that
+   wraps when a translated name needs the whole measure. */
 .editorHeader {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
 .editorTitle {
@@ -257,18 +348,26 @@
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
 }
 
 .editorRoute {
-  font-size: 12px;
-  line-height: 18px;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-xs);
   color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .fieldLabel {
@@ -356,17 +455,19 @@
   display: flex;
 }
 
+/* The add button is the last slot of the provider list: a dashed place that
+   fills the row and repeats the row cards' corner. It keeps the 44px floor but
+   grows with a long translated label instead of clipping it. */
 .addButton {
-  /* Overrides the shared button base above: this is not a pill sitting in a
-     footer but the last slot of the provider list, so it fills the row and
-     repeats the row cards' corner. Dashed, like every other "nothing here yet"
-     affordance on this page, to read as a place rather than a command. */
   flex: 1 1 0;
   min-width: 180px;
   gap: 6px;
-  height: 44px;
+  height: auto;
+  min-height: 44px;
+  padding: 10px 14px;
   border: 1px dashed var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-lg);
+  text-align: center;
 }
 
 /* The add card's mode switch with the one-line purpose of the chosen mode
@@ -384,7 +485,7 @@
 .addPanel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .addPanel[hidden] {
@@ -395,10 +496,10 @@
 .setupCard {
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-module-platform);
-  padding: 14px 16px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   list-style: none;
 }
 
@@ -508,9 +609,10 @@
 
 .modelListHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
 }
 
 .modelEntry {
@@ -525,7 +627,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .modelName {
@@ -734,6 +836,14 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
+}
+
+/* The model id is a machine fact the adapter matches against, so its field
+   reads in the code face one step below the display-name field beside it: the
+   human name stays the row's voice, the id its address. */
+.modelIdInput {
+  font-family: var(--ds-font-family-code);
+  font-size: 13px;
 }
 
 .modelReasoning {
