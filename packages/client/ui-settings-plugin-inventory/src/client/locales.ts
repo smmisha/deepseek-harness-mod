@@ -162,7 +162,7 @@ export const es = {
   unobserved: 'no corriendo',
   pending: 'Esperando dependencias',
   loadingPhase: 'Cargando',
-  active: 'corriendo',
+  'active': 'En ejecución',
   failed: 'No se pudo iniciar',
   unloading: 'Descarga',
 } satisfies Record<keyof typeof en, string>
@@ -203,7 +203,7 @@ export const fr = {
   unobserved: 'Ne fonctionne pas',
   pending: 'En attente de dépendances',
   loadingPhase: 'Chargement',
-  active: 'Courir',
+  'active': 'En cours',
   failed: 'Échec du démarrage',
   unloading: 'Déchargement',
 } satisfies Record<keyof typeof en, string>
@@ -244,7 +244,7 @@ export const de = {
   unobserved: 'Läuft nicht',
   pending: 'Warten auf Abhängigkeiten',
   loadingPhase: 'Laden',
-  active: 'Laufen',
+  'active': 'Läuft',
   failed: 'Start fehlgeschlagen',
   unloading: 'Entladen',
 } satisfies Record<keyof typeof en, string>
@@ -285,7 +285,7 @@ export const ru = {
   unobserved: 'Не работает',
   pending: 'Ожидание зависимостей',
   loadingPhase: 'Загрузка',
-  active: 'Бег',
+  active: 'Работает',
   failed: 'Не удалось запустить',
   unloading: 'Разгрузка',
 } satisfies Record<keyof typeof en, string>
@@ -326,7 +326,7 @@ export const pt = {
   unobserved: 'Não está em execução',
   pending: 'Esperando por dependências',
   loadingPhase: 'Carregando',
-  active: 'Correndo',
+  'active': 'Em execução',
   failed: 'Falha ao iniciar',
   unloading: 'Descarregando',
 } satisfies Record<keyof typeof en, string>

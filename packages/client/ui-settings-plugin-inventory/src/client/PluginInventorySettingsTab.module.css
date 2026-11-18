@@ -332,7 +332,9 @@
 /* The preset switcher trigger mirrors the General-settings selector pill. */
 .switcher {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 12px;
   height: 36px;
@@ -367,8 +369,10 @@
   flex: none;
 }
 
+/* The label states which preset is in force, so it is never capped: the button
+   takes the room it needs and only a genuinely tight header shortens it. */
 .switcherLabel {
-  max-width: 240px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }

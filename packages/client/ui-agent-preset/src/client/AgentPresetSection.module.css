@@ -217,17 +217,18 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
 }
 
+/* A preset name carries the card: it wraps at word boundaries instead of being
+   clipped, so a long localized name stays readable next to the default marker. */
 .cardName {
   min-width: 0;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 /* Bounded to four lines. A preset publishes its own description, so one long
