@@ -1,3 +1,4 @@
+import type { TurnEndReason } from '@deepseek-ai/dsh-session/types'
 import type { ChatNode } from './chat-nodes.ts'
 
 /** Current process range and finalized answer boundary derived from one Turn. */
@@ -46,6 +47,18 @@ export function isSubagentDelegationTool(name: string): boolean {
 }
 
 /**
+ * Whether one turn ending stopped the run before a natural completion: an
+ * operator abort, a graceful stop at a settled step boundary, or a crash
+ * closer. These endings keep their process disclosure open and replace the
+ * elapsed-time summary.
+ * @param reason - the turn's recorded ending kind.
+ * @returns whether the ending is a stop rather than a completion, failure, or block.
+ */
+export function stoppedTurnReason(reason: TurnEndReason['kind'] | undefined): boolean {
+  return reason === 'aborted' || reason === 'interrupted' || reason === 'stopped'
+}
+
+/**
  * Keep live, stopped, and failed Turns open.
  * @param node - Node carrying the owning Turn.
  * @returns whether whole-Turn collapse is unavailable.
@@ -53,6 +66,6 @@ export function isSubagentDelegationTool(name: string): boolean {
 export function turnProcessAlwaysOpen(node: ChatNode | undefined): boolean {
   const location = node?.location
   if (location?.kind !== 'turn' && location?.kind !== 'step') return false
-  const reason = location.turn.end?.data.reason.kind
-  return location.turn.status === 'open' || reason === 'aborted' || reason === 'interrupted' || reason === 'error'
+  return location.turn.status === 'open'
+    || stoppedTurnReason(location.turn.end?.data.reason.kind) || location.turn.end?.data.reason.kind === 'error'
 }

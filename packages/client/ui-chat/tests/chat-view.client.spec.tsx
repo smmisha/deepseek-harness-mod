@@ -3628,6 +3628,25 @@ describe('ChatView', () => {
     expect(view.getByText('任务已停止')).toBeTruthy()
   })
 
+  it('summarizes a graceful stop at its settled step, without elapsed time, and keeps it open', () => {
+    const answer: AssistantMessageNode = {
+      kind: 'assistant', seq: 2, time: 2_000, turn: 1, step: 1, blocks: [{ kind: 'text', text: 'answer' }],
+    }
+    const h = makeHarness({ chat: chatSnapshotFixture({
+      nodes: [user(1, 'hi'), answer],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 20_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+      turnEndReasons: new Map([[1, { kind: 'stopped' }]]),
+    }) })
+    const view = render(<h.ChatView {...h.props} />)
+    const control = turnProcessControl(view.container)
+    // The settled content stays visible; only the summary names the boundary.
+    expect(control?.textContent).toBe('当前步骤完成后已停止')
+    expect(control?.disabled).toBe(true)
+    expect(view.getByText('answer')).toBeTruthy()
+    expect(view.queryByText('已停止')).toBeNull()
+  })
+
   it('withholds the usage-details trigger when turn usage is outside the window', () => {
     const settled: AssistantMessageNode = {
       kind: 'assistant', seq: 2, time: 2_000, turn: 1, step: 1, blocks: [{ kind: 'text', text: 'answer' }],
