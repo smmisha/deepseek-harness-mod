@@ -23,10 +23,10 @@ export function DesktopChannelRow({ useChannel, select, t }:
   const [open, setOpen] = useState(false)
   const busy = pending !== undefined || state?.changing === true
   const channel = pending ?? state?.channel
-  return <div className={css.row} role="group" aria-label={t('desktop.channel.title')}>
-    <div className={css.rowText}>
-      <div className={css.title}>{t('desktop.channel.title')}</div>
-      <div className={css.description}>{t('desktop.channel.description')}</div>
+  return <div role="group" aria-label={t('desktop.channel.title')}>
+    <div>
+      <div>{t('desktop.channel.title')}</div>
+      <div>{t('desktop.channel.description')}</div>
       {(failed || state?.error !== undefined) && <div role="alert">{t(failed ? 'desktop.channel.readError' : 'desktop.channel.error')}</div>}
     </div>
     <Menu open={open} onClose={() => { setOpen(false) }} portal align="end"

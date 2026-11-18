@@ -20,6 +20,7 @@ import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.
 import type { DesktopChannelRowInjected, DesktopChannelToastInjected } from '../src/client/DesktopChannelRow.tsx'
 import type { DesktopChannelBridge } from '../src/types.ts'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
+import type { GeneralSectionInjected } from '../src/client/GeneralSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
 
@@ -336,6 +337,44 @@ describe('ui-settings-general apply', () => {
     })
     expect(settings.mutate).not.toHaveBeenCalled()
   })
+
+  it('projects General rows into two reading groups that follow the item ledger', async ({ mock, start }) => {
+    const { c } = await client(mock, start)
+    const face = (generalEntry(c).inject as unknown as () => GeneralSectionInjected)()
+    const groups = face.hooks.groups
+    const first = groups.getSnapshot()
+    expect(first.map(group => group.id)).toEqual(['interface', 'work'])
+    // The three interface ids the section names read first; every other row,
+    // ordered as registered, reads as a working preference.
+    expect(first[0]!.items).toEqual(['language', 'appearance', 'font-size'])
+    expect(first[1]!.items).toEqual([
+      'permission', 'transcript-view', 'developer-tools', 'shortcuts',
+      'link-opening', 'composer-enter', 'performance-usage', 'current-version',
+    ])
+    // The projection is cached between ledger versions.
+    expect(groups.getSnapshot()).toBe(first)
+    const listener = vi.fn()
+    const off = groups.subscribe(listener)
+    const dispose = c.ctx.slots.register({
+      name: 'settings.general.item', id: 'session-log', order: 90, locale: NS,
+    }, () => null)
+    // An entry that declares no order takes the default position.
+    const disposeUnordered = c.ctx.slots.register({
+      name: 'settings.general.item', id: 'unordered-row', locale: NS,
+    }, () => null)
+    await vi.waitFor(() => { expect(listener).toHaveBeenCalled() })
+    const next = groups.getSnapshot()
+    expect(next).not.toBe(first)
+    // A new row lands in the second group at its order position, not appended.
+    expect(next[0]!.items).toEqual(['language', 'appearance', 'font-size'])
+    expect(next[1]!.items).toEqual([
+      'permission', 'unordered-row', 'transcript-view', 'developer-tools', 'shortcuts',
+      'link-opening', 'composer-enter', 'performance-usage', 'session-log', 'current-version',
+    ])
+    off()
+    dispose()
+    disposeUnordered()
+  }, COLD_BOOT_TIMEOUT_MS)
 
   it('re-registers after a Loader rebuild of the declaring chain (stale disposers must not block)', async ({ mock, start }) => {
     const { c, settings } = await client(mock, start)
