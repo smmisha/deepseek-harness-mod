@@ -40,7 +40,7 @@ changes:
 <a id="verification"></a>
 ## 验证
 
-pnpm exec vitest run packages/core/agent-loop/tests/graceful-stop.spec.ts：9 个测试通过。pnpm run typecheck：host 与 client 门禁通过。
+pnpm exec vitest run packages/core/agent-loop/tests/graceful-stop.spec.ts：10 个测试通过。pnpm run typecheck：host 与 client 门禁通过。
 
 <a id="dev-note"></a>
 ## 开发备注

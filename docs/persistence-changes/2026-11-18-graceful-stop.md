@@ -40,7 +40,7 @@ Existing logs remain valid, and new readers handle every historical reason. An o
 <a id="verification"></a>
 ## Verification
 
-pnpm exec vitest run packages/core/agent-loop/tests/graceful-stop.spec.ts: 9 tests passed. pnpm run typecheck: host and client gates passed.
+pnpm exec vitest run packages/core/agent-loop/tests/graceful-stop.spec.ts: 10 tests passed. pnpm run typecheck: host and client gates passed.
 
 <a id="dev-note"></a>
 ## Dev Note
