@@ -1,0 +1,189 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.toolbar,
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.muted {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.balanceRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amount {
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 510;
+}
+
+.provider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.providerName {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.windowRow {
+  display: grid;
+  grid-template-columns: 72px minmax(80px, 1fr) minmax(120px, auto) 128px;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+
+.windowName {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.track {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-skeleton);
+}
+
+.fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.fill.near {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.fill.over {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.usedCopy {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.near {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.over {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.budget {
+  min-width: 0;
+}
+
+/* The Input primitive sizes to the native field; the budget column sets its width instead. */
+.budget > span {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.budget input {
+  width: 100%;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.table th:nth-child(-n + 2),
+.table td:nth-child(-n + 2) {
+  text-align: left;
+}
+
+.table thead th {
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.table tfoot th,
+.table tfoot td {
+  font-weight: 500;
+  border-bottom: none;
+}
+
+.model,
+.provider {
+  display: block;
+}
+
+.model {
+  font-weight: 500;
+}
+
+.provider {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+@media (max-width: 560px) {
+  .windowRow {
+    grid-template-columns: 64px 1fr 112px;
+  }
+
+  .usedCopy {
+    grid-column: 2;
+    text-align: left;
+  }
+}

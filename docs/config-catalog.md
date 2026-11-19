@@ -4981,6 +4981,46 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-typert-loader -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-usage -->
+<a id="deepseek-aidsh-usage"></a>
+
+## `@deepseek-ai/dsh-usage`
+
+- `inject`: `sessionQuery`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/experimental/usage/src/index.ts:46`](../packages/experimental/usage/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Ledger file; a relative path resolves against the profile directory. */
+  readonly ledgerFile: string
+  /** DeepSeek balance source. */
+  readonly deepseek: DeepSeekSection
+  /** Token budgets keyed by provider route id, edited live on the Usage page. */
+  readonly limits: Volatile<Record<string, UsageBudget>>
+}
+
+/** Where the DeepSeek balance comes from. */
+export interface DeepSeekSection {
+  /** Credential the DeepSeek API route reads its key from. */
+  readonly apiKeyEnv: string
+  /** API origin. */
+  readonly baseURL: string
+}
+
+/** Token budget per rolling window, as configured under the provider id; an absent window is unbounded. */
+export interface UsageBudget {
+  /** Tokens allowed in any rolling five hours. */
+  readonly fiveHours?: number | undefined
+  /** Tokens allowed in any rolling seven days. */
+  readonly week?: number | undefined
+  /** Tokens allowed in any rolling thirty days. */
+  readonly month?: number | undefined
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-usage -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-user-approval -->
 <a id="deepseek-aidsh-user-approval"></a>
 

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Usage",
+    "description": "Token usage per day and model estimated from the Session logs, rolling five-hour, weekly, and monthly token budgets per provider, and the DeepSeek account balance."
+  }
+}

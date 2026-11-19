@@ -366,6 +366,9 @@ export default defineConfig({
         // The free web chat entry binds its generated administration Remote, which exists only in lib;
         // source tests cover mountFreeChat and its page.
         'packages/experimental/freechat/src/client/index.ts',
+        // The usage entry binds its generated Remote, which exists only in lib;
+        // source tests cover mountUsage, its section, and its notice.
+        'packages/experimental/usage/src/client/index.ts',
         // The mods band entry imports the bridge's generated Remote contribution, which exists only in lib;
         // the Web snapshot exercises the built entry, while source tests cover mountModsBand.
         'packages/experimental/client-ui-claude-code-mods/src/client/index.ts',

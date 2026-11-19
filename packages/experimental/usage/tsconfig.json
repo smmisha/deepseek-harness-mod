@@ -1,0 +1,52 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/client",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../util/atomic-write"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../util/launch-environment"
+    },
+    {
+      "path": "../../boot/app-boot"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../session-query/session-query"
+    },
+    {
+      "path": "../../llm/llm-retry"
+    },
+    {
+      "path": "../../credentials/credentials"
+    }
+  ]
+}

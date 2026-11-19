@@ -107,6 +107,7 @@ describe('release families', () => {
       '@deepseek-ai/dsh-tool-terminal',
       '@deepseek-ai/dsh-experimental-tool-worktree',
       '@deepseek-ai/dsh-experimental-translator',
+      '@deepseek-ai/dsh-usage',
       '@deepseek-ai/dsh-experimental-voice-input-bundle',
       '@deepseek-ai/dsh-webhook-github',
       '@deepseek-ai/dsh-webhook',

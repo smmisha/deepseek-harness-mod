@@ -4627,6 +4627,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'usage',
+    summary: 'Host Remote behind the Usage page.',
+    description: 'Host Remote behind the Usage page.',
+    methods: [
+      {
+        signature: '@Remote async view(since: number): Promise<UsageView>',
+        description: 'Read new Session events and sum the calls.',
+        parameters: [{ name: 'since', description: 'earliest call time the rows include, in epoch milliseconds.' }],
+        returns: 'quarter-hour rows since then and rolling-window totals ending now.',
+      },
+      {
+        signature: '@Remote async balance(): Promise<UsageBalance>',
+        description: 'Read the DeepSeek account balance.',
+        parameters: [],
+        returns: 'the balance, or why it cannot be shown.',
+      },
+    ],
+  },
+  {
     key: 'userQuestions',
     summary: '`ctx.userQuestions`: validation plus the scoped answerer waterfall.',
     description: '`ctx.userQuestions`: validation plus the scoped answerer waterfall.',
@@ -10639,6 +10658,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: SessionId;\n}',
+  },
+  {
+    name: 'UsageBalance',
+    declaration: 'export type UsageBalance = {\n    readonly status: \'available\';\n    readonly sufficient: boolean;\n    readonly entries: readonly UsageBalanceEntry[];\n} | {\n    readonly status: \'unconfigured\';\n} | {\n    readonly status: \'failed\';\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'UsageBalanceEntry',
+    declaration: 'export interface UsageBalanceEntry {\n    readonly currency: string;\n    readonly total: string;\n    readonly granted: string;\n    readonly toppedUp: string;\n}',
+  },
+  {
+    name: 'UsageSlotRow',
+    declaration: 'export interface UsageSlotRow extends UsageTokens {\n    readonly slot: number;\n    readonly provider: string;\n    readonly model: string;\n    readonly calls: number;\n}',
+  },
+  {
+    name: 'UsageTokens',
+    declaration: 'export interface UsageTokens {\n    readonly input: number;\n    readonly cacheRead: number;\n    readonly cacheWrite: number;\n    readonly output: number;\n}',
+  },
+  {
+    name: 'UsageView',
+    declaration: 'export interface UsageView {\n    readonly rows: readonly UsageSlotRow[];\n    readonly windows: readonly UsageWindowTotals[];\n    readonly scannedAt: number;\n}',
+  },
+  {
+    name: 'UsageWindowTotals',
+    declaration: 'export interface UsageWindowTotals {\n    readonly provider: string;\n    readonly fiveHours: number;\n    readonly week: number;\n    readonly month: number;\n}',
   },
   {
     name: 'UserMessage',
