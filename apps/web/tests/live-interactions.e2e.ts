@@ -174,7 +174,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     // preference is Queue, so the button reads Queue rather than plain Send.
     const send = page.getByRole('button', { name: 'Queue message', exact: true })
     await send.waitFor({ timeout: 10_000 })
-    expect(await page.getByRole('button', { name: 'Stop generating', exact: true }).count()).toBe(0)
+    expect(await page.getByRole('button', { name: 'Finish step, then stop', exact: true }).count()).toBe(0)
     expect(await page.getByRole('button', { name: 'Send message', exact: true }).count()).toBe(0)
     const runningDraftSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(RUNNING_DRAFT_EXPECTED, runningDraftSnapshot, MODE)
@@ -182,13 +182,13 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     await expect.poll(() => input.textContent(), { timeout: 10_000 }).toBe('')
     const queuedRow = page.locator('[data-queue-dock]').getByRole('listitem').filter({ hasText: RUNNING_DRAFT })
     await queuedRow.waitFor({ timeout: 10_000 })
-    await page.getByRole('button', { name: 'Stop generating', exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Finish step, then stop', exact: true }).waitFor({ timeout: 10_000 })
     await queuedRow.getByRole('button', { name: 'Remove queued message' }).click()
     await expect.poll(() => queuedRow.count(), { timeout: 10_000 }).toBe(0)
 
-    const stopButton = page.getByRole('button', { name: 'Stop generating' })
+    const stopButton = page.getByRole('button', { name: 'Finish step, then stop' })
     await stopButton.hover()
-    await page.getByRole('tooltip', { name: 'Stop generating Esc Esc', exact: true }).waitFor()
+    await page.getByRole('tooltip', { name: 'Finish step, then stop Esc Esc', exact: true }).waitFor()
     await stopButton.click()
     await settled
     expect(turnEndReasons(sessionEvents).at(-1)).toBe('aborted')
@@ -321,7 +321,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
         if (style === null) element.removeAttribute('style')
         else element.setAttribute('style', style)
       }, originalStyle)
-      await page.getByRole('button', { name: 'Stop generating', exact: true }).click()
+      await page.getByRole('button', { name: 'Finish step, then stop', exact: true }).click()
       await settled
     }
     expect(tripwire.pageErrors).toEqual([])

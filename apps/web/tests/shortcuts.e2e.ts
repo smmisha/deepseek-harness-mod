@@ -50,7 +50,7 @@ describe('web e2e: shortcut reference', () => {
       const rows = dialog.getByRole('listitem')
       const stopRow = dialog.getByRole('region', { name: locale === 'zh-CN' ? '消息输入' : 'Message input', exact: true })
         .getByRole('listitem').last()
-      await stopRow.getByText(locale === 'zh-CN' ? '停止生成' : 'Stop generating', { exact: true }).waitFor()
+      await stopRow.getByText(locale === 'zh-CN' ? '完成当前步骤后停止' : 'Finish step, then stop', { exact: true }).waitFor()
       const stopButtons = stopRow.getByRole('button')
       expect(await stopButtons.count()).toBe(0)
       expect(new Set(await rows.evaluateAll(items => items.map(row => row.getBoundingClientRect().height))))

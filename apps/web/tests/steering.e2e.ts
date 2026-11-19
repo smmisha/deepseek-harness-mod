@@ -305,7 +305,7 @@ describe.skipIf(MODE === 'record')('web e2e: retained steering and a post-stop m
     await input.fill(STEER)
     await input.press('Meta+Enter')
     await page.locator('[data-pending-steering]').filter({ hasText: STEER }).waitFor({ timeout: 10_000 })
-    await page.getByRole('button', { name: 'Stop generating', exact: true }).click()
+    await page.getByRole('button', { name: 'Finish step, then stop', exact: true }).click()
     await expect.poll(() => firstRequestSignal?.aborted).toBe(true)
     releaseQuestion.resolve(undefined)
     await expect.poll(() => sessionEvents.filter(event => event.type === 'turn/end').length, { timeout: 10_000 }).toBe(1)
@@ -422,7 +422,7 @@ describe.each(['reconnect', 'delayed-inbox'] as const)('web e2e: composer shortc
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
     await input.fill(PROMPT)
     await input.press('Enter')
-    await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Finish step, then stop' }).waitFor({ timeout: 10_000 })
     await expect.poll(() => sessionEvents.some(event => event.type === 'request/context'), { timeout: 10_000 }).toBe(true)
 
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
@@ -525,7 +525,7 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
     await input.fill(PROMPT)
     await input.press('Enter')
-    await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Finish step, then stop' }).waitFor({ timeout: 10_000 })
 
     const queuedText = 'Queued by the complementary Cmd+Enter shortcut.'
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
@@ -613,7 +613,7 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     // The turn must report busy before the next two sends: Enter's queue gesture
     // resolved against a not-yet-running agent admits the message into the turn
     // instead of publishing a Queue row.
-    await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Finish step, then stop' }).waitFor({ timeout: 10_000 })
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
     await input.fill(STEER_ONE)
     await input.press('Enter')
