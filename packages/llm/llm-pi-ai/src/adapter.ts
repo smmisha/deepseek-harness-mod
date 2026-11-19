@@ -60,6 +60,7 @@ import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attac
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { requestImageTarget, toPiContext } from './context.ts'
+import type { ModelListingCache } from './live-listing.ts'
 import { conversationUpdates, createModels, getSupportedThinkingLevels } from './models.ts'
 import { toStreamChunks } from './stream.ts'
 import { bindThinkingToPrefix } from './prefix-binding.ts'
@@ -107,6 +108,12 @@ export interface PiAiAdapterOptions {
    * every request no matter how often the human signed in.
    */
   auth: PiAiAuthInjection
+  /**
+   * Served-model listings of the routes that follow one. Model-facing operations
+   * wait for it before reading the route's models; omission leaves every route on
+   * the installed catalog.
+   */
+  modelListings?: ModelListingCache
   /**
    * Synchronously prepare this call's headers before SDK dispatch. The input
    * contains a fresh copy of profile headers; attribution is enforced afterward.
@@ -345,6 +352,7 @@ export class PiAiAdapter extends LlmAdapter {
 
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     return Promise.resolve().then(async () => {
+      await this.ensureListing(provider)
       const snapshot = this.current()
       const profile = this.profileOf(snapshot, provider)
       try { await this.config.resolveApiKey(provider, profile) }
@@ -367,10 +375,21 @@ export class PiAiAdapter extends LlmAdapter {
     model: string,
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    return Promise.resolve().then(() => {
+    return Promise.resolve().then(async () => {
+      await this.ensureListing(provider)
       const snapshot = this.current()
       return this.modelInfo(snapshot, provider, model)
     })
+  }
+
+  /**
+   * Wait until a route's served-model listing is as current as a request may wait
+   * for. A route that follows no listing returns at once.
+   * @param provider - route key.
+   */
+  private async ensureListing(provider: string): Promise<void> {
+    const spec = this.current().profiles.get(provider)?.modelListing
+    if (spec !== undefined) await this.config.modelListings?.ensure(provider, spec)
   }
 
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
@@ -393,10 +412,12 @@ export class PiAiAdapter extends LlmAdapter {
   }
 
   override prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
-    const snapshot = this.current()
-    return Promise.resolve({
-      model: this.modelInfo(snapshot, provider, model),
-      stream: options => this.streamWithSnapshot(options, snapshot),
+    return this.ensureListing(provider).then(() => {
+      const snapshot = this.current()
+      return {
+        model: this.modelInfo(snapshot, provider, model),
+        stream: (options: GenerateOptions) => this.streamWithSnapshot(options, snapshot),
+      }
     })
   }
 

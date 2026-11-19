@@ -2042,7 +2042,7 @@ export interface Config extends ProtocolConfig, ModelListingConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:251`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:277`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -2115,6 +2115,22 @@ export interface PiAiProviderProfile {
    * to answer instead.
    */
   defaultInput?: PiAiModality[]
+  /**
+   * Whether this route offers the models its gateway's served-model listing names
+   * now (default true). A route whose `models` list is written keeps that list; a
+   * listing never replaces it.
+   */
+  followModelListing?: boolean
+  /**
+   * URL of the served-model listing this route follows. Absent, a built-in route
+   * still on its provider's default endpoint follows that provider's listing; a
+   * route pointed elsewhere follows none unless it names a URL here.
+   */
+  modelListingUrl?: string
+  /** Age after which a served listing refreshes in the background (default 600,000). */
+  modelListingMaxAgeMs?: number
+  /** Limit on one served listing request before it counts as failed (default 10,000). */
+  modelListingTimeoutMs?: number
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */

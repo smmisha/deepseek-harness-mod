@@ -2,6 +2,7 @@
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type { Context } from '@deepseek-ai/cordis'
 import { ACCOUNT_QUOTA_EXCEEDED_CODE, APP_IDENTITY, LlmError, QUOTA_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
+import type { LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import {
@@ -31,9 +32,14 @@ export function apply(ctx: Context, config: Config): void {
   const settings = () => resolveAccountOptions(plainAccountOptions(config), environment)
   settings()
   const supported = resolveAdapterOptions({}).models
+  /** The ACCOUNT_SIGN_IN_REQUIRED diagnostic the request path and the listing refresh share. */
+  const signInRequired = (): LlmError => new LlmError(
+    'Sign in to DeepSeek to use the account provider. The request destination must allow account authentication.',
+    'ACCOUNT_SIGN_IN_REQUIRED',
+  )
   const resolveAuth = async (connection: ResolvedDeepSeekOptions): Promise<DeepSeekRequestAuth> => {
     const token = await resolveDeepSeekAccountToken(ctx, connection.baseURL)
-    if (token === undefined) throw new LlmError('Sign in to DeepSeek to use the account provider. The request destination must allow account authentication.', 'ACCOUNT_SIGN_IN_REQUIRED')
+    if (token === undefined) throw signInRequired()
     return {
       headers: { [TOKEN_HEADER]: token },
       onRequestError: async (error) => {
@@ -70,7 +76,10 @@ export function apply(ctx: Context, config: Config): void {
     }
     return { ...resolved.protocol, models: result.resolution, catalog: result }
   }
-  const entry = { provider: PROVIDER, displayName: 'DeepSeek Account', settingsNs: ctx.fiber.entry?.options.id ?? name, settingsPath: [] }
+  const settingsNs = ctx.fiber.entry?.options.id ?? name
+  const entry: LlmConfigurableProvider = {
+    provider: PROVIDER, displayName: 'DeepSeek Account', settingsNs, settingsPath: [], listingRefresh: true,
+  }
   const directory = ctx.llm.registerConfigurableProviders([entry])
   let reportedError: string | undefined
   /** Publish override diagnostics on the provider directory. */
@@ -95,5 +104,23 @@ export function apply(ctx: Context, config: Config): void {
       const { offered, badges } = discovered(view).catalog
       return offered.map(model => catalogModelInfo(provider, model, badges.get(model.id)))
     },
+  })
+  ctx.llm.registerListingRefresh(settingsNs, async (provider, signal) => {
+    if (provider !== PROVIDER) {
+      throw new LlmError(
+        `llm-deepseek-account: "${settingsNs}" follows no model listing for provider route "${provider}"`,
+        'NO_LISTING_REFRESH',
+      )
+    }
+    const listing = settings().catalog
+    if (await resolveDeepSeekAccountToken(ctx, listing.url) === undefined) throw signInRequired()
+    catalog.invalidate()
+    const view = await catalog.view(listing, signal)
+    // The cache serves an unauthenticated view without loading when the token
+    // disappears between the check above and this access.
+    if (!view.authenticated) throw signInRequired()
+    if (view.listing === undefined) {
+      throw new LlmError('The model listing failed to load; the bundled catalog stays in use', 'LISTING_REFRESH_FAILED')
+    }
   })
 }

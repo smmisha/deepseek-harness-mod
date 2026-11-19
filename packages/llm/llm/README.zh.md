@@ -87,12 +87,13 @@ const configure = (maxTokens: number): ConfigureCall =>
 - **注册提供方适配器**——一个适配器拥有一个或多个提供方路由，其注册会捕获该路由的重试策略；重复注册同一路由会以 `DUPLICATE_ADAPTER` 失败。
 - **通过配置暴露并激活提供方**——适配器声明可配置提供方路由与 settings namespace，配置界面因此可以激活休眠提供方并编辑连接信息，无需重启。`LlmConfigurableProvider.error` 报告供修复的配置诊断；未受影响的模型仍可提供服务。条目还可携带 `defaultBaseURL`，即配置未设置端点时适配器使用的端点；以及 `nativeAuth`，即配置未指定凭据引用时适配器认证读取的环境变量与 OAuth 登录；`baseURLEnv` 列出配置端点所用的环境变量。配置界面直接从目录读取这些字段，无需调用适配器。
 - **发现与解析模型**——列出适配器公布的模型、询问端点它提供哪些模型（候选携带可选的 `inputModalities`；缺省表示未知），并解析某个精确模型的上下文窗口、输出默认值、推理（reasoning）强度、输入模态与系统提示词更新模式：当模型把任意位置最新的 `system` 消息读作有效系统提示词时，`LlmResolvedModelInfo.systemPromptUpdate` 为 `'in-history'`；只读取开头 system 消息时该字段缺失；`normalizeModelInfo` 以 `INVALID_MODEL_INFO` 拒绝任何其他值。
+- **按需重新加载路由跟随的模型列表**——`registerListingRefresh(settingsNs, refresh)` 为每个 settings 命名空间提供一个由适配器拥有的重新加载，并随其 fiber 释放；命名空间为空时以 `INVALID_LISTING_REFRESH` 失败，为同一命名空间重复提供时以 `DUPLICATE_LISTING_REFRESH` 失败。`refreshListing(settingsNs, provider, signal)` 查找该提供项，没有时以 `NO_LISTING_REFRESH` 失败，否则委托给拥有者：拥有者丢弃路由缓存的列表并重新加载，而本运行时既不读取也不写入 settings 与凭据。重新加载不返回目录；成功后发出 `llm/models-updated`，已打开的模型选择器随之重新加载。`@Remote('refreshListing')` 适配器把任何拒绝报告为携带 settings 命名空间与路由的 `RemoteError` `llm/model-listing-refresh-rejected`，`LlmConfigurableProvider.listingRefresh: true` 声明该能力，配置界面据此提供该操作。
 - **校验调用配置**——显式或配置的推理强度会在任何提供方 I/O 之前对照精确模型校验；请求省略输出上限时，会填入适配器配置的输出上限。
 - **不展开即读取内嵌 Assistant 流**——`assistantStreamFirstTokenTime`（首 token）、`assistantStreamHasVisibleContent`（任一可见内容）与 `assistantStreamHasVisibleText`（任一可见文本）通过可提前退出的扫描直接从紧凑记录得出结果；`lastAssistantStreamChunk` 反向扫描到某一类型的最后一个原始 chunk，`assistantStreamChunks` 与 `joinAssistantStreamText` 扫描整个流，`assembleAssistantStream` 向 `BlockAssembler` 每个 run 喂一段拼接 delta，blocks／usage／replayState 与逐成员展开相同。`runFirstTokenTime` 与 `runFirstVisibleTime` 对单个打包 run 做提前退出扫描，`isTokenDelta`、`isVisibleChunk` 与 `chunkHasVisibleText` 定义单个 chunk 的 token 与可见性规则。`expandAssistantStream` 仍是持久边界读取记录的校验路径；它不被记忆化，因为保留的展开在事件生命周期内约花费紧凑流的十倍内存。
 
 ### 失败与恢复
 
-每个流都恰好以一个终止 `finish` 分片结束：失败为 `{ kind: 'error', failure }`，取消为 `{ kind: 'aborted', failure }`。失败携带稳定 code，如 `NO_ADAPTER`、`MISSING_CREDENTIAL`、`AUTH`、`RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`；消费方依据 code 路由，绝不解析消息文本。`LLM_FAILURE_CODES` 定义内置提供方与本运行时会抛出的全部 code；`new LlmError` 只接受这些 code 或 `HTTP_<status>`，`LlmError.fromFailure` 用于重新抛出 code 由其他提供方决定的已观察失败。标记了 `retryChoice` 的 code 是提供方 `retryPolicy.retryableCodes` schema 向设置表单发布的选项；成为选项不会把它加入默认重试集合。`QUOTA` 表示提供方中立的额度耗尽，`ACCOUNT_QUOTA` 专用于当前产品能够充值的第一方账号余额不足。点名未注册提供方的请求会以 `NO_ADAPTER` 失败，格式错误的凭据会以 `INVALID_CREDENTIAL` 失败，而不是表现为不透明的 fetch 错误。本服务从不自行重跑请求：重试是 `dsh-llm-retry` 在 agent 失败步骤扩展点上的职责。
+每个流都恰好以一个终止 `finish` 分片结束：失败为 `{ kind: 'error', failure }`，取消为 `{ kind: 'aborted', failure }`。失败携带稳定 code，如 `NO_ADAPTER`、`MISSING_CREDENTIAL`、`AUTH`、`RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`；消费方依据 code 路由，绝不解析消息文本。`LLM_FAILURE_CODES` 定义内置提供方与本运行时会抛出的全部 code；`new LlmError` 只接受这些 code 或 `HTTP_<status>`，`LlmError.fromFailure` 用于重新抛出 code 由其他提供方决定的已观察失败。标记了 `retryChoice` 的 code 是提供方 `retryPolicy.retryableCodes` schema 向设置表单发布的选项；成为选项不会把它加入默认重试集合。`QUOTA` 表示提供方中立的额度耗尽，`ACCOUNT_QUOTA` 专用于当前产品能够充值的第一方账号余额不足。点名未注册提供方的请求会以 `NO_ADAPTER` 失败，格式错误的凭据会以 `INVALID_CREDENTIAL` 失败，而不是表现为不透明的 fetch 错误。本服务从不自行重跑请求：重试是 `dsh-llm-retry` 在 agent 失败步骤扩展点上的职责。被拒绝的列表重新加载是一次被拒绝的调用，而不是流结果：`INVALID_LISTING_REFRESH`、`DUPLICATE_LISTING_REFRESH` 与 `NO_LISTING_REFRESH` 覆盖注册与分发，提供方则抛出自己的诊断——路由不跟随列表时为 `LISTING_NOT_FOLLOWED`，重新加载失败且继续使用内置目录时为 `LISTING_REFRESH_FAILED`。
 
 -----
 
@@ -106,13 +107,13 @@ const configure = (maxTokens: number): ConfigureCall =>
 
 ### 设计理念
 
-本服务基于一项职责分离原则：**逻辑约定是提供方无关的，适配器拥有协议。** 它一次性地定义规范消息、内容块与流式分片词汇，每个提供方适配器只把自己的协议格式翻译为该词汇。注册表是拓扑的拥有者——适配器路由、可配置提供方条目与发现 offer 都在这里注册，并随其 fiber 一起 dispose（资源释放）——而 agent loop 的请求始终是会话日志的纯函数：loop 构建的请求以深度冻结状态到达，因此监听器与适配器只能读取，绝不能改写。
+本服务基于一项职责分离原则：**逻辑约定是提供方无关的，适配器拥有协议。** 它一次性地定义规范消息、内容块与流式分片词汇，每个提供方适配器只把自己的协议格式翻译为该词汇。注册表是拓扑的拥有者——适配器路由、可配置提供方条目、模型发现 offer 与列表重新加载 offer 都在这里注册，并随其 fiber 一起 dispose（资源释放）——而 agent loop 的请求始终是会话日志的纯函数：loop 构建的请求以深度冻结状态到达，因此监听器与适配器只能读取，绝不能改写。
 
 ### 源码地图
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `LlmRuntime` 服务：适配器注册表、可配置提供方目录、模型发现、调用准备与流式边界 |
+| [`src/index.ts`](src/index.ts) | `LlmRuntime` 服务：适配器注册表、可配置提供方目录、模型发现与列表重新加载、调用准备与流式边界 |
 | [`src/types.ts`](src/types.ts) | `StreamChunk` 协议、内容块映射、结束原因与共享词汇 |
 | [`src/message.ts`](src/message.ts) | 投递、历史与请求共享的不可变消息构造函数 |
 | [`src/assembler.ts`](src/assembler.ts) | `BlockAssembler`：分片到块的增量组装 |
@@ -139,6 +140,7 @@ const configure = (maxTokens: number): ConfigureCall =>
 - **文件投影无条件进行**——没有任何提供方会收到文件字节；每条路由对每个 `FileBlock` 都得到一行确定性句柄文本，模型在需要时用文件工具读取保存的副本。
 - **协议顺序**——`usage` 先于 `finish`，工具参数保持原始 JSON 字符串，终止 `finish` 之后不再有任何内容。
 - **注册表变更具有原子性**——路由与目录注册会在任何变动前整体校验候选集合，因此被拒绝的变更会让此前状态继续服务。
+- **列表重新加载遵循拥有者的配置**——`refreshListing` 不读取 settings 或凭据；已注册的提供方解析路由，要么重新加载它跟随的列表，要么以自己的诊断拒绝。
 
 </details>
 
@@ -156,6 +158,7 @@ const configure = (maxTokens: number): ConfigureCall =>
 - [Token 计量](../token-meter/README.zh.md)——具备回放感知的请求与上下文压力测量。
 - [孪生 LLM 适配器](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.zh.md)——为什么 DeepSeek 路由交付两个结构不同的适配器。
 - [LLM 流终止失败](../../../.agents/notes/implemented/architecture/2026-07-29-terminal-llm-stream-failures.zh.md)——模型请求结果与插件失败之间的服务边界。
+- [模型列表重新加载接缝](../../../.agents/notes/implemented/architecture/2026-11-18-model-listing-refresh-seam.zh.md)——按需重新加载为何以 settings 命名空间为键，以及各路由为何拥有自己的拒绝诊断。
 
 -----
 

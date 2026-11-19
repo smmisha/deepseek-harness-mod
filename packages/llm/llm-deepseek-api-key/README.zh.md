@@ -45,6 +45,8 @@ kind: "package-reference"
 
 与内置目录不同的 `models` 列表会替换整个目录，并停止请求列表；模型页把编辑后的目录存在这里。删除这个列表（即模型页上的**恢复默认模型**）后，路由重新使用列表，即使缓存的列表尚未过期，下一次访问也会重新加载。与内置目录完全相同的列表视为未自定义。
 
+模型页上的**刷新模型**会立即重新加载路由跟随的列表。本插件以 `ctx.llm.registerListingRefresh(settingsNs, ...)` 为其 settings 命名空间注册该重新加载，并在目录条目上声明 `listingRefresh: true`。当 `models` 与内置目录不同、或 Messages 的 origin 不是 `https://api.deepseek.com`（这两种状态下不发列表请求）时，重新加载以 `LISTING_NOT_FOLLOWED` 拒绝；没有可解析的 API key 时以 `MISSING_CREDENTIAL` 拒绝；请求的命名空间不服务该路由时以 `NO_LISTING_REFRESH` 拒绝。真正执行时，重新加载会丢弃缓存的列表，并最多等待 `modelsTimeoutMs` 来加载新列表；成功时路由使用新列表并发出 `llm/models-updated`，因此已打开的选择器会重新加载；失败时路由使用内置目录，`LISTING_REFRESH_FAILED` 的消息也是这样说明。路由配置完全不变，因此从自定义目录返回仍要用**恢复默认模型**。
+
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `modelsTimeoutMs` | `5,000` | 单次列表请求以及首次访问等待的上限 |

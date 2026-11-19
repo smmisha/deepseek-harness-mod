@@ -1,12 +1,13 @@
 /** Models section registration: slot declaration injection, the locale-following label thunk, and HMR recovery. */
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import Schema from '@deepseek-ai/schemastery'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { remoteDefaultResponses } from '@deepseek-ai/dsh-client-test-runtime/src/assembly/remote-default-responses.ts'
 import { ok, RemoteMock } from '@deepseek-ai/dsh-remote-mock'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -37,23 +38,27 @@ async function bench(mock = RemoteMock.create().load(remoteDefaultResponses), se
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
+  const llm = {
+    listProviders: vi.fn(() => Promise.resolve({ ok: true as const, value: [] })),
+    listConfigurableProviders: vi.fn(() => Promise.resolve({ ok: true as const, value: [] })),
+    discoverModels: vi.fn(() => Promise.resolve({ ok: true as const, value: [] })),
+    refreshListing: vi.fn<(_settingsNs: string, _provider: string) => Promise<RemoteResult<void>>>(
+      () => Promise.resolve({ ok: true, value: undefined }),
+    ),
+    ...services,
+  }
   const remote = new TestRemote(ctx, {
     credentials: {
       describe: vi.fn(() => Promise.resolve({ ok: true, value: {} })),
       set: vi.fn(),
       unset: vi.fn(),
     },
-    llm: {
-      listProviders: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
-      listConfigurableProviders: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
-      discoverModels: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
-      ...services,
-    },
+    llm,
     settings: mock.remote.settings,
     session: { initializeDefaultModel: vi.fn(async () => ({ ok: true, value: undefined })) },
   })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, remote }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, remote, llm }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -134,6 +139,7 @@ describe('ui-settings-models apply', () => {
     expect(typeof injected.controller.load).toBe('function')
     expect(injected.hooks.snapshot).toBe(injected.controller.store)
     expect(typeof injected.operations.writeSettings).toBe('function')
+    expect(typeof injected.operations.refreshListing).toBe('function')
     const onboarding = before.slots.entries('settings.onboarding')
     expect(onboarding).toHaveLength(2)
     expect(onboarding.find(entry => entry.options.id === 'welcome-notice')).toMatchObject({
@@ -165,6 +171,32 @@ describe('ui-settings-models apply', () => {
     expect(after.slots.entries('settings.onboarding')).toHaveLength(2)
     // The self-inflicted ledger notifications hit the duplicate guard.
     expect(after.slots.entries('settings.section')).toHaveLength(1)
+  })
+
+  it('maps the listing-refresh Remote answer onto the row outcome', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const injected = (
+      b.slots.entries('settings.section')[0]!.inject as unknown as
+      () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected
+    )()
+    expect(typeof injected.operations.refreshListing).toBe('function')
+
+    b.llm.refreshListing.mockResolvedValueOnce({ ok: true, value: undefined })
+    await expect(injected.operations.refreshListing('llm-deepseek', 'deepseek-official'))
+      .resolves.toEqual({ kind: 'refreshed' })
+    expect(b.llm.refreshListing).toHaveBeenLastCalledWith('llm-deepseek', 'deepseek-official')
+
+    b.llm.refreshListing.mockResolvedValueOnce({
+      ok: false,
+      error: new RemoteError('llm/model-listing-refresh-rejected', 'listing unavailable', {
+        settingsNs: 'llm-deepseek',
+        provider: 'deepseek-official',
+      }),
+    })
+    await expect(injected.operations.refreshListing('llm-deepseek', 'deepseek-official'))
+      .resolves.toEqual({ kind: 'refused', message: 'listing unavailable' })
   })
 
   it('the label thunk follows the active locale without re-registration', async () => {

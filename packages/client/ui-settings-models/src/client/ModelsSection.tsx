@@ -261,6 +261,9 @@ export function providerCopy(template: string, target: ProviderIdentity): string
   return template.replace('{provider}', () => providerTargetLabel(target))
 }
 
+/** How long a listing-reload confirmation stays visible. */
+const REFRESH_NOTICE_MS = 4_000
+
 /**
  * Render the Models section content column.
  * @param props - slot-delivered injected dependencies.
@@ -298,6 +301,12 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   const [deleting, setDeleting] = useState(false)
   const [deleteFailure, setDeleteFailure] = useState<string | undefined>(undefined)
   const [savedTarget, setSavedTarget] = useState<ProviderIdentity | undefined>(undefined)
+  /** Route whose listing reload is in flight. */
+  const [refreshing, setRefreshing] = useState<string | undefined>(undefined)
+  /** Route that just reloaded; cleared when the confirmation expires. */
+  const [refreshed, setRefreshed] = useState<string | undefined>(undefined)
+  /** Refusal of the last listing reload, for the row it names. */
+  const [refreshFailure, setRefreshFailure] = useState<{ readonly provider: string; readonly message: string } | undefined>(undefined)
   const [dismissedSetup, setDismissedSetup] = useState<ReadonlySet<string>>(() => new Set())
 
   const announceSaved = (target: ProviderIdentity): void => {
@@ -305,6 +314,28 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
     // notice reads its name from: an apply can rename the route, and the
     // target captured when the card opened still carries the old name.
     void controller.load().then(() => { setSavedTarget(target) })
+  }
+
+  /**
+   * Reload one row's followed model listing now. The page's own snapshot does
+   * not change — only the adapter's cache does — so the outcome is reported
+   * here instead of through a reload.
+   */
+  const reloadListing = async (row: ProviderRow): Promise<void> => {
+    const provider = row.entry.provider
+    setRefreshing(provider)
+    setRefreshFailure(undefined)
+    setRefreshed(undefined)
+    const outcome = await operations.refreshListing(row.entry.settingsNs, provider)
+    setRefreshing(undefined)
+    if (outcome.kind === 'refused') {
+      setRefreshFailure({ provider, message: outcome.message })
+      return
+    }
+    setRefreshed(provider)
+    window.setTimeout(() => {
+      setRefreshed(current => current === provider ? undefined : current)
+    }, REFRESH_NOTICE_MS)
   }
 
   /**
@@ -529,6 +560,19 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                     : <span className={styles['rowId']} title={row.entry.provider}>{row.entry.provider}</span>}
                 </span>
                 <span className={styles['rowActions']}>
+                  {row.listingRefresh
+                    ? (
+                      <button
+                        type="button"
+                        className={styles['secondaryButton']}
+                        aria-label={providerCopy(t('refreshProvider'), target)}
+                        disabled={refreshing !== undefined || state.status !== 'ready'}
+                        onClick={() => { void reloadListing(row) }}
+                      >
+                        {refreshing === row.entry.provider ? t('refreshingModels') : t('refreshModels')}
+                      </button>
+                    )
+                    : null}
                   {/* The account catalog comes from the account listing; its model overrides live in cordis.patch.yml. */}
                   {row.entry.provider === 'deepseek-account'
                     ? null
@@ -572,6 +616,12 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 </span>
               </div>
               {error}
+              {refreshFailure?.provider === row.entry.provider
+                ? <p role="alert" className={styles['error']}>{refreshFailure.message}</p>
+                : null}
+              {refreshed === row.entry.provider
+                ? <p role="status" aria-live="polite" className={styles['savedNotice']}>{t('modelsRefreshed')}</p>
+                : null}
               {renderSlot(
                 'settings.models.provider-card',
                 { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },

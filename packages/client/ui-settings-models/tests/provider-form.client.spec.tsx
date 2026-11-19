@@ -132,6 +132,7 @@ function scriptedFace(options: {
         })),
       ))),
       discoverModels: discover,
+      refreshListing: vi.fn(() => Promise.resolve(remoteOk(undefined))),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(remoteOk({ writable: true, namespaces: [namespace] }))),

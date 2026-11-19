@@ -34,15 +34,17 @@ interface OfficialConnection extends ResolvedDeepSeekOptions {
 export function apply(ctx: Context, config: Config): void {
   const options = () => resolveAdapterOptions(plainOptions(config), launchEnvironmentOf(ctx))
   options()
+  /** The MISSING_CREDENTIAL diagnostic the request path and the listing refresh share. */
+  const missingCredential = (connection: ResolvedDeepSeekOptions): LlmError => new LlmError(
+    `llm-deepseek: no API key for provider route "${PROVIDER}"; store ${connection.apiKeyEnv} through the credentials`
+    + ` service (the web Models page writes it), or export ${connection.apiKeyEnv} in the launching environment`,
+    'MISSING_CREDENTIAL',
+  )
   const resolveApiKey = async (connection: ResolvedDeepSeekOptions): Promise<string> => {
     const ref = connection.apiKeyEnv
     const key = await resolveDeepSeekApiKey(ctx, ref)
     if (key !== undefined) return key
-    throw new LlmError(
-      `llm-deepseek: no API key for provider route "${PROVIDER}"; store ${ref} through the credentials`
-      + ` service (the web Models page writes it), or export ${ref} in the launching environment`,
-      'MISSING_CREDENTIAL',
-    )
+    throw missingCredential(connection)
   }
   /** The API key, or `undefined` when none is configured; other credential failures propagate. */
   const presentApiKey = async (connection: ResolvedDeepSeekOptions): Promise<string | undefined> => {
@@ -74,8 +76,9 @@ export function apply(ctx: Context, config: Config): void {
     }
     return { ...connection, models: catalog.resolution, offered: catalog.offered, refusals: catalog.refusals, badges: catalog.badges }
   }
+  const settingsNs = ctx.fiber.entry?.options.id ?? name
   ctx.llm.registerConfigurableProviders([
-    { provider: PROVIDER, displayName: 'DeepSeek', settingsNs: ctx.fiber.entry?.options.id ?? name, settingsPath: [] },
+    { provider: PROVIDER, displayName: 'DeepSeek', settingsNs, settingsPath: [], listingRefresh: true },
   ])
   registerDeepSeekProvider<OfficialConnection>(ctx, PROVIDER, {
     providerName: 'DeepSeek',
@@ -120,5 +123,29 @@ export function apply(ctx: Context, config: Config): void {
     catch (_rejectedConfiguration) { return }
     if (next !== following) listings.invalidate()
     following = next
+  })
+  ctx.llm.registerListingRefresh(settingsNs, async (provider, signal) => {
+    if (provider !== PROVIDER) {
+      throw new LlmError(
+        `llm-deepseek: "${settingsNs}" follows no model listing for provider route "${provider}"`,
+        'NO_LISTING_REFRESH',
+      )
+    }
+    const connection = options()
+    const listing = connection.listing
+    if (listing === undefined) {
+      throw new LlmError(
+        'The customized model catalog or a non-official endpoint is in use; Restore defaults and the official'
+        + ' endpoint to follow the published listing',
+        'LISTING_NOT_FOLLOWED',
+      )
+    }
+    if (await presentApiKey(connection) === undefined) throw missingCredential(connection)
+    listings.invalidate()
+    const view = await listings.view(listing, signal)
+    if (!view.authenticated) throw missingCredential(connection)
+    if (view.listing === undefined) {
+      throw new LlmError('The model listing failed to load; the bundled catalog stays in use', 'LISTING_REFRESH_FAILED')
+    }
   })
 }

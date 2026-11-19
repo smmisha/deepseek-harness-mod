@@ -45,6 +45,8 @@ Listed models are offered, merged with this build's entries, and refused before 
 
 A `models` list that differs from the built-in catalog replaces the catalog and stops listing requests; the Models page stores an edited catalog there. Removing that list, as **Restore defaults** on the Models page does, returns the route to the listing, and the next access loads the listing again even when the cached one is still fresh. A list identical to the built-in catalog counts as uncustomized.
 
+**Refresh models** on the Models page reloads the followed listing immediately. The plugin registers the reload for its settings namespace with `ctx.llm.registerListingRefresh(settingsNs, ...)` and declares `listingRefresh: true` on its directory entry. The reload refuses with `LISTING_NOT_FOLLOWED` while `models` differs from the built-in catalog or the Messages origin is not `https://api.deepseek.com` — the two states that request no listing — with `MISSING_CREDENTIAL` when no API key resolves, and with `NO_LISTING_REFRESH` for a route its namespace does not serve. When it proceeds, the reload discards the cached listing and waits for a new one up to `modelsTimeoutMs`; on success the route serves the fresh listing and publishes `llm/models-updated`, so open selectors reload, and on failure it serves the bundled catalog, as the `LISTING_REFRESH_FAILED` message says. Nothing in the route configuration changes, so **Restore defaults** remains the way back from a customized catalog.
+
 | Field | Default | Meaning |
 |---|---|---|
 | `modelsTimeoutMs` | `5,000` | Deadline of one listing request and of a first-access wait |

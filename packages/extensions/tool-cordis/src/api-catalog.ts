@@ -2137,6 +2137,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.'],
       },
       {
+        signature: 'registerListingRefresh( settingsNs: string, refresh: (provider: string, signal?: AbortSignal) => Promise<void>, ): () => void',
+        description: 'Offer to reload the model listings this plugin\'s settings namespace follows, on demand. The namespace is the key because that is what a configuration surface already holds from the configurable-provider directory. Disposed with the fiber.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose routes this reload serves.' }, { name: 'refresh', description: 'reloads one provider route\'s followed listing and must honor the supplied signal.' }],
+        returns: 'the disposer that withdraws the offer.',
+      },
+      {
+        signature: 'async refreshListing(settingsNs: string, provider: string, signal?: AbortSignal): Promise<void>',
+        description: 'Reload one provider route\'s followed model listing now, discarding its cached copy first. Nothing here reads or writes settings: the registered owner resolves the route\'s current configuration and refuses with its own diagnostic when the route follows no listing.',
+        parameters: [{ name: 'settingsNs', description: 'namespace whose registered refresh serves this route.' }, { name: 'provider', description: 'route to reload; one namespace may own several.' }, { name: 'signal', description: 'caller cancellation.' }],
+      },
+      {
+        signature: '@Remote(\'refreshListing\') async remoteRefreshListing( settingsNs: string, provider: string, signal: AbortSignal, ): Promise<void>',
+        description: 'Remote adapter for one on-demand listing reload.',
+        parameters: [{ name: 'settingsNs', description: 'namespace whose registered refresh serves this route.' }, { name: 'provider', description: 'route to reload.' }, { name: 'signal', description: 'caller cancellation supplied by the Remote carrier.' }],
+        throws: ['RemoteError with `llm/model-listing-refresh-rejected` when the refresh refuses or fails.'],
+      },
+      {
         signature: 'providerRetryPolicy(provider: string): ResolvedRetryPolicy',
         description: 'Resolve the retry policy captured when one provider route was registered.',
         parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
@@ -7459,7 +7476,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmConfigurableProvider',
-    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n    defaultBaseURL?: string;\n    baseURLEnv?: readonly string[];\n    nativeAuth?: LlmNativeAuth;\n    error?: string;\n}',
+    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n    defaultBaseURL?: string;\n    baseURLEnv?: readonly string[];\n    nativeAuth?: LlmNativeAuth;\n    listingRefresh?: true;\n    error?: string;\n}',
   },
   {
     name: 'LlmDiscoveredModel',
@@ -7527,7 +7544,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(conf /* …truncated — full shape in source */',
+    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    registerListingRefresh(settingsNs: string, refresh: (provider: string, signal?: AbortSignal) => Promise<void>): () => void;\n    async refreshListing(settingsNs: string, provider: string, signal?: AbortSignal): Promise<void>;\n    @Remote(\'refreshListing\')\n    async remoteRefreshListing(settingsNs: string, provider: string, signal: AbortSignal): Promise<void>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageReques /* …truncated — full shape in source */',
   },
   {
     name: 'LocalAtInput',

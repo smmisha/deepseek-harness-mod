@@ -199,6 +199,38 @@ describe('llm-deepseek real dynamic composition', () => {
     expect(keys).toEqual(['boot-key', 'boot-key'])
   })
 
+  it('reloads the followed listing on demand through the composed route', async () => {
+    vi.stubEnv('DEEPSEEK_API_KEY', '')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const messages = { api_capabilities: { anthropic_messages: {} } }
+    // A listed model this build does not know is offered only with a minimum client version.
+    let listed: object[] = [{ id: 'deepseek-flash', ...messages }]
+    const requested: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const request = new Request(input, init)
+      requested.push(request.url)
+      if (request.url !== 'https://api.deepseek.com/models') return Promise.reject(new Error(`unexpected request to ${request.url}`))
+      return Promise.resolve(new Response(JSON.stringify({ data: listed })))
+    })
+    const { ctx } = await loadComposition({ withDynamic: true, baseURL: 'https://api.deepseek.com/anthropic' })
+    const ids = async () => (await ctx.llm.listModels('deepseek-official')).map(model => model.id)
+    expect(await ids()).toEqual(['deepseek-flash'])
+
+    // The Models page's button reaches this exact method on the composed service.
+    listed = [
+      { id: 'deepseek-flash', ...messages },
+      { id: 'deepseek-v5', ...messages, client_requirements: { 'deepseek-harness': { min_version: '0.0.1' } } },
+    ]
+    await ctx.llm.remoteRefreshListing(NS, 'deepseek-official', new AbortController().signal)
+    expect(requested).toHaveLength(2)
+    expect(await ids()).toEqual(['deepseek-flash', 'deepseek-v5'])
+
+    // A customized catalog follows no listing, and the refusal reaches the page as the Remote diagnostic.
+    await ctx.settings.mutate(NS, [{ op: 'set', path: ['models'], value: [{ id: 'custom' }] }])
+    await expect(ctx.llm.remoteRefreshListing(NS, 'deepseek-official', new AbortController().signal))
+      .rejects.toMatchObject({ code: 'llm/model-listing-refresh-rejected', details: { settingsNs: NS, provider: 'deepseek-official' } })
+  })
+
   it('advertises listed badges through the composed route and drops them with a customized catalog', async () => {
     vi.stubEnv('DEEPSEEK_API_KEY', '')
     vi.spyOn(console, 'error').mockImplementation(() => {})

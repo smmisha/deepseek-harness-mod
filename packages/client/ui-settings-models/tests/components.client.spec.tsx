@@ -29,7 +29,10 @@ import type { ProviderRow } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
 import { settingsSchema } from './settings-schema.client.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 const t: ModelsSectionInjected['t'] = key => en[key]
 const OPENAI_TARGET = { provider: 'openai', displayName: 'openai' }
@@ -163,12 +166,14 @@ function remoteOk<T>(value: T) {
   return { ok: true as const, value }
 }
 /** The codes this page's scripted Host answers refuse with. */
-type RefusalCode = 'credential/rejected' | 'gateway/internal' | 'settings/conflict' | 'settings/rejected'
+type RefusalCode = 'credential/rejected' | 'gateway/internal' | 'llm/model-listing-refresh-rejected' | 'settings/conflict' | 'settings/rejected'
 
 /** One refusal per code, each carrying the details its own code declares. */
 const REFUSALS: { [Code in RefusalCode]: (message: string) => RemoteError<Code> } = {
   'credential/rejected': message => new RemoteError('credential/rejected', message, { ref: 'DEEPSEEK_API_KEY' }),
   'gateway/internal': message => new RemoteError('gateway/internal', message, {}),
+  'llm/model-listing-refresh-rejected': message =>
+    new RemoteError('llm/model-listing-refresh-rejected', message, { settingsNs: 'llm-deepseek', provider: 'deepseek-official' }),
   'settings/conflict': message =>
     new RemoteError('settings/conflict', message, { ns: 'llm-pi-ai', expected: 4, actual: 5 }),
   'settings/rejected': message => new RemoteError('settings/rejected', message, { ns: 'llm-pi-ai' }),
@@ -210,6 +215,15 @@ function scriptedFace(overrides: {
         { provider: 'plain', displayName: 'plain', settingsNs: 'llm-plain', settingsPath: ['profiles', 'plain'], active: false },
       ].map(({ active: _active, ...entry }) => entry)))),
       discoverModels: vi.fn(() => Promise.resolve(remoteOk([]))),
+      refreshListing: vi.fn<(_settingsNs: string, _provider: string) => Promise<RemoteResult<void>>>(
+        () => Promise.resolve(remoteOk(undefined)),
+      ),
+    },
+    session: {
+      /** Account rows only appear while the account catalog reports them usable. */
+      modelCatalog: vi.fn(() => Promise.resolve(remoteOk({
+        groups: [] as { id: string; models: { id: string }[] }[],
+      }))),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(remoteOk({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),
@@ -245,8 +259,9 @@ const contexts = new WeakMap<object, PageContext>()
 function ctxWith(face: object): PageContext {
   const existing = contexts.get(face)
   if (existing !== undefined) return existing
+  const session = (face as { session?: object }).session ?? {}
   const ctx = Object.assign(new Context(), { remote: { ...face,
-    session: { initializeDefaultModel: async () => ({ ok: true, value: undefined }) },
+    session: { initializeDefaultModel: async () => ({ ok: true, value: undefined }), ...session },
   } })
   contexts.set(face, ctx)
   return ctx
@@ -797,6 +812,7 @@ describe('ModelsSection', () => {
       entry,
       configured: true,
       removable: false,
+      listingRefresh: false,
       apiKeyEnv: 'X',
       credential,
     })
@@ -2771,5 +2787,162 @@ describe('Models provider rows', () => {
     const status = screen.getByRole('status')
     expect(status.textContent).toBe(en.loadingProviders)
     expect(status.querySelector('[data-state="ongoing"]')).toBeTruthy()
+  })
+})
+
+/** Directory rows for the refresh specs: only the DeepSeek routes follow a reloadable catalog. */
+const REFRESHABLE_DIRECTORY = [
+  {
+    provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [],
+    listingRefresh: true,
+  },
+  {
+    provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'],
+    defaultBaseURL: 'https://api.openai.com/v1', baseURLEnv: ['FIXTURE_ENDPOINT'],
+    nativeAuth: { env: ['OPENAI_API_KEY'], oauth: false },
+  },
+]
+
+describe('listing refresh', () => {
+  /** Mount the page with the adapter reporting the refreshable DeepSeek route. */
+  async function mountRefreshable(overrides: Parameters<typeof scriptedFace>[0] = {}) {
+    const scripted = scriptedFace(overrides)
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+    return mountFace(scripted)
+  }
+
+  it('offers the refresh on the official row while its catalog is inherited', async () => {
+    await mountRefreshable()
+    const refresh = screen.getByRole<HTMLButtonElement>('button', { name: deepSeekCopy(en.refreshProvider) })
+    expect(refresh.textContent).toBe(en.refreshModels)
+    expect(refresh.disabled).toBe(false)
+  })
+
+  it('hides the refresh when the user layer replaces the model catalog', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+    scripted.face.settings.describe.mockImplementation(() => Promise.resolve(remoteOk({
+      writable: true,
+      hasDocument: false,
+      namespaces: wireNamespaces().map(view => view.ns === 'llm-deepseek'
+        ? { ...view, user: { models: [{ id: 'pinned-model' }] } }
+        : view),
+    })))
+    await mountFace(scripted)
+    // The row itself is still there; only the reload of the adapter's own
+    // followed catalog has nothing left to act on.
+    expect(screen.getByText('DeepSeek')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: deepSeekCopy(en.refreshProvider) })).toBeNull()
+  })
+
+  it('leaves a third-party row without the adapter capability unlisted', async () => {
+    await mountSection()
+    expect(screen.getByRole('button', { name: openaiCopy(en.editProvider) })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: openaiCopy(en.refreshProvider) })).toBeNull()
+  })
+
+  it('offers the refresh on the account row once its catalog reports usable', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+      {
+        provider: 'deepseek-account', displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account',
+        settingsPath: [], listingRefresh: true,
+      },
+    ])))
+    scripted.face.session.modelCatalog.mockResolvedValue(remoteOk({
+      groups: [{ id: 'deepseek-account', models: [{ id: 'deepseek-v4-flash' }] }],
+    }))
+    await mountFace(scripted)
+    expect(screen.getByRole('button', {
+      name: providerCopy(en.refreshProvider, { provider: 'deepseek-account', displayName: en.deepSeekAccount }),
+    })).toBeTruthy()
+  })
+
+  it('reloads through the wired operation and clears the confirmation after four seconds', async () => {
+    vi.useFakeTimers()
+    try {
+      const scripted = scriptedFace()
+      scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+      const pending = Promise.withResolvers<RemoteResult<void>>()
+      scripted.face.llm.refreshListing.mockImplementationOnce(() => pending.promise)
+      await mountFace(scripted)
+
+      const refresh = screen.getByRole<HTMLButtonElement>('button', { name: deepSeekCopy(en.refreshProvider) })
+      expect(refresh.textContent).toBe(en.refreshModels)
+      fireEvent.click(refresh)
+
+      // The row names itself to the Host and reports the in-flight reload.
+      expect(scripted.face.llm.refreshListing).toHaveBeenCalledExactlyOnceWith('llm-deepseek', 'deepseek-official')
+      expect(refresh.textContent).toBe(en.refreshingModels)
+      expect(refresh.disabled).toBe(true)
+
+      await act(async () => {
+        pending.resolve(remoteOk(undefined))
+        await pending.promise
+        await Promise.resolve()
+      })
+      expect(refresh.textContent).toBe(en.refreshModels)
+      expect(refresh.disabled).toBe(false)
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+
+      // The confirmation is transient: it clears four seconds after it appears.
+      act(() => { vi.advanceTimersByTime(3_999) })
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('surfaces a refused reload as the host message on its row', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+    scripted.face.llm.refreshListing.mockResolvedValueOnce(
+      remoteFail('the listing endpoint refused the reload', 'llm/model-listing-refresh-rejected'),
+    )
+    await mountFace(scripted)
+    fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.refreshProvider) }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('the listing endpoint refused the reload')
+    expect(screen.queryByText(en.modelsRefreshed)).toBeNull()
+  })
+
+  it('keeps a newer confirmation when an earlier one expires', async () => {
+    vi.useFakeTimers()
+    try {
+      const scripted = scriptedFace()
+      scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+        ...REFRESHABLE_DIRECTORY,
+        {
+          provider: 'deepseek-account', displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account',
+          settingsPath: [], listingRefresh: true,
+        },
+      ])))
+      scripted.face.session.modelCatalog.mockResolvedValue(remoteOk({
+        groups: [{ id: 'deepseek-account', models: [{ id: 'deepseek-v4-flash' }] }],
+      }))
+      await mountFace(scripted)
+      const official = screen.getByRole<HTMLButtonElement>('button', { name: deepSeekCopy(en.refreshProvider) })
+      const account = screen.getByRole<HTMLButtonElement>('button', {
+        name: providerCopy(en.refreshProvider, { provider: 'deepseek-account', displayName: en.deepSeekAccount }),
+      })
+
+      fireEvent.click(official)
+      await act(async () => { await Promise.resolve() })
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(account)
+      await act(async () => { await Promise.resolve() })
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+
+      // The official row's timer expires first and must leave the account
+      // row's confirmation alone; its own timer clears it a second later.
+      act(() => { vi.advanceTimersByTime(3_000) })
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+      act(() => { vi.advanceTimersByTime(1_000) })
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
