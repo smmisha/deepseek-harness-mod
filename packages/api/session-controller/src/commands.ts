@@ -25,6 +25,7 @@ import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-ses
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   ApiSessionAgentController,
@@ -42,6 +43,8 @@ import type {
   SessionCancelValue,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
   SessionForkRequest,
   SessionForkValue,
   SessionPromptRequest,
@@ -433,7 +436,9 @@ export class SessionCommandController {
           // A copied input is not a new request in the child, even if later reinserted there.
           if (event.seq < session.inheritedEventCount) continue
           const source = message.source
-          if ((source.kind === 'user' || source.kind === 'retry') && 'rpcId' in source) receipts.requests.add(source.rpcId)
+          if ((source.kind === 'user' || source.kind === 'retry' || source.kind === 'rewind') && 'rpcId' in source) {
+            receipts.requests.add(source.rpcId)
+          }
         }
       }
       receipts.offset = session.seq
@@ -545,6 +550,91 @@ export class SessionCommandController {
         assertNever(request.action, 'queue action')
     }
     return { accepted: true }
+  }
+
+  /**
+   * Rewind an idle Session to one settled turn-opening user message and queue
+   * its edited text as a new Turn. One empty `rewind` user message replaces the
+   * edited Turn's surface nodes and every later node, so the model sees the
+   * preceding conversation followed by the edited message; the retracted
+   * records stay in the log. The Turn's first node stays protected when it is
+   * the system prompt head. Files changed by retracted tool calls are not
+   * restored.
+   * @param request - Session, edited message seq, replacement text, and request identity.
+   * @param principal - the non-owner caller recorded on both messages, when present.
+   * @returns acknowledgement once the retraction is committed and the edited message is queued.
+   */
+  async editMessage(
+    request: SessionEditMessageRequest,
+    principal: Principal | undefined,
+  ): Promise<SessionEditMessageValue> {
+    let seq: SessionSeq
+    try {
+      seq = SessionSeq(request.seq)
+    } catch {
+      throw new RemoteError('gateway/bad-request', 'seq must be a non-negative safe integer', {})
+    }
+    if (request.text.trim().length === 0) {
+      throw new RemoteError('gateway/bad-request', 'edited message text must include non-whitespace text', {})
+    }
+    // resolveAgent already refuses a Session that subagent routing owns.
+    const agent = await this.resolveAgent(request.sessionId)
+    let observed: SessionObservation
+    try {
+      observed = await this.ctx.sessionQuery.observeSession(request.sessionId)
+    } catch (error) {
+      throw new RemoteError('gateway/internal', `edit source unavailable for session "${request.sessionId}": ${String(error)}`, {})
+    }
+    using source = observed
+    const target = source.events[seq]
+    if (target?.type !== 'user/message' || target.seq !== seq || target.data.source.kind !== 'user'
+      || target.surfaceOp !== 'append') {
+      throw new RemoteError('session/edit-unavailable', `event ${String(request.seq)} is not a sent user message`, { reason: 'NOT_A_USER_MESSAGE' })
+    }
+    const turnStart = source.events.findLast(event => event.seq < seq && event.type === 'turn/start')
+    // Only the message that opened its Turn is editable; steering admitted later in the Turn is not.
+    const opener = source.events.find(event => event.seq > (turnStart?.seq ?? -1)
+      && event.type === 'user/message' && event.data.source.kind === 'user')
+    if (opener?.seq !== seq) {
+      throw new RemoteError('session/edit-unavailable', `event ${String(request.seq)} did not open its turn`, { reason: 'NOT_A_USER_MESSAGE' })
+    }
+    const ownSource = { rpcId: request.requestId, ...principal === undefined ? {} : { principal } }
+    try {
+      return await agent.runMaintenance(() => {
+        if (this.hasPromptRequest(agent.session, request.requestId)) return Promise.resolve({ accepted: true as const })
+        if (agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) {
+          throw new RemoteError('session/edit-unavailable', 'send or remove queued messages before editing', { reason: 'PENDING_INPUT' })
+        }
+        const nodes = agent.session.surface.nodes
+        const targetIdx = nodes.indexOf(seq)
+        if (targetIdx === -1) {
+          throw new RemoteError('session/edit-unavailable', 'the message was condensed and can no longer be edited', { reason: 'NOT_ON_SURFACE' })
+        }
+        // Retract the edited Turn from its first model-visible node; node 0 keeps the system prompt head.
+        const turnFirst = turnStart === undefined ? 0 : nodes.findIndex(node => node > turnStart.seq)
+        const startIdx = Math.max(turnFirst, 1)
+        const shadowed = nodes.slice(Math.min(startIdx, targetIdx))
+        agent.session.append(
+          'user/message',
+          createUserMessage({ content: [], source: { kind: 'rewind', ...ownSource } }),
+          {
+            // oxlint-disable-next-line typescript/no-non-null-assertion -- shadowed holds at least the target node
+            surfaceOp: { op: 'replace', startSeq: shadowed[0]!, endSeq: shadowed.at(-1)! },
+            sourceEventSeqs: [...shadowed],
+          },
+        )
+        agent.followup(createUserMessage({
+          content: replaceQueueText(target.data.content, [{ type: 'text', text: request.text }]),
+          source: { kind: 'user', ...ownSource },
+        }))
+        return Promise.resolve({ accepted: true as const })
+      })
+    } catch (error: unknown) {
+      // A repeated request whose first copy already started its Turn is accepted, not busy.
+      if (this.hasPromptRequest(agent.session, request.requestId)) return { accepted: true }
+      if (remoteErrorOf(error) !== undefined) throw error
+      throw new RemoteError('session/agent-busy', 'stop the running turn before editing a message', { reason: String(error) })
+    }
   }
 
   /**

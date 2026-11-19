@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for 2026-11-19-edit-message-rewind.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-19-edit-message-rewind.md
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement:
+  en: 664752224d4cbf53
+  zh: 266d6811f6ec2624
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/problem:
+  en: 62c86a72d88f6235
+  zh: f8d5253e46095c12
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/decision:
+  en: 92922d7d5bff42ad
+  zh: 3629dd3c8e5b3089
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/decision/an-existing-surface-operation-not-a-new-event:
+  en: 677aeef87003275b
+  zh: b0c28034fa770973
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/decision/empty-user-nodes-send-nothing:
+  en: 48a5afec2f1955db
+  zh: 6e49a5e40047fbfd
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/decision/the-edited-message-travels-the-ordinary-prompt-path:
+  en: 28dad3cc7049efcd
+  zh: 9c69317b45724e4b
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/decision/chat-hides-the-retracted-span:
+  en: ec2316e28765b6fd
+  zh: 2e41c926790f62ec
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/alternatives-considered:
+  en: d6bb0da9a00fedd5
+  zh: a337dae535c8ab2a
+/agent-note-editing-a-sent-message-rewinds-the-session-through-an-empty-surface-replacement/consequences:
+  en: c13ef3a2c51432ad
+  zh: baba58cb03e062f8

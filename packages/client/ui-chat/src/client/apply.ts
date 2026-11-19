@@ -322,6 +322,7 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
+          editMessage: (seq, text) => ctx.uiConversation.editMessage(sessionId, seq, text),
         }
       },
     }, ChatView)

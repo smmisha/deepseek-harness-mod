@@ -59,6 +59,13 @@ export interface IConversation {
    */
   updateQueue(itemId: MessageId, action: QueueAction): Promise<void>
   /**
+   * Rewind the scoped Session to one sent user message and send its edited text as a new Turn.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns completion once the Host accepts; rejects with the Host's refusal code.
+   */
+  editMessage(seq: number, text: string): Promise<void>
+  /**
    * Stop the scoped session's in-flight turn while preserving its pending Queue.
    * @param mode - `graceful` finishes the current step and then closes the turn;
    *   `immediate` aborts it now. Omitted uses `graceful`.
@@ -545,6 +552,13 @@ export class ConversationController extends Service implements IConversation {
       ) return
       throw new Error(`conversation.updateQueue failed: ${result.error.code}: ${result.error.message}`)
     }
+  }
+
+  /** Rewind to one sent user message and send its edited text as a new Turn. */
+  async editMessage(seq: number, text: string): Promise<void> {
+    const session = this.scopedSession('editMessage')
+    const result = await session.editMessage(seq, text)
+    if (!result.ok) throw new Error(`conversation.editMessage failed: ${result.error.code}: ${result.error.message}`)
   }
 
   /**

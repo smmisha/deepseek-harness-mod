@@ -567,6 +567,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionMessageProjection: 'session.md',
   SessionUpdateQueueRequest: 'session.md',
   SessionUpdateQueueValue: 'session.md',
+  SessionEditMessageRequest: 'session.md',
+  SessionEditMessageValue: 'session.md',
   EncodedFileUploadRequest: 'attachment.md',
   AgentResolver: 'attachment.md',
   PromptFileBinding: 'attachment.md',

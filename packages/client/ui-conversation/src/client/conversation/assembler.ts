@@ -106,6 +106,41 @@ function maximumPublication(
   return PUBLICATION_RANK[left] >= PUBLICATION_RANK[right] ? left : right
 }
 
+/**
+ * Whether one entry is the Host's retraction of an edited Turn: an empty
+ * `rewind` user message that replaced the edited Turn and every later
+ * model-visible message.
+ * @param entry - loaded event entry.
+ * @returns whether the entry retracts earlier conversation.
+ */
+function isRetraction(entry: SessionEventLikeEntry): boolean {
+  const event = entry.event
+  return event.type === 'user/message' && event.data.source.kind === 'rewind' && typeof event.surfaceOp === 'object'
+}
+
+/**
+ * Drop the conversation a user retracted by editing a sent message. Each
+ * retraction hides its edited Turn from that Turn's start, or from the window
+ * start when the start is not loaded, through the retraction itself; the log
+ * keeps the records. Inbox splices stay: they render nothing, and Definitions
+ * fold them as one ordered index history that a gap would corrupt.
+ * @param sorted - loaded entries in seq order.
+ * @returns the entries every View presents, in seq order.
+ */
+function withoutRetracted(sorted: readonly SessionEventLikeEntry[]): readonly SessionEventLikeEntry[] {
+  const spans: (readonly [number, number])[] = []
+  for (const entry of sorted) {
+    const event = entry.event
+    if (event.type !== 'user/message' || event.data.source.kind !== 'rewind' || typeof event.surfaceOp !== 'object') continue
+    const op = event.surfaceOp
+    const turnStart = sorted.findLast(candidate => candidate.event.type === 'turn/start' && candidate.event.seq <= op.startSeq)
+    spans.push([turnStart?.event.seq ?? Number.NEGATIVE_INFINITY, entry.event.seq])
+  }
+  if (spans.length === 0) return sorted
+  return sorted.filter(entry => entry.event.type === 'agent/inbox/spliced'
+    || !spans.some(([from, through]) => entry.event.seq >= from && entry.event.seq <= through))
+}
+
 function startSeq(context: InternalContext): number | undefined {
   return context.startSeq
 }
@@ -259,8 +294,9 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     this.revised.clear()
     this.dependents.clear()
     this.hasMore = hasMore
-    const sorted = [...entries].sort((left, right) => left.event.seq - right.event.seq)
-    for (const entry of sorted) this.inputs.set(entry.event.seq, entry)
+    const loaded = [...entries].sort((left, right) => left.event.seq - right.event.seq)
+    for (const entry of loaded) this.inputs.set(entry.event.seq, entry)
+    const sorted = withoutRetracted(loaded)
     this.locationIndex.rebuild(sorted)
     this.timelineDirty = true
     for (const entry of sorted) this.matchInput(entry)
@@ -281,6 +317,8 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     if (this.inputs.has(event.seq)) return 'none'
     if (this.revised.size > 0) this.revised.clear()
     this.inputs.set(event.seq, record)
+    // An edit retracts conversation every View already shows, so it replays the window.
+    if (isRetraction(record)) return this.replaceWindow(this.sortedInputs(), this.hasMore)
     let publication: ConversationPublication = 'none'
     if (event.type !== 'assistant/live-chunk' && isLocationBoundary(event.type)) {
       const previousTimeline = this.locationIndex.snapshot()
@@ -358,8 +396,11 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
       .sort((left, right) => left.event.seq - right.event.seq)
     for (const entry of fresh) this.inputs.set(entry.event.seq, entry)
     this.hasMore = hasMore
+    // An older page can reach the start of a retracted Turn, so retractions replay the window.
+    const loaded = this.sortedInputs()
+    if (loaded.some(isRetraction)) return this.replaceWindow(loaded, hasMore)
     const previousTimeline = this.locationIndex.snapshot()
-    const changedLocations = this.locationIndex.rebuild(this.sortedInputs())
+    const changedLocations = this.locationIndex.rebuild(loaded)
     if (this.locationIndex.snapshot() !== previousTimeline) this.timelineDirty = true
     const affected = this.refreshMatchLocations(changedLocations)
     const pending = new Map<string, PendingMatch[]>()

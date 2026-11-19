@@ -440,30 +440,49 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
   )
 }
 
+/** Text and save state of one open sent-message editor. */
+interface EditState {
+  readonly text: string
+  /** The Host is applying this text. */
+  readonly busy?: true
+  /** The Host refused the last save. */
+  readonly error?: string
+}
+
+/**
+ * Read the Host's stated reason from a refused edit.
+ * @param error - rejection from the Session's edit action.
+ * @returns the message after the stable code prefix, or the whole message.
+ */
+function refusalReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  const match = /: [\w/-]+: (.*)$/su.exec(message)
+  return match?.[1] ?? message
+}
+
 /**
  * Official durable user keyed Chat renderer.
  *
  * Renders the durable-message chain seat above the bubble, the user-action row
  * below it, or the row's own editor while an edit is open. Opening the editor
- * touches neither the composer nor the transcript; saving hands the edited text
- * to the composer draft without submitting it. Closing the editor returns the
- * keyboard to the pencil (the row when the entry offers no trigger), never to
- * `<body>`, and never scrolls the transcript.
+ * touches neither the composer nor the transcript; saving asks the Host to
+ * rewind the Session to this message and send the edited text as a new Turn,
+ * which retracts this Turn and every later one from the transcript. A refused
+ * save keeps the editor open with the Host's reason. Closing the editor returns
+ * the keyboard to the pencil (the row when the entry offers no trigger), never
+ * to `<body>`, and never scrolls the transcript.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, renderSlotChain, inputActions, useSession, t,
+  node, renderFactorySlot, loadImage, renderSlotChain, editMessage, inputActions, useSession, t,
 }: ChatNodeViewProps<'user'> & {
   /** Bound by the `user` keyed registration, the only entry that declares the seat. */
   renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
 }) {
   const data = node.data
+  // Saving rewinds the whole Session, so every run blocks the edit, not only this
+  // message's own Turn; a queued message has its own QueueDock editor.
   const running = useSession(snapshot => snapshot.running)
-  // The agent reads a message while its Turn is open; an earlier Turn is settled
-  // and a queued message has its own QueueDock editor, so neither is blocked.
-  const location = node.location
-  const turnOpen = (location.kind === 'turn' || location.kind === 'step') && location.turn.status === 'open'
-  const readingThisMessage = running && turnOpen
-  const [edit, setEdit] = useState<{ readonly text: string } | null>(null)
+  const [edit, setEdit] = useState<EditState | null>(null)
   // The pencil unmounts with the rest of the action row while the editor is
   // open, so the closed editor hands back both the row and the affordance that
   // replaced it; the refs are re-attached before this commit's layout effects.
@@ -472,13 +491,22 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
   const returningFocus = useRef(false)
   // A run that starts elsewhere hides the open editor instead of discarding what
   // was already typed; the editor returns when the run settles.
-  const editing = readingThisMessage ? null : edit
+  const editing = running ? null : edit
   const closeEdit = (): void => {
     returningFocus.current = true
     setEdit(null)
   }
-  const saveEdit = (text: string): void => {
-    inputActions.setDraft(text)
+  const saveEdit = async (text: string): Promise<void> => {
+    setEdit({ text, busy: true })
+    try {
+      await editMessage(data.seq, text)
+    } catch (error: unknown) {
+      setEdit({ text, error: t('message.editFailed', { reason: refusalReason(error) }) })
+      return
+    }
+    // The retraction removes this row and the new Turn's message replaces it,
+    // so the keyboard moves to the composer rather than to a vanished pencil;
+    // the pencil only catches a focus the composer could not claim.
     inputActions.focus()
     returningFocus.current = true
     setEdit(null)
@@ -512,8 +540,12 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           <EditMessageEditor
             text={editing.text}
             onChange={(text) => { setEdit({ text }) }}
-            onSave={() => { saveEdit(editing.text) }}
+            onSave={() => { void saveEdit(editing.text) }}
             onCancel={closeEdit}
+            saveLabel={t('message.editSend')}
+            note={t('message.editNote')}
+            {...editing.error === undefined ? {} : { error: editing.error }}
+            busy={editing.busy === true}
             t={t}
           />
         )}
@@ -525,7 +557,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           className={css.actions}
           extraActions={renderFactorySlot('conversation.chat.user.actions', {
             beginEdit: () => { setEdit({ text }) },
-            editUnavailable: readingThisMessage,
+            editUnavailable: running,
             editTriggerRef: editTrigger,
           })}
           t={t}

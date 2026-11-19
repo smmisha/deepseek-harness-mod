@@ -51,10 +51,11 @@ it('records empty retry user messages without duplicate requests', async () => {
   const controls = events.flatMap(event => event.type === 'agent/inbox/spliced' ? event.data.inserted : [])
     .filter(message => message.source.kind === 'retry')
   expect(retries.map(retry => retry.id)).toEqual(controls.map(control => control.id))
+  // Empty retry nodes keep their log and surface positions but send no content-less user turn.
   expect(adapter.requests[1]!.messages.filter(message => message.role === 'user').map(message => message.content))
-    .toEqual([[{ type: 'text', text: 'original task' }], []])
+    .toEqual([[{ type: 'text', text: 'original task' }]])
   expect(adapter.requests[2]!.messages.filter(message => message.role === 'user').map(message => message.content))
-    .toEqual([[{ type: 'text', text: 'original task' }], [], []])
+    .toEqual([[{ type: 'text', text: 'original task' }]])
   expect(events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])).toEqual(['error', 'error', 'completed'])
   expect(events.filter(event => event.type === 'turn/start')).toHaveLength(3)
   expect((await remote.prompt(request('after-completion'))).ok).toBe(false)

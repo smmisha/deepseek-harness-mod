@@ -60,8 +60,36 @@
   max-height: 240px;
 }
 
+/* The consequence of saving, or the refusal of the last save, sits on the
+   action pair's line so the editor keeps its height. */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.note,
+.error {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: end;
+}
+
+.note {
+  color: var(--dsw-alias-label-caption);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .actions {
   display: flex;
+  flex: none;
   justify-content: flex-end;
   gap: 4px;
 }

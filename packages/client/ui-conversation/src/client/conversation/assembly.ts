@@ -323,6 +323,19 @@ export class UiConversation extends Service {
   }
 
   /**
+   * Rewind one Session to a sent user message and send its edited text as a new Turn.
+   * @param sessionId - Session that owns the message.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns resolves when the Host accepts the edit; rejects when the Host refuses it.
+   */
+  async editMessage(sessionId: SessionId, seq: number, text: string): Promise<void> {
+    const conversation = this.sessions.scope(sessionId)?.get('conversation')
+    if (conversation === undefined) throw new Error(`ui-conversation: session "${sessionId}" has no conversation service`)
+    await conversation.editMessage(seq, text)
+  }
+
+  /**
    * Show a notice in the composer of one Session.
    * @param sessionId - Session whose composer shows the notice.
    * @param text - localized notice text.

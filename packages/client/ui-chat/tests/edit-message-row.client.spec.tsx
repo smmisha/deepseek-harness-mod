@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 /**
  * The official user row opens an in-place editor from its pencil: opening it
- * touches neither the composer nor the transcript, saving hands the edited text
- * to the composer draft without sending, cancelling leaves everything as it was,
- * and closing the editor never leaves the keyboard on the body. Only the message
- * the running agent is reading is locked; an earlier or queued message stays
- * editable.
+ * touches neither the composer nor the transcript, saving asks the Host to
+ * rewind to this message and send the edited text as a new Turn, a refusal keeps
+ * the editor open with its reason, cancelling leaves everything as it was, and
+ * closing the editor never leaves the keyboard on the body. Any run locks the
+ * edit, because saving rewinds the whole Session.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -69,6 +69,8 @@ interface RowOptions {
   readonly claimFocus?: () => void
   /** Content blocks appended after the message text, in display order. */
   readonly attachments?: readonly unknown[]
+  /** Host answer to the edit; omitted accepts it. */
+  readonly editMessage?: (seq: number, text: string) => Promise<void>
 }
 
 interface RowBench {
@@ -77,6 +79,8 @@ interface RowBench {
     focus: ReturnType<typeof vi.fn>
     submit: ReturnType<typeof vi.fn>
   }
+  /** The row's rewind-and-send action. */
+  readonly editMessage: ReturnType<typeof vi.fn<(seq: number, text: string) => Promise<void>>>
   /** Every prepared content the row handed to the user content Factory. */
   readonly contentCalls: UserContentInput[]
   readonly setRunning: (running: boolean) => void
@@ -95,6 +99,7 @@ function renderRow(text = 'hello', options: RowOptions = {}): RowBench {
   const setDraft = vi.fn()
   const focus = vi.fn(options.claimFocus)
   const submit = vi.fn()
+  const editMessage = vi.fn<(seq: number, text: string) => Promise<void>>(options.editMessage ?? (() => Promise.resolve()))
   const inputActions = {
     insertQuote: () => false,
     captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
@@ -161,11 +166,13 @@ function renderRow(text = 'hello', options: RowOptions = {}): RowBench {
     loadImage: unusedImageLoader,
     renderFactorySlot,
     inputActions,
+    editMessage,
     useSession: bindSnapshotSelector(session),
   }
   render(<UserMessageNodeView {...props as ChatNodeViewProps<'user'>} renderSlotChain={renderSlotChain} />)
   return {
     inputActions: { setDraft, focus, submit },
+    editMessage,
     contentCalls,
     setRunning: (running) => { act(() => { session.set(sessionSnapshot(running)) }) },
   }
@@ -192,16 +199,47 @@ describe('user message row editing', () => {
     expect(document.querySelector('[data-content]')).toBeNull()
   })
 
-  it('saves the edited text into the composer draft without sending it', () => {
+  it('sends the edited text through the Host rewind, never through the composer', async () => {
     const bench = renderRow('sent text')
     const field = openEditor()
+    expect(screen.getByText(t('message.editNote'))).toBeDefined()
     fireEvent.change(field, { target: { value: 'sent text, corrected' } })
-    fireEvent.click(screen.getByRole('button', { name: t('message.editSave') }))
-    expect(bench.inputActions.setDraft).toHaveBeenCalledExactlyOnceWith('sent text, corrected')
-    expect(bench.inputActions.focus).toHaveBeenCalledOnce()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('message.editSend') })) })
+    expect(bench.editMessage).toHaveBeenCalledExactlyOnceWith(7, 'sent text, corrected')
+    expect(bench.inputActions.setDraft).not.toHaveBeenCalled()
     expect(bench.inputActions.submit).not.toHaveBeenCalled()
+    expect(bench.inputActions.focus).toHaveBeenCalledOnce()
     expect(screen.queryByRole('textbox', { name: t('message.edit') })).toBeNull()
-    expect(document.querySelector('[data-content]')?.textContent).toBe('sent text')
+  })
+
+  it('waits on the Host with both actions locked', async () => {
+    const answer = Promise.withResolvers<undefined>()
+    renderRow('sent text', { editMessage: () => answer.promise })
+    const field = openEditor()
+    fireEvent.change(field, { target: { value: 'corrected' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('message.editSend') })) })
+    const send = screen.getByRole('button', { name: t('message.editSend') })
+    expect(send).toHaveProperty('disabled', true)
+    expect(send.getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('button', { name: t('message.editCancel') })).toHaveProperty('disabled', true)
+    await act(async () => { answer.resolve(undefined); await answer.promise })
+    expect(screen.queryByRole('textbox', { name: t('message.edit') })).toBeNull()
+  })
+
+  it('keeps the editor and the typed text open with the Host refusal', async () => {
+    const bench = renderRow('sent text', {
+      editMessage: () => Promise.reject(new Error('conversation.editMessage failed: session/agent-busy: stop the running turn before editing a message')),
+    })
+    const field = openEditor()
+    fireEvent.change(field, { target: { value: 'corrected' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('message.editSend') })) })
+    expect(screen.getByRole('alert').textContent)
+      .toBe(t('message.editFailed', { reason: 'stop the running turn before editing a message' }))
+    expect(screen.getByRole('textbox', { name: t('message.edit') })).toHaveProperty('value', 'corrected')
+    expect(screen.queryByText(t('message.editNote'))).toBeNull()
+    expect(bench.inputActions.focus).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('textbox', { name: t('message.edit') }), { target: { value: 'corrected again' } })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('cancels without touching the composer or the message', () => {
@@ -254,7 +292,7 @@ describe('user message row editing', () => {
     expect(active?.textContent).toContain('sent text')
   })
 
-  it('keeps a save hand-off in the composer instead of pulling it back to the pencil', () => {
+  it('keeps a save hand-off in the composer instead of pulling it back to the pencil', async () => {
     const composer = document.createElement('button')
     composer.textContent = 'Type a message'
     document.body.append(composer)
@@ -262,23 +300,23 @@ describe('user message row editing', () => {
       renderRow('sent text', { claimFocus: () => { composer.focus() } })
       const field = openEditor()
       fireEvent.change(field, { target: { value: 'corrected' } })
-      fireEvent.click(screen.getByRole('button', { name: t('message.editSave') }))
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('message.editSend') })) })
       expect(document.activeElement).toBe(composer)
     } finally {
       composer.remove()
     }
   })
 
-  it('never leaves the keyboard on the body after saving', () => {
+  it('never leaves the keyboard on the body after saving', async () => {
     renderRow('sent text')
     const field = openEditor()
     fireEvent.change(field, { target: { value: 'corrected' } })
-    fireEvent.click(screen.getByRole('button', { name: t('message.editSave') }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('message.editSend') })) })
     expect(document.activeElement).toBe(screen.getByRole('button', { name: t('message.edit') }))
     expect(screen.queryByRole('textbox', { name: t('message.edit') })).toBeNull()
   })
 
-  it('locks only the message its running Turn is reading', () => {
+  it('locks the message while its own Turn runs', () => {
     const bench = renderRow('sent text', { turn: 'open', running: true })
     const pencil = screen.getByRole('button', { name: t('message.edit') })
     expect(pencil.getAttribute('aria-disabled')).toBe('true')
@@ -289,12 +327,13 @@ describe('user message row editing', () => {
     expect(openEditor()).toHaveProperty('value', 'sent text')
   })
 
-  it('keeps an earlier message editable while another Turn runs', () => {
-    // The message is not what the agent reads: a settled Turn stays editable, and
-    // a queued message keeps its own QueueDock editor.
-    renderRow('sent text', { turn: 'closed', running: true })
+  it('locks an earlier message while a later Turn runs, because saving rewinds the Session', () => {
+    const bench = renderRow('sent text', { turn: 'closed', running: true })
     const pencil = screen.getByRole('button', { name: t('message.edit') })
-    expect(pencil.getAttribute('aria-disabled')).toBeNull()
+    expect(pencil.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(pencil)
+    expect(screen.queryByRole('textbox', { name: t('message.edit') })).toBeNull()
+    bench.setRunning(false)
     expect(openEditor()).toHaveProperty('value', 'sent text')
   })
 
@@ -335,14 +374,14 @@ describe('user message row editing context', () => {
     expect(bench.contentCalls.at(-1)?.content.attachments).toHaveLength(2)
   })
 
-  it('edits only the text and leaves the message attachments in place', () => {
+  it('edits only the text and leaves the message attachments in place', async () => {
     const bench = renderRow('sent text', { attachments: [IMAGE_BLOCK] })
     const field = openEditor()
     fireEvent.change(field, { target: { value: 'sent text, corrected' } })
-    fireEvent.click(screen.getByRole('button', { name: t('message.editSave') }))
-    expect(bench.inputActions.setDraft).toHaveBeenCalledExactlyOnceWith('sent text, corrected')
-    // The message keeps its own attachments: the resting row renders them with
-    // the unchanged text after the edit closes.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: t('message.editSend') })) })
+    // Only the text travels: the Host keeps the message's own attachments. Until the
+    // retraction arrives, the resting row renders them with the unchanged text.
+    expect(bench.editMessage).toHaveBeenCalledExactlyOnceWith(7, 'sent text, corrected')
     const restored = bench.contentCalls.at(-1)?.content
     expect(restored?.text).toBe('sent text')
     expect(restored?.attachments).toHaveLength(1)

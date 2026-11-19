@@ -114,6 +114,8 @@ Blockquotes travel as ordinary prompt text without quote metadata. Local submiss
 
 An empty `prompt.content` array requests a new turn only for an eligible failed, idle ordinary Session in queue mode. Pending human input prevents admission; non-waking injected context is retained. `conversationContinuation` supplies the shared six-code manual policy, independently of provider retry configuration. The input follows ordinary inbox and Loop admission and records an empty `user/message` with `source.kind: 'retry'`; its input identity and caller metadata support deduplication and recovery. Whitespace-only text parts remain invalid.
 
+`editMessage({ requestId, sessionId, seq, text })` rewinds an idle ordinary Session to one sent turn-opening `user/message` and sends its edited text as a new Turn. Under true idle ownership, with no pending input, the Host appends one empty `user/message` with `source.kind: 'rewind'` whose surface replacement covers the edited Turn's first model-visible node through the last one, then queues the edited message with the original attachments and the same request identity. The model therefore sees the conversation before the edited Turn followed by the edited message; the retracted records stay in the log, and Chat hides them. Node 0 keeps the system prompt head. Files that retracted tool calls changed are not restored. A message that is not a sent user message, has already left the model-visible surface, or meets pending input is refused with `session/edit-unavailable` and its reason; a running Session answers `session/agent-busy`; a repeated request identity is accepted once.
+
 <a id="model-experience"></a>
 ## Model Experience
 

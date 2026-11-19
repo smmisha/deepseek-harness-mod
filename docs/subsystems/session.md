@@ -1005,6 +1005,13 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('updateQueue') updateQueue(request: SessionUpdateQueueRequest): Promise<SessionUpdateQueueValue>
 
 /**
+ * Rewind an idle Session to one sent user message and queue its edited text as a new Turn.
+ * @param request - Session, edited message seq, replacement text, and request identity.
+ * @returns acknowledgement once the retraction is committed and the edited message is queued.
+ */
+@Remote('editMessage') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>
+
+/**
  * Cancel one active Agent turn without dropping its pending inbox.
  * @param request - Session whose active Agent turn is cancelled.
  * @returns acknowledgement that cancellation was requested.

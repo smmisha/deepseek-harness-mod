@@ -3010,6 +3010,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'acknowledgement that the queue mutation was applied.',
       },
       {
+        signature: '@Remote(\'editMessage\') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>',
+        description: 'Rewind an idle Session to one sent user message and queue its edited text as a new Turn.',
+        parameters: [{ name: 'request', description: 'Session, edited message seq, replacement text, and request identity.' }],
+        returns: 'acknowledgement once the retraction is committed and the edited message is queued.',
+      },
+      {
         signature: '@Remote(\'cancel\') cancel(request: SessionCancelRequest): SessionCancelValue',
         description: 'Cancel one active Agent turn without dropping its pending inbox.',
         parameters: [{ name: 'request', description: 'Session whose active Agent turn is cancelled.' }],
@@ -8925,6 +8931,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionCreateValue',
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'SessionEditMessageRequest',
+    declaration: 'export interface SessionEditMessageRequest {\n    readonly requestId: SessionRequestId;\n    readonly sessionId: SessionId;\n    readonly seq: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SessionEditMessageValue',
+    declaration: 'export interface SessionEditMessageValue {\n    readonly accepted: true;\n}',
   },
   {
     name: 'SessionEndInput',

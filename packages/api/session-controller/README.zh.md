@@ -114,6 +114,8 @@ Blockquote 作为普通 prompt 文本传递，不携带 quote 元数据。本地
 
 空的 `prompt.content` 数组仅在普通 Session 空闲、最新失败符合继续条件且使用 queue 模式时请求新轮次。待消费的用户输入阻止准入，非唤醒的注入上下文保留。`conversationContinuation` 提供共用的六码手动策略，独立于提供方重试配置。输入遵循普通 inbox 和 Loop 准入，记录带 `source.kind: 'retry'` 的空 `user/message`；输入身份与调用方元数据用于去重和恢复。仅含空白的文本块仍无效。
 
+`editMessage({ requestId, sessionId, seq, text })` 把空闲的普通 Session 回退到一条已发送、开启轮次的 `user/message`，并把编辑后的文本作为新一轮发送。在真正空闲且没有待处理输入时，Host 追加一条 `source.kind: 'rewind'` 的空 `user/message`，其 surface 替换覆盖被编辑轮次的第一个模型可见节点直到最后一个节点，然后以原附件和同一请求身份排队编辑后的消息。因此模型看到被编辑轮次之前的对话，紧接编辑后的消息；被撤回的记录仍留在日志中，Chat 将其隐藏。节点 0 保留系统提示词头部。被撤回的工具调用改动过的文件不会恢复。不是已发送用户消息、已离开模型可见 surface 或遇到待处理输入的消息，会以 `session/edit-unavailable` 及其原因拒绝；运行中的 Session 返回 `session/agent-busy`；重复的请求身份只接受一次。
+
 <a id="model-experience"></a>
 ## 模型体验
 

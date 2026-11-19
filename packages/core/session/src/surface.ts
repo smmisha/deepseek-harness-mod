@@ -128,9 +128,11 @@ export function deriveEventMessage(
   // data.
   switch (event.type) {
     // Ordinary prompts and injected context retain producer-owned framing.
-    // See Derived history in packages/core/session/README.md.
+    // See Derived history in packages/core/session/README.md. An empty user
+    // node (a manual continuation or a retraction) keeps its surface position
+    // without sending a content-less user turn.
     case 'user/message': {
-      return event.data
+      return event.data.content.length === 0 ? null : event.data
     }
     // Empty system and developer nodes retain their surface positions without
     // adding wire messages. An empty assistant event hosts a max-tokens step's

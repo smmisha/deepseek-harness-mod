@@ -370,6 +370,13 @@ export class Session implements SessionFace {
     return this.remote.session.updateQueue({ sessionId: this.sessionId, itemId, action })
   }
 
+  /** Rewind to one sent user message and send its edited text as a new Turn. */
+  async editMessage(seq: number, text: string): Promise<RemoteResult<{ accepted: true }>> {
+    return this.remote.session.editMessage({
+      sessionId: this.sessionId, requestId: randomUUID() as SessionRequestId, seq, text,
+    })
+  }
+
   /**
    * Stop the active turn while the Host preserves pending inbox work; failures
    * land in promptError (same error-strip display slot). A subagent address
