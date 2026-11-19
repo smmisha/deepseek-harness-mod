@@ -73,7 +73,7 @@ describe('Assembled liveshare viewer page stopping its own branch', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
     }, { timeout: 30_000 })
-    expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull()
     expect(screen.queryByRole('button', { name: '发送消息' })).toBeNull()
 
     // Branching gives this page a Session of its own, and that child carries the reader's run.
@@ -83,13 +83,13 @@ describe('Assembled liveshare viewer page stopping its own branch', () => {
     const branch = branches.at(-1)
     if (branch === undefined) throw new Error('no branch action on the shared Session')
     await act(async () => { fireEvent.click(branch) })
-    const stop = await screen.findByRole('button', { name: '停止生成' }, { timeout: 15_000 })
+    const stop = await screen.findByRole('button', { name: '完成当前步骤后停止' }, { timeout: 15_000 })
 
     // Cancelling it ends that run — the Host's own answer to `cancel` — and hands the composer back
     // for the next prompt, while the run in the shared Session is still the owner's to end.
     await act(async () => { fireEvent.click(stop) })
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull()
     }, { timeout: 15_000 })
     expect(screen.getAllByRole('button', { name: '发送消息' }).length).toBeGreaterThan(0)
   }, 180_000)

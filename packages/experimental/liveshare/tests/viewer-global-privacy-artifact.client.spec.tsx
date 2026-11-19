@@ -208,7 +208,7 @@ describe('Assembled viewer page global configuration privacy', () => {
     expect(relay.ordinaryCalls).toEqual(expect.arrayContaining(['session/page', 'session/attachment', 'session/modelCatalog']))
 
     expect(context.get('remoteAccess')?.source('session', 'fx-alpha', 'session/prompt').getSnapshot()).toBe(true)
-    const stopLabel = locale === 'zh' ? '停止生成' : 'Stop generating'
+    const stopLabel = locale === 'zh' ? '完成当前步骤后停止' : 'Finish step, then stop'
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: stopLabel })) })
     await waitFor(() => { expect(owner?.cancellations).toEqual(['fx-alpha']) })
     const text = `privacy ${authority}: real input sender remains granted`

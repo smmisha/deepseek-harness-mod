@@ -118,7 +118,7 @@ describe('Assembled liveshare viewer page', () => {
     expect(document.body.textContent).not.toContain('仅可查看')
     // The fixture Session is running, and a viewer cannot interrupt the owner's generation: the
     // composer offers neither Stop nor Send.
-    expect(screen.queryByRole('button', { name: 'Stop generating' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Finish step, then stop' })).toBeNull()
     expect(screen.queryByRole('button', { name: /发送|Send/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /附件|Attach|上传|Upload/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /重命名|Rename|归档|Archive|删除|Delete|Fork/ })).toBeNull()
