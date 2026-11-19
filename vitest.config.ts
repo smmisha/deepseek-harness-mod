@@ -363,6 +363,9 @@ export default defineConfig({
         // The permission entry binds generated Remote code; cua-permissions.e2e.ts covers
         // its built entry, while source tests exercise mountCuaPermissions and its UI.
         'packages/experimental/cua/src/client/index.ts',
+        // The free web chat entry binds its generated administration Remote, which exists only in lib;
+        // source tests cover mountFreeChat and its page.
+        'packages/experimental/freechat/src/client/index.ts',
         // The mods band entry imports the bridge's generated Remote contribution, which exists only in lib;
         // the Web snapshot exercises the built entry, while source tests cover mountModsBand.
         'packages/experimental/client-ui-claude-code-mods/src/client/index.ts',

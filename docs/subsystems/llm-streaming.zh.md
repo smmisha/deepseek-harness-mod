@@ -1029,6 +1029,46 @@ async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeek
 
 Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages/llm/deepseek-llm-api-extensions/src/index.ts)
 
+<a id="ctxfreechatadmin--freechatadmin"></a>
+
+### `ctx.freechatAdmin` — `FreeChatAdmin`
+
+Host Remote behind the free web chat administration page.
+
+```ts cordis-catalog
+/**
+ * Read the routes and thread rows.
+ * @returns the playable routes and the known threads.
+ */
+@Remote async state(): Promise<FreeChatState>
+
+/**
+ * Drop one thread's live web conversation; its local memory stays.
+ * @param id - sanitized thread id from {@link FreeChatState.threads}.
+ * @returns whether a live conversation was closed.
+ */
+@Remote async resetThread(id: string): Promise<{ closedSession: boolean }>
+```
+
+Source: [`packages/experimental/freechat/src/admin.ts`](../../packages/experimental/freechat/src/admin.ts)
+
+<a id="ctxfreechatguestport--guestport"></a>
+
+### `ctx.freeChatGuestPort` — `GuestPort`
+
+Bridge to the Electron guest page that owns the signed-in chat site. The desktop shell implements it over its own `<webview>` automation channel; the transport never imports Electron itself, so the package stays Host-runtime agnostic and testable with a fake port.
+
+```ts cordis-catalog
+/**
+ * Run one script inside the guest page and return its JSON value.
+ * @param script - self-contained expression evaluated in the guest's main world.
+ * @returns the script's JSON-serializable result.
+ */
+evaluate<T>(script: string): Promise<T>
+```
+
+Source: [`packages/experimental/freechat/src/types.ts`](../../packages/experimental/freechat/src/types.ts)
+
 <a id="ctxllm--llmruntime"></a>
 
 ### `ctx.llm` — `LlmRuntime`

@@ -78,6 +78,7 @@ describe('release families', () => {
       '@deepseek-ai/dsh-experimental-forge-github',
       '@deepseek-ai/dsh-experimental-forge-session',
       '@deepseek-ai/dsh-experimental-forge',
+      '@deepseek-ai/dsh-freechat',
       '@deepseek-ai/dsh-hook-protocol',
       '@deepseek-ai/dsh-hooks-claude-code',
       '@deepseek-ai/dsh-hooks-codex',

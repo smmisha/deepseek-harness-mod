@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Chat web gratuito",
+    "description": "Un proxy local compatible con OpenAI sobre el chat web de DeepSeek con sesión iniciada, con memoria local de hilos, rotación automática de sesiones y un puente de herramientas para conectores MCP."
+  }
+}

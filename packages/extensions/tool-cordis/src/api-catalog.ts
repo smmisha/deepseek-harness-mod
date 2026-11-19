@@ -1633,6 +1633,38 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'freechatAdmin',
+    summary: 'Host Remote behind the free web chat administration page.',
+    description: 'Host Remote behind the free web chat administration page.',
+    methods: [
+      {
+        signature: '@Remote async state(): Promise<FreeChatState>',
+        description: 'Read the routes and thread rows.',
+        parameters: [],
+        returns: 'the playable routes and the known threads.',
+      },
+      {
+        signature: '@Remote async resetThread(id: string): Promise<{ closedSession: boolean }>',
+        description: 'Drop one thread\'s live web conversation; its local memory stays.',
+        parameters: [{ name: 'id', description: 'sanitized thread id from {@link FreeChatState.threads}.' }],
+        returns: 'whether a live conversation was closed.',
+      },
+    ],
+  },
+  {
+    key: 'freeChatGuestPort',
+    summary: 'Bridge to the Electron guest page that owns the signed-in chat site.',
+    description: 'Bridge to the Electron guest page that owns the signed-in chat site. The desktop shell implements it over its own `<webview>` automation channel; the transport never imports Electron itself, so the package stays Host-runtime agnostic and testable with a fake port.',
+    methods: [
+      {
+        signature: 'evaluate<T>(script: string): Promise<T>',
+        description: 'Run one script inside the guest page and return its JSON value.',
+        parameters: [{ name: 'script', description: 'self-contained expression evaluated in the guest\'s main world.' }],
+        returns: 'the script\'s JSON-serializable result.',
+      },
+    ],
+  },
+  {
     key: 'fs',
     summary: 'Abstract filesystem provider.',
     description: 'Abstract filesystem provider. Targets must preserve identity across aliases; reads expose regular UTF-8 text or typed errors, listings are stable and content-free, and single-file publication is atomic. Moves can retain their source after publishing the destination. Optional guards add stale protection without changing the unguarded provider contract.',
@@ -7071,6 +7103,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ForgeWorktreeWaiting',
     declaration: 'export type ForgeWorktreeWaiting = \'creation\' | \'restoration\';',
+  },
+  {
+    name: 'FreeChatModelRow',
+    declaration: 'export interface FreeChatModelRow {\n    readonly id: string;\n    readonly name: string;\n    readonly contextWindow: number;\n    readonly maxOutputTokens: number;\n    readonly reasoning: boolean;\n}',
+  },
+  {
+    name: 'FreeChatState',
+    declaration: 'export interface FreeChatState {\n    readonly models: readonly FreeChatModelRow[];\n    readonly threads: readonly FreeChatThreadRow[];\n}',
+  },
+  {
+    name: 'FreeChatThreadRow',
+    declaration: 'export interface FreeChatThreadRow {\n    readonly id: string;\n    readonly generation: number;\n    readonly turns: number;\n    readonly updatedAt?: string | undefined;\n    readonly live: boolean;\n}',
   },
   {
     name: 'FsDeleteOutcome',

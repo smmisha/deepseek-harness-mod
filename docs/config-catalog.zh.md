@@ -1665,6 +1665,104 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-file-reference-local -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-freechat -->
+<a id="deepseek-aidsh-freechat"></a>
+
+## `@deepseek-ai/dsh-freechat`
+
+- `source`: [`packages/experimental/freechat/src/index.ts:107`](../packages/experimental/freechat/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration; every section is optional and defaulted explicitly. */
+export interface Config {
+  /** Listening surface. */
+  readonly server?: Partial<ServerSection> | undefined
+  /** Web-chat transport selection. */
+  readonly transport?: Partial<TransportSection> | undefined
+  /** Rotation budgets. */
+  readonly context?: Partial<ContextPolicy> | undefined
+  /** Durable memory location. */
+  readonly storage?: Partial<StorageSection> | undefined
+  /** Remote model catalog. */
+  readonly registry?: Partial<RegistrySection> | undefined
+  /** Browser connection used by `transport.kind="cdp"`. */
+  readonly cdp?: Partial<CdpSection> | undefined
+  /** Connector document location. */
+  readonly connectors?: Partial<ConnectorsSection> | undefined
+}
+
+/** Listening surface of the proxy. */
+export interface ServerSection {
+  /** Bind address; loopback keeps the proxy off the network. */
+  readonly host: string
+  /** Listen port; zero asks the operating system. */
+  readonly port: number
+  /** Bearer token every client must present; empty disables authentication. */
+  readonly token: string
+  /** Largest accepted request body in bytes. */
+  readonly maxBodyBytes: number
+}
+
+/** How the bridge reaches the signed-in chat page. */
+export interface TransportSection {
+  /**
+   * `electron-guest` drives the desktop guest page and requires the shell to
+   * provide the `freeChatGuestPort` service; `loopback` is the scripted
+   * transport used by tests and by a deployment that only exercises the proxy.
+   */
+  readonly kind: 'loopback' | 'electron-guest' | 'cdp'
+  /** Poll interval while an answer streams. */
+  readonly pollMs: number
+  /** Consecutive unchanged polls that end an answer. */
+  readonly idlePolls: number
+  /** Budget for the guest composer to appear. */
+  readonly readyTimeoutMs: number
+  /** Budget for one answer to finish before the bridge fails visibly. */
+  readonly answerTimeoutMs: number
+}
+
+/** Budget that turns a growing web thread into a rotation. */
+export interface ContextPolicy {
+  /** Hard cap on messages injected into one web session. */
+  readonly maxMessages: number
+  /** Estimated-token cap for one web session. */
+  readonly maxTokens: number
+  /** Newest messages replayed verbatim into a replacement session. */
+  readonly replayTail: number
+  /** Per-message clamp applied before accounting, so one huge paste cannot exhaust a session. */
+  readonly maxCharsPerMessage: number
+}
+
+/** Durable memory location. */
+export interface StorageSection {
+  /** Directory holding one JSONL file per thread plus `index.json`. */
+  readonly directory: string
+}
+
+/** Remote model catalog. */
+export interface RegistrySection {
+  /** HTTPS document listing additional free routes; empty keeps the registry local. */
+  readonly url: string
+  /** Cache lifetime before the next list re-fetches. */
+  readonly ttlMs: number
+}
+
+/** Browser connection the CDP transport uses. */
+export interface CdpSection {
+  /** Debugging port of the Chromium instance. */
+  readonly port: number
+  /** Chat page opened in the dedicated tab. */
+  readonly url: string
+}
+
+/** Connector document location. */
+export interface ConnectorsSection {
+  /** `mcpServers` JSON file the hub reads and a management surface writes. */
+  readonly file: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-freechat -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fs-local -->
 <a id="deepseek-aidsh-fs-local"></a>
 
