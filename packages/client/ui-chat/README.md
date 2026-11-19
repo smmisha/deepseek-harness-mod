@@ -57,6 +57,8 @@ Standalone Markdown images show contained previews and open the shared image lig
 
 Settings → General → Open chat links in selects the destination for ordinary clicks on Chat HTTP(S) links: In-App Sidebar (default) opens a new right-Sidebar Browser tab, while Default Browser opens an external tab. The setting follows Keyboard shortcuts and is shown only while the Sidebar Browser is available. If the Sidebar Browser is not registered, both choices use the external browser; modified clicks retain native behavior. The `ui-chat.linkOpening` preference persists on the Host for authenticated browsers and stays process-local when settings cannot persist writes. Sent file references and skills confirmed by the message’s logged invocation also open in the right Sidebar. File paths use the viewed Session; skill names resolve through its current input-trigger source. Both use the prose file-link dotted underline on hover or focus. Sessions, directories, and command labels remain non-navigating references.
 
+Settings → General → Interface → User messages chooses `bubble` (default) or `flat` and stores `ui-chat.messageLayout`; Bubble width (`ui-chat.bubbleWidth`: `narrow`, `standard` (default), `wide`, or `full`) appears only while messages are bubbles. Standard keeps the 0.702 content-width share capped at 82% of the row; the other presets take 0.6/72%, 0.85/92%, and the full row. Chat names the layout on `body[data-dsh-message-layout]` and the share and cap as `--dsh-chat-bubble-share` and `--dsh-chat-bubble-cap`, so the user bubble and its edit surface follow the same width. Flat aligns user messages to the start at full width without a fill or radius, marked by a 2 px start border.
+
 <a id="system-prompt-row"></a>
 ## Hidden Chat rows
 

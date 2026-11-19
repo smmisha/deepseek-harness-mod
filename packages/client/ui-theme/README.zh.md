@@ -39,6 +39,10 @@ Desktop 的固定快捷键 `Cmd`/`Ctrl` + `+`（或 `=`）和 `Cmd`/`Ctrl` + `-`
 
 三行分别独立设置正文字体（界面与会话正文）、代码字体（代码块、行内代码及其他使用 `--ds-font-family-code` 的文本）与侧栏终端字体。每个输入框接受逗号分隔的字体名，失焦或按 Enter 时提交；清空输入框即恢复内置字体栈。服务会规范化每个列表：去掉引号、反斜杠、尖括号与控制字符，并给 CSS 通用字体族以外的名称加双引号，然后存入 `textFontFamily`、`codeFontFamily` 或 `terminalFontFamily`。用户列表排在该类内置字体栈之前，因此本机缺少的字体会回退到默认字体。输入框接受任何已安装字体的名称，但不枚举本地字体。
 
+### 调色板、强调色与动效
+
+“界面”分组中还有三行。调色板在内置配色与 Moonlight 之间选择；Moonlight 是一套冷调蓝灰配色，会在两种配色方案中重新着色画布、凸起表面、侧栏、用户气泡、卡片、悬停填充、文字与强调色。强调色提供内置强调色、八种预设，以及通过原生取色器选择的自定义颜色；选定的强调色会设置业务强调色、其浅色填充、链接以及强调色填充上的文字颜色（按对比度取白色或近黑色），在深色方案中会调亮，并优先于调色板自带的强调色。两者合并为一个 `ctx.theme` 令牌覆盖层 `ui-theme:appearance`；选择内置调色板与强调色时该层会被释放。界面动效可取 `full`、`reduced` 或 `none`：后两者会在根元素上设置 `data-dsh-motion`，由 `motion.css` 把过渡（`none` 时还包括动画）缩短到几乎为零，同时 ui-primitives 的 `prefersReducedMotion()` 返回 true，使脚本驱动的动效也被跳过。这些值以 `palette`、`accent`（内置强调色为 `''`，否则为小写 `#rrggbb`）与 `motion` 持久化；头部 CSS 会在外壳加载前绘制 Moonlight 画布。
+
 ### 注册主题
 
 组合可以通过 `ctx.theme` 注册带别名 token 覆盖的第三方主题 id；覆盖层按注册顺序折入活动快照的 token 中。主题还可以替换产品图标：`ThemeDefinition.icons` 把 ui-primitives `ICON_SYMBOLS` 的 id 映射到完整的 SVG 文档。插件在 `body` 开头保留一个隐藏的图标 sprite，其 `<symbol>` 子元素采用活动主题的替换项，缺省时回退到默认值，因此替换图形可以是多色的，并可使用跟随调色板的 `currentColor` 或 `--dsw-*` 变量绘制。替换标记与注册它的插件代码同等受信任。`register` 会拒绝未知 id、根元素不是带 `viewBox` 且格式正确的 SVG 命名空间 `<svg>` 的文档、会作用于整个文档的 `<style>` 或 `<script>` 元素，以及不以 `<symbol id>-` 开头的元素 id。根元素的 `width`、`height`、`class` 和 `aria-hidden` 会被忽略，因为图标尺寸由使用处决定。渐变及其他绘制服务器在 sprite 中解析其色标，因此会跟随调色板 token，但不跟随使用处的颜色覆盖。移除其中一个绝不会覆盖最后一个持久化的内置偏好。第三方主题 id 仍是进程内扩展，不会跨越内置 settings schema。

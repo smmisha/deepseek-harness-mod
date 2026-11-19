@@ -23,6 +23,9 @@
 /deepseek-ai-dsh-client-ui-theme/use-this-package/fonts:
   en: b45d5b48ca799c3a
   zh: af65514b3759204f
+/deepseek-ai-dsh-client-ui-theme/use-this-package/palette-accent-and-motion:
+  en: 2bace4f7d9584b8b
+  zh: f91cc2a4d8a098d6
 /deepseek-ai-dsh-client-ui-theme/use-this-package/registering-a-theme:
   en: 5244fc168d0a03f8
   zh: c7ab12fdf8c6c55b

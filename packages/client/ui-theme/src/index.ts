@@ -9,6 +9,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { bootThemeInjections } from './boot-theme.ts'
 import { DEFAULT_PREFERENCE, FONT_SIZE_SPECS, fontSizeSchema, THEME_PREFERENCES } from './theme-settings.ts'
+import {
+  DEFAULT_MOTION, DEFAULT_PALETTE, MOTION_LEVELS, PALETTES, type MotionLevel, type PaletteId,
+} from './appearance.ts'
 
 export {
   DEFAULT_FONT_SIZE, DEFAULT_PREFERENCE, FONT_SIZE_FIELD, FONT_SIZE_MAX, FONT_SIZE_MIN,
@@ -32,6 +35,12 @@ export interface Config {
   codeFontFamily: Volatile<string>
   /** Sidebar terminal font list; `''` keeps the built-in stack. */
   terminalFontFamily: Volatile<string>
+  /** Color palette layered over the light and dark schemes. */
+  palette: Volatile<PaletteId>
+  /** Accent color as lowercase `#rrggbb`; `''` keeps the palette's or the built-in accent. */
+  accent: Volatile<string>
+  /** Interface motion: follow the system, reduced, or none. */
+  motion: Volatile<MotionLevel>
 }
 
 /** Live theme and typography preferences. */
@@ -43,6 +52,9 @@ export const Config = z.object({
   textFontFamily: z.string().default('').volatile(),
   codeFontFamily: z.string().default('').volatile(),
   terminalFontFamily: z.string().default('').volatile(),
+  palette: z.union([...PALETTES]).default(DEFAULT_PALETTE).volatile(),
+  accent: z.string().pattern(/^(?:#[0-9a-f]{6})?$/u).default('').volatile(),
+  motion: z.union([...MOTION_LEVELS]).default(DEFAULT_MOTION).volatile(),
 })
 
 /** Supply the current palette before browser plugins start.
@@ -60,6 +72,6 @@ export function apply(ctx: Context, config: Config): void {
       text: config.textFontFamily.get(),
       code: config.codeFontFamily.get(),
       terminal: config.terminalFontFamily.get(),
-    }))
+    }, config.palette.get()))
   }, { prepend: true })
 }

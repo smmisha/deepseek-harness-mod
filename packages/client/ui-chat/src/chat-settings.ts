@@ -70,6 +70,24 @@ export type LinkOpening = 'sidebar' | 'new-tab'
 /** Preserve the built-in browser for users without an explicit preference. */
 export const DEFAULT_LINK_OPENING: LinkOpening = 'sidebar'
 
+/** How user messages sit in the transcript: right-aligned filled bubbles, or flat left-aligned rows. */
+export const MESSAGE_LAYOUTS = ['bubble', 'flat'] as const
+
+/** User-message presentation. */
+export type MessageLayout = typeof MESSAGE_LAYOUTS[number]
+
+/** Keep bubbles for users without an explicit preference. */
+export const DEFAULT_MESSAGE_LAYOUT: MessageLayout = 'bubble'
+
+/** Widest share of the conversation column a user bubble may take. */
+export const BUBBLE_WIDTHS = ['narrow', 'standard', 'wide', 'full'] as const
+
+/** User-bubble width preset. */
+export type BubbleWidth = typeof BUBBLE_WIDTHS[number]
+
+/** Keep the designed width for users without an explicit preference. */
+export const DEFAULT_BUBBLE_WIDTH: BubbleWidth = 'standard'
+
 /** Durable Chat section shared by the Host schema and browser scope. */
 export interface ChatSettings {
   /** Work-details preference; absence uses the client default, and legacy saved values remain accepted. */
@@ -82,6 +100,10 @@ export interface ChatSettings {
   performanceUsage: PerformanceUsageMode
   /** Default destination for Chat HTTP(S) links. */
   linkOpening: LinkOpening
+  /** User-message presentation; absence keeps bubbles. */
+  messageLayout?: MessageLayout
+  /** User-bubble width preset; absence keeps the designed width. */
+  bubbleWidth?: BubbleWidth
 }
 
 /** Durable Chat schema; also the wire envelope the browser scope validates against. */
@@ -89,6 +111,8 @@ export const ChatSettingsFields = {
   [COLLAPSE_TIMING_FIELD]: z.union([...COLLAPSE_TIMINGS]).default(DEFAULT_COLLAPSE_TIMING),
   [FOLDED_REPLIES_FIELD]: z.union([...FOLDED_REPLIES]).default(DEFAULT_FOLDED_REPLIES),
   linkOpening: z.union(['sidebar', 'new-tab']).default(DEFAULT_LINK_OPENING),
+  messageLayout: z.union([...MESSAGE_LAYOUTS]).default(DEFAULT_MESSAGE_LAYOUT),
+  bubbleWidth: z.union([...BUBBLE_WIDTHS]).default(DEFAULT_BUBBLE_WIDTH),
   performanceUsage: z.union([...PERFORMANCE_USAGE_MODES]).default(DEFAULT_PERFORMANCE_USAGE),
   // Missing and unrecognized modes defer to the client's default.
   [TRANSCRIPT_VIEW_FIELD]: z.union([...TRANSCRIPT_VIEW_SETTING_VALUES]).loose(),

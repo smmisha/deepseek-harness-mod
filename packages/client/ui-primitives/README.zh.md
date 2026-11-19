@@ -176,6 +176,7 @@ kind: "package-library"
 | [`src/code-highlighting.ts`](src/code-highlighting.ts) | 共享的文件名 grammar 选择与惰性逐行高亮 |
 | [`src/input-modality.ts`](src/input-modality.ts) | 全文档输入模态，发布到 `<html>` |
 | [`src/plugin-artwork.tsx`](src/plugin-artwork.tsx) | 固定配色插件插画，SVG def id 按实例生成 |
+| [`src/reduced-motion.ts`](src/reduced-motion.ts) | `prefersReducedMotion()`：当“界面动效”偏好在根元素上设置了 `data-dsh-motion`，或系统要求减少动态效果时返回 true；所有脚本动画都通过它判断，而不直接查询 `prefers-reduced-motion` |
 | [`src/useAnchoredMaxHeight.ts`](src/useAnchoredMaxHeight.ts) | 底部锚定浮层的高度限制 |
 | [`src/settings-form/`](src/settings-form/) | 设置页套件：基于设置 scope 的暂存表单模型、值字段与密文字段、表单框架 |
 

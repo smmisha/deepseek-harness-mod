@@ -1,7 +1,7 @@
 /** Coordinates onboarding navigation, transitions and the shared native recharge page. */
 import type { ProductEventMap } from '@deepseek-ai/dsh-client-product-analytics/client'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, prefersReducedMotion } from '@deepseek-ai/dsh-client-ui-primitives'
 import { hasOnboardingCredit } from './onboarding-balance.ts'
 import { OnboardingSurface } from './OnboardingSurface.tsx'
 import type { DesktopOnboardingProps } from './onboarding-contract.ts'
@@ -42,7 +42,7 @@ export function DesktopOnboarding({
   useEffect(() => {
     if (step === targetStep) return
     const element = page.current
-    if (!state.visible || element?.animate === undefined || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!state.visible || element?.animate === undefined || prefersReducedMotion()) {
       setStep(targetStep)
       return
     }

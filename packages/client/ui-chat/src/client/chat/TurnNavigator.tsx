@@ -3,6 +3,7 @@ import {
   forwardRef, memo, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState,
   type CSSProperties, type ForwardedRef,
 } from 'react'
+import { prefersReducedMotion } from '@deepseek-ai/dsh-client-ui-primitives'
 import { defaultRangeExtractor, elementScroll, observeElementOffset, useVirtualizer, type Range } from '@tanstack/react-virtual'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { TurnRailItem } from './turn-rail-items.ts'
@@ -33,7 +34,7 @@ const RAIL_INSET_PX = 6
 const FADE_PX = 24
 
 function preferredScrollBehavior(): 'auto' | 'smooth' {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  return prefersReducedMotion()
     ? 'auto'
     : 'smooth'
 }

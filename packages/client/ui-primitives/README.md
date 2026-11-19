@@ -176,6 +176,7 @@ The package enforces one separation: presentational React atoms with zero Cordis
 | [`src/code-highlighting.ts`](src/code-highlighting.ts) | Shared filename grammar selection and lazy line highlighting |
 | [`src/input-modality.ts`](src/input-modality.ts) | Document-wide input modality published on `<html>` |
 | [`src/plugin-artwork.tsx`](src/plugin-artwork.tsx) | Fixed-palette plugin artwork with per-instance SVG def ids |
+| [`src/reduced-motion.ts`](src/reduced-motion.ts) | `prefersReducedMotion()`: true when the Interface animations preference sets `data-dsh-motion` on the root element or the system asks for reduced motion; every scripted animation checks it instead of querying `prefers-reduced-motion` directly |
 | [`src/useAnchoredMaxHeight.ts`](src/useAnchoredMaxHeight.ts) | Height limits for bottom-anchored overlays |
 | [`src/settings-form/`](src/settings-form/) | The settings page kit: the staged form model over a settings scope, the value and secret fields, and the form frame |
 

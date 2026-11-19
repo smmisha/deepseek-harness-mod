@@ -43,7 +43,8 @@ describe('in-place message editor geometry', () => {
     expect(rule('.editBlock', ROW_CSS)).toMatch(/width:\s*fit-content;/)
     expect(rule('.editBlock', ROW_CSS)).toMatch(/max-width:\s*var\(--dsh-chat-bubble-max-width\);/)
     expect(rule('.userRow', ROW_CSS))
-      .toMatch(/--dsh-chat-bubble-max-width:\s*min\(calc\(var\(--dsh-chat-content-width, 748px\) \* 0\.702\), 82%\);/)
+      .toMatch(new RegExp(String.raw`--dsh-chat-bubble-max-width:\s*min\(\s*calc\(var\(--dsh-chat-content-width, 748px\) \* `
+        + String.raw`var\(--dsh-chat-bubble-share, 0\.702\)\),\s*var\(--dsh-chat-bubble-cap, 82%\)\s*\);`))
     expect(rule('.userStack', ROW_CSS)).toMatch(/max-width:\s*var\(--dsh-chat-bubble-max-width\);/)
   })
 

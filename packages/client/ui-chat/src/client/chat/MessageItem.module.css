@@ -6,8 +6,13 @@
      column and widens with a dragged or adaptive column. The 748px fallback
      covers mounts outside the conversation column, where the axis variable is
      absent. The bubble stack, the editor's attachment context, and the editor
-     itself read this one measurement. */
-  --dsh-chat-bubble-max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
+     itself read this one measurement. The Bubble width setting replaces the
+     share and its cap through body variables; without them the designed
+     values apply. */
+  --dsh-chat-bubble-max-width: min(
+    calc(var(--dsh-chat-content-width, 748px) * var(--dsh-chat-bubble-share, 0.702)),
+    var(--dsh-chat-bubble-cap, 82%)
+  );
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -45,6 +50,28 @@
   align-items: flex-end;
   min-width: 0;
 }
+/* Flat layout: user messages leave the right-aligned bubble for a left-aligned
+   row as wide as the column. A start-edge rule in the border tone keeps them
+   distinct from replies, and `border-inline-start` follows each message's own
+   direction. Rows, steering, pending echoes, and the editor share this row. */
+:global(body[data-dsh-message-layout='flat']) .userRow {
+  --dsh-chat-bubble-max-width: 100%;
+  align-items: flex-start;
+}
+
+:global(body[data-dsh-message-layout='flat']) .userStack,
+:global(body[data-dsh-message-layout='flat']) .editAttachments {
+  align-items: flex-start;
+}
+
+:global(body[data-dsh-message-layout='flat']) .userStack [data-message-bubble] {
+  padding-block: 2px;
+  padding-inline: 12px 0;
+  border-inline-start: 2px solid var(--dsw-alias-border-l2);
+  border-radius: 0;
+  background: transparent;
+}
+
 .referenceSummary {
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsh-content-font-size-secondary, 13px);

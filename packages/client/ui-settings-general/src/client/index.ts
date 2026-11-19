@@ -270,7 +270,9 @@ export function apply(ctx: ClientContext): void {
   // section owns the column's order — and every other row, including one a
   // plugin registers with an id this package has never seen, reads as a
   // working preference.
-  const INTERFACE_ITEM_IDS: ReadonlySet<string> = new Set(['language', 'appearance', 'font-size'])
+  const INTERFACE_ITEM_IDS: ReadonlySet<string> = new Set([
+    'language', 'appearance', 'palette', 'accent', 'font-size', 'message-layout', 'bubble-width', 'motion',
+  ])
   let generalGroupsVersion = -1
   let generalGroups: readonly GeneralGroup[] = []
   const generalGroupsInjected = (): GeneralSectionInjected => ({

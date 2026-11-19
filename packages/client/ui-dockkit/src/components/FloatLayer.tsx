@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import clsx from 'clsx'
-import { IconCloseOutlineRegular, IconPanelLeftOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCloseOutlineRegular, IconPanelLeftOutlineRegular, Tooltip, prefersReducedMotion } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DockIntents, DockLabels, TabRenderer } from '../contract/adapter.ts'
 import type { FloatRect, LayoutState, PaneId, TabId, TabRecord } from '../contract/types.ts'
 import { FLOAT_MIN_SIZE } from '../engine/constraints.ts'
@@ -88,7 +88,7 @@ function floatBounds(): FloatBounds {
 
 /** Whether the platform asks for reduced motion; environments without `matchMedia` (jsdom) report no preference. */
 function reducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return prefersReducedMotion()
 }
 
 /** How much recent drawing history the release velocity is measured over. */

@@ -339,14 +339,17 @@ describe('ui-settings-general apply', () => {
   })
 
   it('projects General rows into two reading groups that follow the item ledger', async ({ mock, start }) => {
+    const INTERFACE_ROWS = [
+      'language', 'appearance', 'palette', 'accent', 'font-size', 'message-layout', 'bubble-width', 'motion',
+    ]
     const { c } = await client(mock, start)
     const face = (generalEntry(c).inject as unknown as () => GeneralSectionInjected)()
     const groups = face.hooks.groups
     const first = groups.getSnapshot()
     expect(first.map(group => group.id)).toEqual(['interface', 'work'])
-    // The three interface ids the section names read first; every other row,
+    // The interface ids the section names read first, in their order; every other row,
     // ordered as registered, reads as a working preference.
-    expect(first[0]!.items).toEqual(['language', 'appearance', 'font-size'])
+    expect(first[0]!.items).toEqual(INTERFACE_ROWS)
     expect(first[1]!.items).toEqual([
       'permission', 'transcript-view', 'developer-tools', 'shortcuts',
       'link-opening', 'composer-enter', 'performance-usage', 'current-version',
@@ -366,7 +369,7 @@ describe('ui-settings-general apply', () => {
     const next = groups.getSnapshot()
     expect(next).not.toBe(first)
     // A new row lands in the second group at its order position, not appended.
-    expect(next[0]!.items).toEqual(['language', 'appearance', 'font-size'])
+    expect(next[0]!.items).toEqual(INTERFACE_ROWS)
     expect(next[1]!.items).toEqual([
       'permission', 'unordered-row', 'transcript-view', 'developer-tools', 'shortcuts',
       'link-opening', 'composer-enter', 'performance-usage', 'session-log', 'current-version',

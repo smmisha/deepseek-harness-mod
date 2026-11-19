@@ -1,5 +1,6 @@
 /** Framework-hook projection into the desktop introduction's pure view. */
 import { useEffect, useLayoutEffect, useState } from 'react'
+import { prefersReducedMotion } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -44,7 +45,7 @@ export function DesktopOnboardingEntry({ useOnboarding, useAccount, useLocale, s
   const pendingCompletion = done && state.status === 'saving'
   const completed = done && state.status === 'ready'
   const exiting = completed && lastVisible !== null
-    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    && !prefersReducedMotion()
 
   useLayoutEffect(() => {
     if (state.visible) setLastVisible(state)
