@@ -222,9 +222,9 @@ describe('ModelSelect reasoning effort', () => {
       t={t}
     />)
 
-    const trigger = screen.getByRole('button', {
-      name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
-    })
+    // More than one level gives the effort its own chip; the model trigger names the model alone.
+    const trigger = screen.getByRole('button', { name: '选择模型，当前 DeepSeek-V4-Flash' })
+    expect(screen.getByRole('button', { name: '选择推理等级，当前 High' }).textContent).toBe('High')
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
@@ -238,7 +238,7 @@ describe('ModelSelect reasoning effort', () => {
         model: 'deepseek-v4-flash',
         reasoningEffort: 'max',
       })
-      expect(trigger.getAttribute('aria-label')).toBe('选择模型，当前 DeepSeek-V4-Flash，推理等级 Max')
+      expect(screen.getByRole('button', { name: '选择推理等级，当前 Max' })).toBeTruthy()
       expect(document.activeElement).toBe(trigger)
     })
   })
@@ -266,7 +266,7 @@ describe('ModelSelect reasoning effort', () => {
     />)
 
     fireEvent.click(screen.getByRole('button', {
-      name: '选择模型，当前 Model，推理等级 Default',
+      name: '选择模型，当前 Model',
     }))
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
@@ -340,7 +340,7 @@ describe('ModelSelect reasoning effort', () => {
     directory.set(state())
     await waitFor(() => {
       expect(screen.getByRole('button', {
-        name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
+        name: '选择模型，当前 DeepSeek-V4-Flash',
       })).toBeTruthy()
     })
   })
@@ -371,7 +371,7 @@ describe('ModelSelect reasoning effort', () => {
       t={t}
     />)
 
-    const trigger = screen.getByRole('button', { name: /选择模型|当前/ })
+    const trigger = screen.getByRole('button', { name: /^选择模型/ })
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     const rejected = screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ })
@@ -413,7 +413,7 @@ describe('ModelSelect reasoning effort', () => {
       resolveText={resolveText} select={select} t={t} />)
     const spinners = () => document.querySelectorAll('[data-state="ongoing"]')
 
-    const trigger = screen.getByRole('button', { name: /选择模型|当前/ })
+    const trigger = screen.getByRole('button', { name: /^选择模型/ })
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
@@ -442,7 +442,7 @@ describe('ModelSelect reasoning effort', () => {
     render(<ModelSelect renderSlot={renderLabel} locked={false} available directory={directory} load={vi.fn()}
       resolveText={resolveText} select={select} t={t} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^选择模型/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /Max/ }))
     expect(screen.getAllByRole('menuitemradio')
@@ -467,7 +467,8 @@ describe('ModelSelect reasoning effort', () => {
     // Outside the composer subtree — column overflow clips cannot crop it.
     expect(container.contains(menu)).toBe(false)
     expect(menu.parentElement).toBe(document.body)
-    const anchor = trigger.style.getPropertyValue('--dsh-model-anchor')
+    // The seat around the trigger and the effort chip carries the anchor both open from.
+    const anchor = trigger.parentElement!.style.getPropertyValue('--dsh-model-anchor')
     expect(anchor).toMatch(/^--dsh-model-/)
     expect(menu.style.getPropertyValue('--dsh-model-anchor')).toBe(anchor)
     expect(menu.style.left).toBe('')
@@ -495,6 +496,91 @@ describe('ModelSelect reasoning effort', () => {
 
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('ModelSelect effort chip', () => {
+  function renderSeat(directory = createSnapshotStore<ModelDirectoryState>(state())) {
+    const select = vi.fn((selection: ModelSelection) => {
+      directory.set(state({ current: selection }))
+      return Promise.resolve({ ok: true as const, value: undefined })
+    })
+    render(<ModelSelect renderSlot={renderLabel} locked={false} available directory={directory}
+      load={vi.fn()} resolveText={resolveText} select={select} t={t} />)
+    return { directory, select }
+  }
+
+  it('opens the levels in one click and returns the keyboard to the chip after choosing', async () => {
+    const { select } = renderSeat()
+    const chip = screen.getByRole('button', { name: '选择推理等级，当前 High' })
+    expect(chip.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(chip)
+    expect(chip.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: '选择模型，当前 DeepSeek-V4-Flash' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['Off', 'High', 'Max'])
+    await waitFor(() => { expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: /High/ })) })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Off/ }))
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({ provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'off' })
+      expect(screen.queryByRole('menuitemradio')).toBeNull()
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: '选择推理等级，当前 Off' }))
+    })
+  })
+
+  it('closes from the levels it opened instead of backing into the root pane', async () => {
+    renderSeat()
+    const chip = screen.getByRole('button', { name: '选择推理等级，当前 High' })
+    fireEvent.click(chip)
+    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: /High/ }), { key: 'Escape' })
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    await waitFor(() => { expect(document.activeElement).toBe(chip) })
+    fireEvent.click(chip)
+    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: /High/ }), { key: 'Tab', shiftKey: true })
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
+    fireEvent.click(chip)
+    fireEvent.click(chip)
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
+  })
+
+  it('switches from the levels to the model menu when the trigger is clicked', () => {
+    renderSeat()
+    fireEvent.click(screen.getByRole('button', { name: '选择推理等级，当前 High' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择模型，当前 DeepSeek-V4-Flash' }))
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+      expect.stringContaining('模型'), expect.stringContaining('推理等级'),
+    ])
+  })
+
+  it('spins on the chip for a pending effort change and on the trigger for a pending model change', () => {
+    const pending = { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' }
+    const effort = createSnapshotStore<ModelDirectoryState>(state({ pending }))
+    renderSeat(effort)
+    const chip = screen.getByRole('button', { name: '选择推理等级，当前 High' })
+    const trigger = screen.getByRole('button', { name: '选择模型，当前 DeepSeek-V4-Flash' })
+    expect(chip.querySelector('[data-state="ongoing"]')).not.toBeNull()
+    expect(chip.getAttribute('aria-busy')).toBe('true')
+    expect(trigger.querySelector('[data-state="ongoing"]')).toBeNull()
+    act(() => { effort.set(state({ pending: { provider: 'deepseek-official', model: 'deepseek-v4-pro' } })) })
+    expect(chip.querySelector('[data-state="ongoing"]')).toBeNull()
+    expect(chip.getAttribute('aria-busy')).toBe('false')
+    expect(trigger.querySelector('[data-state="ongoing"]')).not.toBeNull()
+  })
+
+  it('keeps a single level inside the model trigger and disables the chip with the seat', () => {
+    const single = { efforts: [{ id: 'standard', name: 'Standard' }], defaultEffort: 'standard' }
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups: [{ id: 'p', name: 'P', models: [{ id: 'm', name: 'Model', reasoning: single }] }],
+      current: { provider: 'p', model: 'm' },
+    }))
+    renderSeat(directory)
+    expect(screen.queryByRole('button', { name: /选择推理等级/ })).toBeNull()
+    expect(screen.getByRole('button', { name: '选择模型，当前 Model，推理等级 Standard' }).textContent).toBe('ModelStandard')
+    cleanup()
+    render(<ModelSelect renderSlot={renderLabel} locked available directory={createSnapshotStore<ModelDirectoryState>(state())}
+      load={vi.fn()} resolveText={resolveText} select={vi.fn()} t={t} />)
+    expect(screen.getByRole('button', { name: '选择推理等级，当前 High' })).toHaveProperty('disabled', true)
   })
 })
 
@@ -1111,11 +1197,13 @@ it('restores the account model name after login without changing the saved route
   const directory = createSnapshotStore(state({ current: selected, groups, retainedEffort: 'High' }))
   render(<ModelSelect renderSlot={renderLabel} locked={false} available directory={directory} load={vi.fn()}
     resolveText={resolveText} select={vi.fn()} t={t} />)
-  expect(screen.getByRole('button', { name: /选择模型，当前/ }).textContent).toBe('DeepSeek FlashHigh')
+  expect(screen.getByRole('button', { name: /选择模型，当前/ }).textContent).toBe('DeepSeek Flash')
+  expect(screen.getByRole('button', { name: /选择推理等级/ }).textContent).toBe('High')
   act(() => { directory.update((snapshot) => { snapshot.groups = []; snapshot.routable = false }) })
   expect(screen.getByRole('button', { name: '请选择模型' }).textContent).toBe('请选择模型')
   act(() => { directory.update((snapshot) => { snapshot.groups = groups; snapshot.routable = true }) })
-  expect(screen.getByRole('button', { name: /选择模型，当前/ }).textContent).toBe('DeepSeek FlashHigh')
+  expect(screen.getByRole('button', { name: /选择模型，当前/ }).textContent).toBe('DeepSeek Flash')
+  expect(screen.getByRole('button', { name: /选择推理等级/ }).textContent).toBe('High')
   expect(directory.getSnapshot().current).toEqual(selected)
 })
 
