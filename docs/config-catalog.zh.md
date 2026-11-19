@@ -628,6 +628,16 @@ export interface Config {
   registryProbeTimeoutMs: number
   /** Lifetime of a winning registry or unavailable result. */
   registryProbeCacheTtlMs: number
+  /** Bundles whose own configuration also opens as a Settings section, in Settings order. */
+  settingsSections: SettingsSection[]
+}
+
+/** One bundle whose configuration also opens from Settings. */
+export interface SettingsSection {
+  /** npm package name of the bundle. */
+  package: string
+  /** Settings navigation label and section title. */
+  label: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-plugin-manager -->

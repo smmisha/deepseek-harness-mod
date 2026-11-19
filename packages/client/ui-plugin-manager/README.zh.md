@@ -98,6 +98,8 @@ ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
 
 组合包的 patch 必须以该 id 声明这一行；注册只在组合包开启期间存在，因此关闭的组合包不显示配置控件。
 
+profile 也可以让组合包自身的配置从「设置」打开。`ui-plugin-manager` 的 `settingsSections` 按设置顺序列出 `{ package, label }` 规则；对每条其组合包已有 `plugins.bundle.config` 条目的规则，页面把该条目镜像为独立的 `settings.section`（id 为 `bundle:<package>`，顺序从 50 起），沿用同一组件、注入接口与词典命名空间，加上节标题，并以 `view: 'page'` 渲染。该节随规则与条目变化：二者都存在时出现，任一消失时撤下；条目仍会显示在组合包页面上。带 store 席位的条目不会被镜像。这样 `ds-harness-remote` 等第三方组合包无需页面点名也能从「设置」打开。
+
 ### 详情页扩展点
 
 对某个不属于自己的组合包、行或官方插件有话要说的插件，通过本页声明的三个 list slot 向该对象的页面贡献内容：`plugins.detail.actions` 在页头放一个控件，位于页面自己的开关和卸载之前；`plugins.detail.badge` 在标题旁放一个标签，位于版本、实验性和异常或未运行标签之后；`plugins.detail.section` 在页面自身内容之下放一个区块——组合包页在来源信息之后，行页和官方插件页在配置之后。每个条目都以页面的 `subject` 渲染：`{ kind: 'bundle', pkg }`、`{ kind: 'row', pkg, row }` 或 `{ kind: 'item', id }`，其中 `pkg` 与 `row` 携带包名、版本、是否已安装、是否启用以及行列表这些供贡献者判断的事实。条目对无话可说的 subject 返回 null，自绘区块外观；页面按 `order` 排列条目。

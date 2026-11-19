@@ -1,0 +1,15 @@
+/* A bundle's configuration as its own Settings section, headed like the other sections. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}

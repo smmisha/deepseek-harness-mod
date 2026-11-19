@@ -27,6 +27,7 @@ import { PluginManagerPage } from './PluginManagerPage.tsx'
 import { createPluginHeaderRef } from './header-scroll.ts'
 import { PluginRefreshToast, type PluginRefreshToastFace } from './PluginRefreshToast.tsx'
 import { PluginsPanelIcon } from './PluginsPanelIcon.tsx'
+import { mountBundleSections } from './bundle-sections.tsx'
 import { configLedgerSource } from './config-ledger.ts'
 import { tabLedgerSource } from './tab-ledger.ts'
 import { PluginManagerController } from './manager-store.ts'
@@ -119,6 +120,8 @@ export function apply(ctx: ClientContext): void {
     yield ctx.remote.$on('plugin-manager/install-state', (progress) => { controller.installProgress(progress) })
     yield ctx.remote.$on('plugin-manager/update-state', (progress) => { controller.updateProgress(progress) })
     yield ctx.on('connection/reset', refresh)
+    // Bundles the profile names open their configuration from Settings too.
+    yield mountBundleSections(ctx)
     yield ctx.slots.inject('shell.overlay', () => ctx.slots.register({
       name: 'shell.overlay', id: 'plugin-manager.refresh-toast', locale: NS,
       inject: (): PluginRefreshToastFace => ({

@@ -19,6 +19,16 @@ export interface Config {
   registryProbeTimeoutMs: number
   /** Lifetime of a winning registry or unavailable result. */
   registryProbeCacheTtlMs: number
+  /** Bundles whose own configuration also opens as a Settings section, in Settings order. */
+  settingsSections: SettingsSection[]
+}
+
+/** One bundle whose configuration also opens from Settings. */
+export interface SettingsSection {
+  /** npm package name of the bundle. */
+  package: string
+  /** Settings navigation label and section title. */
+  label: string
 }
 
 /** Compares public registry responses on the Host; the Client owns the initial selection. */
@@ -27,6 +37,10 @@ export default class PluginRegistryProbe extends TypertRemoteService {
     registryProbeEnabled: z.boolean().default(true),
     registryProbeTimeoutMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(1500),
     registryProbeCacheTtlMs: z.natural().default(300000),
+    settingsSections: z.array(z.object({
+      package: z.string().min(1).required(),
+      label: z.string().min(1).required(),
+    })).default([]),
   })
 
   private readonly lifetime = new AbortController()
