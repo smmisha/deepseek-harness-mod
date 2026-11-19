@@ -108,7 +108,7 @@ export function AccentRow({ accent, setAccent, t }: AppearanceOptionsProps) {
           </label>
         ))}
         <label className={clsx(css.swatch, css.customSwatch, custom && css.swatchSelected)}
-          style={(custom ? { '--swatch': value } : { '--swatch-wheel': HUE_WHEEL }) as CSSProperties} title={t('accent.custom')}>
+          style={custom ? { '--swatch': value } as CSSProperties : { '--swatch-wheel': HUE_WHEEL } as CSSProperties} title={t('accent.custom')}>
           <input type="color" className={css.colorInput} value={custom ? value : '#5b6bff'}
             aria-label={t('accent.custom')}
             onChange={(event) => {

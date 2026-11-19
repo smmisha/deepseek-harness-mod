@@ -71,13 +71,13 @@ export type LinkOpening = 'sidebar' | 'new-tab'
 export const DEFAULT_LINK_OPENING: LinkOpening = 'sidebar'
 
 /** How user messages sit in the transcript: right-aligned filled bubbles, or flat left-aligned rows. */
-export const MESSAGE_LAYOUTS = ['bubble', 'flat'] as const
+export const USER_TURN_LAYOUTS = ['bubble', 'flat'] as const
 
 /** User-message presentation. */
-export type MessageLayout = typeof MESSAGE_LAYOUTS[number]
+export type MessageLayout = typeof USER_TURN_LAYOUTS[number]
 
 /** Keep bubbles for users without an explicit preference. */
-export const DEFAULT_MESSAGE_LAYOUT: MessageLayout = 'bubble'
+export const DEFAULT_USER_TURN_LAYOUT: MessageLayout = 'bubble'
 
 /** Widest share of the conversation column a user bubble may take. */
 export const BUBBLE_WIDTHS = ['narrow', 'standard', 'wide', 'full'] as const
@@ -111,7 +111,7 @@ export const ChatSettingsFields = {
   [COLLAPSE_TIMING_FIELD]: z.union([...COLLAPSE_TIMINGS]).default(DEFAULT_COLLAPSE_TIMING),
   [FOLDED_REPLIES_FIELD]: z.union([...FOLDED_REPLIES]).default(DEFAULT_FOLDED_REPLIES),
   linkOpening: z.union(['sidebar', 'new-tab']).default(DEFAULT_LINK_OPENING),
-  messageLayout: z.union([...MESSAGE_LAYOUTS]).default(DEFAULT_MESSAGE_LAYOUT),
+  messageLayout: z.union([...USER_TURN_LAYOUTS]).default(DEFAULT_USER_TURN_LAYOUT),
   bubbleWidth: z.union([...BUBBLE_WIDTHS]).default(DEFAULT_BUBBLE_WIDTH),
   performanceUsage: z.union([...PERFORMANCE_USAGE_MODES]).default(DEFAULT_PERFORMANCE_USAGE),
   // Missing and unrecognized modes defer to the client's default.

@@ -143,10 +143,16 @@ describe('ui-theme apply', () => {
     await fiber.await()
     const entry = b.slots.entries(SLOT).find(e => e.options.id === 'palette')!
     expect(b.slots.entries(SLOT).map(e => e.options.id)).toEqual(expect.arrayContaining(['palette', 'accent', 'motion']))
-    const face = (entry.inject as unknown as () => AppearanceOptionsInjected)()
-    face.setPalette('moonlight')
-    face.setAccent('#e8457c')
-    face.setMotion('none')
+    const face = entry.inject?.() ?? {}
+    const call = (setter: keyof AppearanceOptionsInjected, value: string): void => {
+      const write = face[setter]
+      if (typeof write !== 'function') throw new Error(`no ${setter}`)
+      const run = write as (next: string) => void
+      run(value)
+    }
+    call('setPalette', 'moonlight')
+    call('setAccent', '#e8457c')
+    call('setMotion', 'none')
     const theme = b.ctx.get('theme') as ThemeRuntime
     expect(theme.getTheme().active.tokens['--dsw-alias-state-business-primary']).toBe('#e8457c')
     await vi.waitFor(() => {

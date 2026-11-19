@@ -2,7 +2,7 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  DEFAULT_BUBBLE_WIDTH, DEFAULT_MESSAGE_LAYOUT, type BubbleWidth, type ChatSettings, type MessageLayout,
+  DEFAULT_BUBBLE_WIDTH, DEFAULT_USER_TURN_LAYOUT, type BubbleWidth, type ChatSettings, type MessageLayout,
 } from '../chat-settings.ts'
 
 /**
@@ -30,7 +30,7 @@ export const BUBBLE_WIDTH_VARIABLES = {
 export class MessageLayoutPolicy {
   private readonly unsubscribe: () => void
   /** Current layout, reconciled with accepted Host settings when available. */
-  readonly layout = createSnapshotStore<MessageLayout>(DEFAULT_MESSAGE_LAYOUT)
+  readonly layout = createSnapshotStore<MessageLayout>(DEFAULT_USER_TURN_LAYOUT)
   /** Current bubble width preset, reconciled with accepted Host settings when available. */
   readonly width = createSnapshotStore<BubbleWidth>(DEFAULT_BUBBLE_WIDTH)
 

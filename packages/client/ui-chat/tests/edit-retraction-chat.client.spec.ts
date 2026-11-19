@@ -27,7 +27,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
 ]
 
 function at(seq: number, type: string, data: unknown, extra: Record<string, unknown> = {}): SessionLiveEventEntry {
-  return { type: 'event', event: { seq, time: 1_700_000_000_000 + seq, type, data, ...extra } as unknown as SessionEvent }
+  return { type: 'event', event: { seq, time: 1_700_000_000_000 + seq, type, data, ...extra } as SessionEvent }
 }
 
 function input(id: string, text: string, kind = 'user') {
