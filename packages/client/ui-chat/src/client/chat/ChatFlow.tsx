@@ -27,7 +27,7 @@ export const ChatFlow = memo(function ChatFlow({
   entries, pendingInputs, lastInputTurn, deferCollapse,
   useSession, useChat, useChatNode, useChatNodeBottom, useChatNodeProcess, useChatGroup, usePresentation, useConnectionState,
   useStore, actions, renderSlot, renderFactorySlot, t, useGroupAction, useGroupHeaderAction,
-  cwd, openFile, inspectCall, forkAt, loadImage,
+  cwd, openFile, inspectCall, forkAt, loadImage, pendingSteer,
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
   const running = useSession(snapshot => snapshot.running)
@@ -77,7 +77,7 @@ export const ChatFlow = memo(function ChatFlow({
     const row = isLocalSubmission(item)
       ? <PendingSubmissionBubble key={item.requestId} submission={item}
         loadImage={loadImage} renderFactorySlot={renderFactorySlot} t={t} />
-      : <PendingSteeringBubble key={item.id} content={item.content}
+      : <PendingSteeringBubble key={item.id} itemId={item.id} content={item.content} pendingSteer={pendingSteer}
         loadImage={loadImage} renderFactorySlot={renderFactorySlot} t={t} />
     if (index <= firstTranscript) leadingRows.push(row)
     else if (isTranscriptEcho(item)) openingRows.push(row)

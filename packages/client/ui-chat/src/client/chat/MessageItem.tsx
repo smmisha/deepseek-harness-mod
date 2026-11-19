@@ -2,16 +2,21 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import type { ReactNode, Ref } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PropsRenderFactories, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { UserTextFacts } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { JsonBlock, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  IconEditOutlineRegular, IconTrashOutlineRegular, JsonBlock, StateDot, TextShimmer, Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, UserContentAttachment, UserContentData, UserContentInput,
+  ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, PendingSteerActions, UserContentAttachment, UserContentData,
+  UserContentInput,
 } from '../contract/slots.ts'
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { EditMessageEditor } from './EditMessageEditor.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
+import iconCss from './MessageIconActions.module.css'
 import css from './MessageItem.module.css'
 
 const EMPTY_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {}
@@ -276,15 +281,49 @@ function UserStyleBubble({
 
 /**
  * Render one Host-authoritative pending steering item with the same visual
- * language as its eventual durable transcript node.
- * @param props - pending content, authorized image loader, and Factory/locale seats.
+ * language as its eventual durable transcript node. The pencil edits its text
+ * in place and the trash removes it, both only while the Host still holds the
+ * item; a refused change is reported in the composer.
+ * @param props - item identity and content, its Host actions, authorized image loader, and Factory/locale seats.
  * @returns the pending steering bubble.
  */
-export function PendingSteeringBubble({ content, loadImage, renderFactorySlot, t }: {
+export function PendingSteeringBubble({ itemId, content, pendingSteer, loadImage, renderFactorySlot, t }: {
+  itemId: MessageId
   content: readonly unknown[]
+  pendingSteer: PendingSteerActions
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
   t: ChatViewSlotProps['t']
 } & Pick<ChatNodeOwnerProps, 'loadImage'>): ReactNode {
+  const [edit, setEdit] = useState<{ readonly text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  // Latest editor state and Host actions for the unmount notice, which must not re-run on re-render.
+  const live = useRef({ edit, pendingSteer, t })
+  const reported = useRef(false)
+  useEffect(() => { live.current = { edit, pendingSteer, t } }, [edit, pendingSteer, t])
+  // The running step admits pending steering and unmounts this bubble; an edit still open then is
+  // announced in the composer instead of disappearing with the bubble.
+  useEffect(() => () => {
+    const { edit: open, pendingSteer: steer, t: label } = live.current
+    if (open !== null && !reported.current) steer.notify(label('steering.admitted'))
+  }, [])
+  const update = async (action: { readonly kind: 'edit'; readonly text: string } | { readonly kind: 'remove' }): Promise<boolean> => {
+    setBusy(true)
+    try {
+      await pendingSteer.update(itemId, action)
+      return true
+    } catch (_refused: unknown) {
+      // The Host refuses a change once the running step has admitted the message.
+      reported.current = true
+      pendingSteer.notify(t('steering.failed'))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  const save = async (): Promise<void> => {
+    if (edit === null || edit.text.trim() === '') return
+    if (await update({ kind: 'edit', text: edit.text })) setEdit(null)
+  }
   return (
     <UserStyleBubble
       node={UNDECORATED_ROW}
@@ -293,11 +332,51 @@ export function PendingSteeringBubble({ content, loadImage, renderFactorySlot, t
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
       pending
-      actions={text => (
+      editor={edit === null
+        ? undefined
+        : (
+          <EditMessageEditor
+            text={edit.text}
+            onChange={(text) => { setEdit({ text }) }}
+            onSave={() => { void save() }}
+            onCancel={() => { setEdit(null) }}
+            t={t}
+          />
+        )}
+      actions={copyText => (
         <MessageIconActions
-          text={text}
+          text={copyText}
           clock="start"
           className={css.actions}
+          extraActions={(
+            <>
+              <Tooltip portal label={t('message.edit')} side="bottom" delayMs={500}>
+                <button
+                  type="button"
+                  className={iconCss.action}
+                  aria-label={t('message.edit')}
+                  disabled={busy}
+                  onClick={() => {
+                    reported.current = false
+                    setEdit({ text: contentParts(content).text })
+                  }}
+                >
+                  <IconEditOutlineRegular size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip portal label={t('steering.remove')} side="bottom" delayMs={500}>
+                <button
+                  type="button"
+                  className={iconCss.action}
+                  aria-label={t('steering.remove')}
+                  disabled={busy}
+                  onClick={() => { void update({ kind: 'remove' }) }}
+                >
+                  <IconTrashOutlineRegular size={14} />
+                </button>
+              </Tooltip>
+            </>
+          )}
           t={t}
         />
       )}

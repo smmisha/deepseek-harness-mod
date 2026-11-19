@@ -263,6 +263,10 @@ export function apply(ctx: Context): void {
           fileDrag: ctx.fileDrag.actions,
           hooks: { presentation, interactionIds: ctx.uiConversation.interactions },
           dispatchInteraction: gesture => ctx.uiConversation.interactions.dispatch(sessionId, gesture),
+          pendingSteer: {
+            update: (itemId, action) => ctx.uiConversation.updatePendingSteer(sessionId, itemId, action),
+            notify: (text) => { ctx.uiConversation.notifyPendingSteer(sessionId, text) },
+          },
           // Files open in the right Sidebar, not in a desktop application: the
           // content stays in the product, beside the conversation that produced
           // it. A relative path resolves from the Session's working directory

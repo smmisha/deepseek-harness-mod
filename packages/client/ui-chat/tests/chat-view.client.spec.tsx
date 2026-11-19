@@ -523,6 +523,7 @@ function makeHarness(
   const props: HarnessStandardProps = {
     fileDrag,
     resolveFilePath: vi.fn((path: string) => path),
+    pendingSteer: { update: vi.fn(() => Promise.resolve()), notify: vi.fn() },
     renderFactorySlot,
     usePanelInfo: selector => selector({ activePanelId: null }),
     sessionId: SID,

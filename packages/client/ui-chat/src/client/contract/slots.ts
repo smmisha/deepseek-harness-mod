@@ -338,10 +338,25 @@ export interface PerformanceUsageInjected {
   }
 }
 
+/** Host actions on a steering message the running Turn has not admitted yet. */
+export interface PendingSteerActions {
+  /**
+   * Replace the text of, or remove, one pending steering message.
+   * @param itemId - identity of the message in the Session's Inbox projection.
+   * @param action - replacement text for an edit, or removal.
+   * @returns resolves when the Host accepts; rejects when the Host refuses, for example after admission.
+   */
+  readonly update: (itemId: MessageId, action: { readonly kind: 'edit'; readonly text: string } | { readonly kind: 'remove' }) => Promise<void>
+  /** Show a notice in the composer of the same Session. */
+  readonly notify: (text: string) => void
+}
+
 /** Business callbacks injected into the Chat view. */
 export interface ChatViewInjected {
   /** File preparation and failure callbacks owned by the file-drag plugin. */
   readonly fileDrag: FileDragActions
+  /** Edit and remove actions for steering messages still waiting for the running step. */
+  readonly pendingSteer: PendingSteerActions
   /** Resolve the reference against this Session and its current path base when the gesture begins. */
   resolveFilePath: (path: string) => string
   /** Dispatch one gesture to the Conversation plugin registry. */
@@ -394,6 +409,8 @@ export interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,
   readonly pendingInputs: readonly (PendingSubmission | InboxState['next-step'][number])[]
   readonly lastInputTurn: number | undefined
   readonly deferCollapse: boolean
+  /** Edit and remove actions for the pending steering rows in `pendingInputs`. */
+  readonly pendingSteer: PendingSteerActions
 }
 
 /** Full props of the Chat-owned flow renderer. */
