@@ -14,7 +14,7 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 
-import type { CacheRetention, ChatTemplateKwargValue, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
+import type { Api, CacheRetention, ChatTemplateKwargValue, Model, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -42,9 +42,17 @@ import type {
   RouteCatalog,
 } from './catalog.ts'
 import { buildProvider, supportedProtocols } from './provider.ts'
+import { defaultModelListingUrl } from './live-listing.ts'
+import type { ModelListingSpec } from './live-listing.ts'
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
+
+/** Age after which a served model listing refreshes in the background (ten minutes). */
+export const DEFAULT_MODEL_LISTING_MAX_AGE_MS = 600_000
+
+/** Limit on one served model listing request (ten seconds). */
+export const DEFAULT_MODEL_LISTING_TIMEOUT_MS = 10_000
 
 /**
  * Default request-level bound on base64-encoded image payload. Every image in
@@ -161,6 +169,22 @@ export interface PiAiProviderProfile {
    * to answer instead.
    */
   defaultInput?: PiAiModality[]
+  /**
+   * Whether this route offers the models its gateway's served-model listing names
+   * now (default true). A route whose `models` list is written keeps that list; a
+   * listing never replaces it.
+   */
+  followModelListing?: boolean
+  /**
+   * URL of the served-model listing this route follows. Absent, a built-in route
+   * still on its provider's default endpoint follows that provider's listing; a
+   * route pointed elsewhere follows none unless it names a URL here.
+   */
+  modelListingUrl?: string
+  /** Age after which a served listing refreshes in the background (default 600,000). */
+  modelListingMaxAgeMs?: number
+  /** Limit on one served listing request before it counts as failed (default 10,000). */
+  modelListingTimeoutMs?: number
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */
@@ -216,6 +240,8 @@ export interface ResolvedPiAiProviderProfile
   displayName: string
   /** Validated credential reference, when one is configured. */
   apiKeyEnv?: CredentialRef
+  /** Served-model listing this route follows, when it follows one. */
+  modelListing?: ModelListingSpec
   /** Positive finite provider-idle interval after defaulting. */
   streamIdleTimeoutMs: number
   /** Positive request-level base64 image payload bound after defaulting. */
@@ -363,6 +389,10 @@ const profile = z.object({
   defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
   defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
+  followModelListing: z.boolean(),
+  modelListingUrl: z.string(),
+  modelListingMaxAgeMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS),
+  modelListingTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS),
   headers: z.dict(z.string()),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
@@ -438,9 +468,41 @@ function assertValidHeaders(provider: string, headers: Readonly<Record<string, s
  * @param validation - writes require a complete catalog; stored reads retain catalog diagnostics.
  * @returns validated profiles in configuration order.
  */
+/**
+ * The served-model listing a route follows, or undefined when it follows none. A
+ * route that writes its own `models` list keeps that list, and a route that turns
+ * the listing off keeps the installed catalog.
+ * @param provider - route key.
+ * @param source - the route's configuration as written.
+ * @returns the listing with its defaults applied, or undefined.
+ * @throws Error when the listing URL is not an absolute http(s) URL.
+ */
+function resolveModelListing(provider: string, source: PiAiProviderProfile): ModelListingSpec | undefined {
+  if (source.followModelListing === false) return undefined
+  if (source.models !== undefined && source.models.length > 0) return undefined
+  const url = source.modelListingUrl ?? defaultModelListingUrl(provider, source.baseURL)
+  if (url === undefined) return undefined
+  if (!/^https?:\/\//.test(url)) {
+    throw new Error(`llm-pi-ai: provider "${provider}" modelListingUrl must be an absolute http(s) URL`)
+  }
+  return {
+    url,
+    maxAgeMs: source.modelListingMaxAgeMs ?? DEFAULT_MODEL_LISTING_MAX_AGE_MS,
+    timeoutMs: source.modelListingTimeoutMs ?? DEFAULT_MODEL_LISTING_TIMEOUT_MS,
+  }
+}
+
+/**
+ * Validate every route of a configuration dict and resolve it to serviceable profiles.
+ * @param providers - configured routes keyed by route key; absent means none.
+ * @param validation - strict writes reject every catalog error; deferred reads retain diagnostics.
+ * @param liveModelsOf - the served-model listing of a route, when one has loaded.
+ * @returns the resolved profiles keyed by route key.
+ */
 export function resolveProfiles(
   providers: Readonly<Record<string, PiAiProviderProfile>> | undefined,
   validation: 'strict' | 'deferred' = 'strict',
+  liveModelsOf: (provider: string) => ReadonlyMap<string, Model<Api>> | undefined = () => undefined,
 ): Map<string, ResolvedPiAiProviderProfile> {
   if (Array.isArray(providers)) {
     throw new Error('llm-pi-ai: providers is now a dict keyed by provider route, not an array of profiles')
@@ -498,12 +560,15 @@ export function resolveProfiles(
     // always shown route keys, and a catalog route must not silently rename
     // itself on every configuration surface just because it gained a profile.
     const displayName = source.displayName ?? provider
+    const modelListing = resolveModelListing(provider, source)
+    const liveModels = modelListing === undefined ? undefined : liveModelsOf(provider)
     let catalog: RouteCatalog | undefined
     let piProvider: Provider | undefined
     let catalogError: string | undefined
     try {
       catalog = resolveRouteModels({
         provider,
+        ...liveModels === undefined ? {} : { liveModels },
         ...source.api === undefined ? {} : { api: source.api },
         ...source.baseURL === undefined ? {} : { baseURL: source.baseURL },
         ...source.models === undefined ? {} : { models: source.models },
@@ -526,8 +591,13 @@ export function resolveProfiles(
       if (validation === 'strict' || !(error instanceof PiAiCatalogError)) throw error
       catalogError ??= error.message
     }
-    const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    const {
+      apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, followModelListing: _follow,
+      modelListingUrl: _listingUrl, modelListingMaxAgeMs: _listingMaxAge, modelListingTimeoutMs: _listingTimeout,
+      ...rest
+    } = source
     resolved.set(provider, {
+      ...modelListing === undefined ? {} : { modelListing },
       ...rest,
       provider,
       displayName,

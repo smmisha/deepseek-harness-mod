@@ -41,6 +41,9 @@ export function AccountMenu({
   const profile = account.details?.profile
   const label = profile === undefined ? null : profile.status === 'ready'
     ? profile.value.name ?? profile.value.contact ?? t('signedIn') : t('signedIn')
+  // The trigger's name states which account the menu belongs to; signed out it names the
+  // visible "More" launcher instead of replacing it.
+  const triggerLabel = signedIn ? t('menuSignedIn', { name: label ?? t('signedIn') }) : t('menuSignedOut')
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
@@ -61,7 +64,7 @@ export function AccountMenu({
       active: signedIn && !account.desktopOnboardingVisible && !account.onboarding, openAccount,
     })}</div>
     <Menu open={open} side="top" portal autoFocus className={css.anchor} listClassName={signedIn ? undefined : css.signedOutMenu}
-      anchor={<button ref={trigger} type="button" className={css.trigger} data-collapsed={!wide} data-signed-out={!signedIn} aria-label={t('menu')}
+      anchor={<button ref={trigger} type="button" className={css.trigger} data-collapsed={!wide} data-signed-out={!signedIn} aria-label={triggerLabel}
         aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
         {signedIn
           ? <span className={css.avatar} data-avatar-status={account.avatar?.status}>

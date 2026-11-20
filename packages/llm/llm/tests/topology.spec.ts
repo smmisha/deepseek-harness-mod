@@ -316,6 +316,63 @@ describe('model discovery registry', () => {
   })
 })
 
+describe('listing refresh registry', () => {
+  it('offers one reload per settings namespace and disposes with its fiber', async () => {
+    const ctx = await setup()
+    const refresh = vi.fn(() => Promise.resolve())
+
+    const dispose = ctx.llm.registerListingRefresh('llm-example', refresh)
+    await expect(ctx.llm.refreshListing('llm-example', 'known-route')).resolves.toBeUndefined()
+    expect(refresh).toHaveBeenCalledWith('known-route')
+
+    // Disposal is observed through the offer itself, which is the only thing
+    // the registration ever produced.
+    dispose()
+    await expect(ctx.llm.refreshListing('llm-example', 'known-route'))
+      .rejects.toMatchObject({ code: 'NO_LISTING_REFRESH' })
+  })
+
+  it('rejects an unnamed namespace and a second registration of the same one', async () => {
+    const ctx = await setup()
+    const refresh = (): Promise<void> => Promise.resolve()
+
+    expect(() => ctx.llm.registerListingRefresh('', refresh)).toThrow(/non-empty settings namespace/)
+    ctx.llm.registerListingRefresh('llm-example', refresh)
+    expect(() => ctx.llm.registerListingRefresh('llm-example', refresh)).toThrow(/already registered/)
+    // The refused second registration left the first one serving.
+    await expect(ctx.llm.refreshListing('llm-example', 'known-route')).resolves.toBeUndefined()
+  })
+
+  it('carries cancellation into Remote refresh and maps owner failures', async () => {
+    const ctx = await setup()
+    const refresh = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('route offline'))
+      .mockRejectedValueOnce('owner refused')
+    ctx.llm.registerListingRefresh('llm-example', refresh)
+    const signal = new AbortController().signal
+
+    await expect(ctx.llm.remoteRefreshListing('llm-example', 'known-route', signal)).resolves.toBeUndefined()
+    expect(refresh).toHaveBeenNthCalledWith(1, 'known-route', signal)
+
+    await expect(ctx.llm.remoteRefreshListing('llm-example', 'known-route', signal)).rejects.toMatchObject({
+      code: 'llm/model-listing-refresh-rejected',
+      message: 'route offline',
+      details: { settingsNs: 'llm-example', provider: 'known-route' },
+    })
+    await expect(ctx.llm.remoteRefreshListing('llm-example', 'other-route', signal)).rejects.toMatchObject({
+      code: 'llm/model-listing-refresh-rejected',
+      message: 'owner refused',
+      details: { settingsNs: 'llm-example', provider: 'other-route' },
+    })
+  })
+
+  it('refuses a namespace nothing serves', async () => {
+    const ctx = await setup()
+    await expect(ctx.llm.refreshListing('llm-absent', 'known-route')).rejects.toMatchObject({ code: 'NO_LISTING_REFRESH' })
+  })
+})
+
 describe('imageRequestPricing resolution', () => {
   it('resolves the owning adapter declaration and degrades everywhere else to undefined', async () => {
     const ctx = await setup()

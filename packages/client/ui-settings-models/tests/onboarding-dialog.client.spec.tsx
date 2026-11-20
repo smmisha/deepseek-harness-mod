@@ -112,6 +112,7 @@ function harness(options: {
           }],
       )),
       discoverModels: () => Promise.resolve(remoteOk([])),
+      refreshListing: () => Promise.resolve(remoteOk(undefined)),
     },
     settings: {
       describe: () => Promise.resolve(remoteOk({

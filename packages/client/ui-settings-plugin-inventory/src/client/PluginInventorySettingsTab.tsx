@@ -8,9 +8,8 @@ import {
   IconSearchOutlineRegular,
   Menu,
   StateDot,
-  Tag,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { StateDotState, TagTone } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './PluginInventorySettingsTab.module.css'
@@ -207,7 +206,7 @@ function CardFacts({ moduleName, moduleLabel, entryId, facts }: {
  * `unloading` are both live transitions the Host is running — an async
  * disposer can hold `unloading` for a while — so both animate. `active` and
  * `failed` carry no dot: a settled enabled row needs no marker, and a failed
- * row has the failure tag. */
+ * row states its own failure. */
 const PHASE_DOT_STATES = {
   pending: 'idle',
   loading: 'ongoing',
@@ -236,16 +235,24 @@ function PhaseDot({ phase, t }: { readonly phase: DotPhase; readonly t: Translat
 /** Enablement states one inventory row can report. */
 type EnablementKind = 'enabled' | 'disabled' | 'conditional' | 'preset' | 'failed'
 
-const TAG_TONES = {
-  disabled: 'neutral',
+/* A state that changes what the plugin does carries a semantic dot: an enabled
+ * row is a settled fact with no marker, a disabled one is idle, a conditional
+ * one may need attention, and a preset-provided row is in effect per session. */
+const STATE_DOTS = {
+  disabled: 'idle',
   conditional: 'warning',
-  preset: 'info',
-  failed: 'danger',
-} as const satisfies Record<Exclude<EnablementKind, 'enabled'>, TagTone>
+  preset: 'done',
+  failed: 'error',
+} as const satisfies Record<Exclude<EnablementKind, 'enabled'>, StateDotState>
 
-/** Enablement tag for the states that depart from the default; a plainly enabled row carries none. */
-function StateTag({ kind, label }: { readonly kind: EnablementKind; readonly label: string }): ReactNode {
-  return kind === 'enabled' ? null : <Tag tone={TAG_TONES[kind]}>{label}</Tag>
+/** Enablement state for the states that depart from the default, as the Skills tab states one: a dot plus its word. */
+function RowState({ kind, label }: { readonly kind: EnablementKind; readonly label: string }): ReactNode {
+  return kind === 'enabled' ? null : (
+    <span className={css.cardState}>
+      <StateDot state={STATE_DOTS[kind]} />
+      {label}
+    </span>
+  )
 }
 
 /** Render the read-only plugin inventory: agent presets first, then the global plane. */
@@ -332,8 +339,8 @@ export function PluginInventorySettingsTab(
     const { title, description } = pluginText(row, resolveText)
     const failed = row.fiberPhase === 'failed'
     const stateText = failed
-      ? t('failedTag')
-      : row.enabled === true ? t('enabledTag') : row.enabled === false ? t('disabledTag') : t('conditionalTag')
+      ? t('failedState')
+      : row.enabled === true ? t('enabledState') : row.enabled === false ? t('disabledState') : t('conditionalState')
     const kind = failed ? 'failed' : row.enabled === true ? 'enabled' : row.enabled === false ? 'disabled' : 'conditional'
     return (
       <PluginCard
@@ -353,7 +360,7 @@ export function PluginInventorySettingsTab(
             {row.enabled === true && showsPhaseDot(row.fiberPhase)
               ? <PhaseDot phase={row.fiberPhase} t={t} />
               : null}
-            <StateTag kind={kind} label={stateText} />
+            <RowState kind={kind} label={stateText} />
           </>
         )}
       >
@@ -381,8 +388,8 @@ export function PluginInventorySettingsTab(
     const { title, description } = pluginText(entry, resolveText)
     const failed = entry.fiberPhase === 'failed'
     const stateText = failed
-      ? t('failedTag')
-      : providers !== undefined ? t('presetEnabledTag') : t(entry.enabled ? 'enabledTag' : 'disabledTag')
+      ? t('failedState')
+      : providers !== undefined ? t('presetEnabledState') : t(entry.enabled ? 'enabledState' : 'disabledState')
     const kind = failed ? 'failed' : providers !== undefined ? 'preset' : entry.enabled ? 'enabled' : 'disabled'
     return (
       <PluginCard
@@ -402,7 +409,7 @@ export function PluginInventorySettingsTab(
             {entry.enabled && showsPhaseDot(entry.fiberPhase)
               ? <PhaseDot phase={entry.fiberPhase} t={t} />
               : null}
-            <StateTag kind={kind} label={stateText} />
+            <RowState kind={kind} label={stateText} />
           </>
         )}
       >
@@ -416,7 +423,7 @@ export function PluginInventorySettingsTab(
               [t('enabledIn'), providers.map(preset => presetName(preset)).join(' · ')],
             ]
             : [
-              [t('configuration'), t(entry.enabled ? 'enabledTag' : 'disabledTag')],
+              [t('configuration'), t(entry.enabled ? 'enabledState' : 'disabledState')],
               ...entry.enabled ? [[t('runtime'), phaseLabel(entry.fiberPhase, t)] as const] : [],
             ]}
         />
@@ -447,6 +454,7 @@ export function PluginInventorySettingsTab(
             <div key={slot} className={css.skeletonCard} aria-hidden="true">
               <span className={css.skeletonBar} />
               <span className={css.skeletonBar} />
+              <span className={css.skeletonChip} />
             </div>
           ))}
         </div>

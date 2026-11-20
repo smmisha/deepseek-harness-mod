@@ -30,6 +30,13 @@ export type ModelDiscoveryOutcome =
   /** The interrogation was refused, with the Host's own diagnostic. */
   | { readonly kind: 'refused'; readonly message: string }
 
+/** What one on-demand model-listing reload answered. */
+export type ListingRefreshOutcome =
+  /** The route reloaded its followed listing; open model pickers update through `llm/models-updated`. */
+  | { readonly kind: 'refreshed' }
+  /** The reload was refused, with the Host's own diagnostic. */
+  | { readonly kind: 'refused'; readonly message: string }
+
 /** The Host operations the Models page and its cards invoke. */
 export interface ModelsOperations {
   /**
@@ -65,6 +72,13 @@ export interface ModelsOperations {
    * @returns the candidates, or the refusal.
    */
   discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<ModelDiscoveryOutcome>
+  /**
+   * Discard one provider route's cached model listing and reload it now.
+   * @param settingsNs - namespace whose adapter family serves the reload.
+   * @param provider - route whose followed listing to reload.
+   * @returns the reload outcome the row renders from.
+   */
+  refreshListing(settingsNs: string, provider: string): Promise<ListingRefreshOutcome>
 }
 
 /**
@@ -94,6 +108,10 @@ export function createModelsOperations(ctx: ClientContext): ModelsOperations {
       return response.ok
         ? { kind: 'found', models: response.value }
         : { kind: 'refused', message: response.error.message }
+    },
+    refreshListing: async (settingsNs, provider) => {
+      const response = await ctx.remote.llm.refreshListing(settingsNs, provider)
+      return response.ok ? { kind: 'refreshed' } : { kind: 'refused', message: response.error.message }
     },
   }
 }

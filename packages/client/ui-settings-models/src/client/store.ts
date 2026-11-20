@@ -33,7 +33,26 @@ export interface ProviderDirectoryEntry {
   readonly defaultBaseURL?: string
   readonly baseURLEnv?: readonly string[]
   readonly nativeAuth?: LlmNativeAuth
+  /** The adapter caches a followed `/models` listing and offers an on-demand reload. */
+  readonly listingRefresh?: true
   readonly error?: string
+}
+
+/**
+ * Whether the user layer replaces the model catalog a route would otherwise
+ * follow. This is the editor's own inherited/customized read, taken from the
+ * published namespace view so a row action can decide from the same facts.
+ * @param entry - the directory row naming the profile address.
+ * @param namespace - the namespace view, when the load resolved it.
+ * @param schema - settings schema operations.
+ * @returns true when the stored user profile pins `models`.
+ */
+export function replacesCatalog(
+  entry: ProviderDirectoryEntry,
+  namespace: SettingsNamespaceView | undefined,
+  schema: SettingsSchemaOperations,
+): boolean {
+  return namespace !== undefined && schema.hasPath(schema.getPath(namespace.user, entry.settingsPath), ['models'])
 }
 
 /**
@@ -58,6 +77,7 @@ export function joinProviderDirectory(
     ...entry.defaultBaseURL === undefined ? {} : { defaultBaseURL: entry.defaultBaseURL },
     ...entry.baseURLEnv === undefined ? {} : { baseURLEnv: entry.baseURLEnv },
     ...entry.nativeAuth === undefined ? {} : { nativeAuth: entry.nativeAuth },
+    ...entry.listingRefresh === undefined ? {} : { listingRefresh: entry.listingRefresh },
     ...entry.error === undefined ? {} : { error: entry.error },
   }))
   for (const provider of registered) {
@@ -85,6 +105,13 @@ export interface ProviderRow {
   configured: boolean
   /** Whether the user layer alone carries the profile (removal restores the base). */
   removable: boolean
+  /**
+   * Whether the row offers reloading its followed model listing now: the
+   * adapter declared the capability and the user layer does not replace the
+   * catalog it would follow. The same read the editor uses to decide between
+   * inherited and customized models, so the row and the editor cannot disagree.
+   */
+  listingRefresh: boolean
   /** The credential reference the resolved profile names, when one does. */
   apiKeyEnv: string | undefined
   /** Credential state for {@link apiKeyEnv}, once described. */
@@ -260,6 +287,7 @@ export class ModelsSettingsStore {
         entry,
         configured,
         removable,
+        listingRefresh: entry.listingRefresh === true && !replacesCatalog(entry, namespace, this.schema),
         apiKeyEnv: entry.provider === 'deepseek-account' ? undefined : apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
         credential: undefined,
       }

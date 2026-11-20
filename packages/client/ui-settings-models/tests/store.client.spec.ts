@@ -1,6 +1,6 @@
 /** Page-store join: directory × namespaces × credentials, with last-good rows on failure. */
 import { describe, expect, it } from 'vitest'
-import type { RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
+import type { RpcResponse, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { settingsSchema } from './settings-schema.client.ts'
@@ -67,13 +67,16 @@ function remoteFail<T>(message: string): RemoteAnswer<T> {
 }
 
 const DIRECTORY = [
-  { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true },
+  {
+    provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true,
+    listingRefresh: true,
+  },
   { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
   { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'anthropic'], active: false },
   { provider: 'ghost', displayName: 'Ghost', settingsNs: '', settingsPath: [], active: true },
 ]
 
-const NAMESPACES = [
+const NAMESPACES: SettingsNamespaceView[] = [
   {
     ns: 'llm-deepseek',
     schema: {},
@@ -204,6 +207,36 @@ describe('ModelsSettingsStore', () => {
     expect(byProvider.get('anthropic')?.apiKeyEnv).toBeUndefined()
     expect(byProvider.get('ghost')).toMatchObject({ configured: false, removable: false })
     expect(state.namespaces.get('llm-pi-ai')?.ns).toBe('llm-pi-ai')
+  })
+
+  it('offers a listing refresh only for a declared catalog the user has not replaced', async () => {
+    const { ctx, mirror } = api()
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    await store.load()
+    const byProvider = new Map(store.store.getSnapshot().rows.map(row => [row.entry.provider, row]))
+    // The adapter declared a followed catalog for the official route and the
+    // user layer pins no models, so the row may reload what it follows.
+    expect(byProvider.get('deepseek-official')?.listingRefresh).toBe(true)
+    // A directory entry without the capability never offers the action.
+    expect(byProvider.get('openai')?.listingRefresh).toBe(false)
+    expect(byProvider.get('ghost')?.listingRefresh).toBe(false)
+
+    const customized = api({
+      describeSettings: () => Promise.resolve(remoteOk({
+        writable: true,
+        hasDocument: false,
+        namespaces: NAMESPACES.map(view => view.ns === 'llm-deepseek'
+          ? { ...view, user: { models: [{ id: 'pinned-model' }] } }
+          : view),
+      })),
+    })
+    const pinned = new ModelsSettingsStore(customized.ctx, settingsSchema, customized.mirror)
+    await pinned.load()
+    const pinnedRows = new Map(pinned.store.getSnapshot().rows.map(row => [row.entry.provider, row]))
+    // Pinning `models` replaces the catalog the route would have followed, so
+    // the row has nothing of the adapter's own left to reload.
+    expect(pinnedRows.get('deepseek-official')?.listingRefresh).toBe(false)
+    expect(pinnedRows.get('openai')?.listingRefresh).toBe(false)
   })
 
   it('degrades the credential badge, not the page, when the credential domain fails', async () => {

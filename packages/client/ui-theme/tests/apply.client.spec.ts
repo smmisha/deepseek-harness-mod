@@ -9,6 +9,7 @@ import { TestRemote, stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, SETTINGS_NS, ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { AppearanceRowInjected, FontSettingsInjected, ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { AppearanceOptionsInjected } from '../src/client/AppearanceOptions.tsx'
 import { THEME_SETTINGS_NAMESPACE, ThemeSettingsSchema, type ThemeSettings } from '../src/theme-settings.ts'
 import { AppearanceRow } from '../src/client/AppearanceRow.tsx'
 import type { createAppearanceRowStore, createFontRowStore } from '../src/client/settings-store.ts'
@@ -35,7 +36,7 @@ async function bench(isLoopback = true) {
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  const section: Record<string, unknown> = { preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '', terminalFontFamily: '' }
+  const section: Record<string, unknown> = { preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13, textFontFamily: '', codeFontFamily: '', terminalFontFamily: '', palette: 'default', accent: '', motion: 'full' }
   const namespace = () => ({
     ns: THEME_SETTINGS_NAMESPACE,
     schema: ThemeSettingsSchema.toJSON(),
@@ -135,6 +136,32 @@ async function keyboardTheme(host = stubConfigForm<ThemeSettings>()) {
 }
 
 describe('ui-theme apply', () => {
+  it('registers the palette, accent, and motion rows and layers their tokens', async () => {
+    const b = await bench()
+    declareItems(b.slots)
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const entry = b.slots.entries(SLOT).find(e => e.options.id === 'palette')!
+    expect(b.slots.entries(SLOT).map(e => e.options.id)).toEqual(expect.arrayContaining(['palette', 'accent', 'motion']))
+    const face = entry.inject?.() ?? {}
+    const call = (setter: keyof AppearanceOptionsInjected, value: string): void => {
+      const write = face[setter]
+      if (typeof write !== 'function') throw new Error(`no ${setter}`)
+      const run = write as (next: string) => void
+      run(value)
+    }
+    call('setPalette', 'moonlight')
+    call('setAccent', '#e8457c')
+    call('setMotion', 'none')
+    const theme = b.ctx.get('theme') as ThemeRuntime
+    expect(theme.getTheme().active.tokens['--dsw-alias-state-business-primary']).toBe('#e8457c')
+    await vi.waitFor(() => {
+      expect(b.mutate.mock.calls.flatMap(([, ops]) => ops.map(op => op.path[0]))).toEqual(['palette', 'accent', 'motion'])
+    })
+    await fiber.dispose()
+    expect(theme.getTheme().active.tokens['--dsw-alias-state-business-primary']).toBeUndefined()
+  })
+
   it('steps all font sizes in one settings mutation and one snapshot', async () => {
     const { theme, keyboard, events, host } = await keyboardTheme()
     keyboard.press()
@@ -172,7 +199,7 @@ describe('ui-theme apply', () => {
   it('adopts all durable font sizes together after a refused batch settles', async () => {
     const host = stubConfigForm<ThemeSettings>()
     const section: ThemeSettings = { preference: 'system', fontSize: 14, codeFontSize: 11, terminalFontSize: 13,
-      textFontFamily: '', codeFontFamily: '', terminalFontFamily: '' }
+      textFontFamily: '', codeFontFamily: '', terminalFontFamily: '', palette: 'default', accent: '', motion: 'full' }
     host.publish({ status: 'ready', value: section, revision: 1, writable: true })
     const { theme, keyboard } = await keyboardTheme(host)
     const write = Promise.withResolvers<boolean>()
@@ -443,7 +470,7 @@ describe('ui-theme apply', () => {
     const b = await bench()
     const host = declareItems(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries(SLOT)).toHaveLength(2)
+    expect(b.slots.entries(SLOT)).toHaveLength(5)
 
     // Collapse: the declarer dies, the cascade removes our entries while the
     // apply closure still holds its (now stale) disposers.
@@ -461,7 +488,7 @@ describe('ui-theme apply', () => {
     declareItems(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(b.slots.entries(SLOT)).toHaveLength(2)
+    expect(b.slots.entries(SLOT)).toHaveLength(5)
     await fiber.dispose()
     expect(b.slots.entries(SLOT)).toHaveLength(0)
     // Dictionary disposal: translation falls back to the bare key.

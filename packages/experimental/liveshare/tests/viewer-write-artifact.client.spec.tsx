@@ -87,7 +87,7 @@ describe('Assembled liveshare viewer page on a writable share', () => {
     }, { timeout: 30_000 })
     expect(document.querySelector('[contenteditable="true"]')).toBeNull()
     expect(document.body.textContent).toContain('仅可查看')
-    expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull()
 
     // The owner widens the share to writing: the same page keeps its transcript, and the composer
     // becomes the reader's — editable, with the running turn's own action.
@@ -115,7 +115,7 @@ describe('Assembled liveshare viewer page on a writable share', () => {
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     }, { timeout: 15_000 })
-    expect(screen.getByRole('button', { name: '停止生成' })).toBeDefined()
+    expect(screen.getByRole('button', { name: '完成当前步骤后停止' })).toBeDefined()
     expect(document.body.textContent).not.toContain('仅可查看')
     // What writing the Session does not carry: the Workspace around it stays the owner's, so no New
     // Session, no Workspace verbs, and no reordering.
@@ -143,8 +143,8 @@ describe('Assembled liveshare viewer page on a writable share', () => {
     await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }) })
     await waitFor(() => { expect(screen.queryByRole('menu')).toBeNull() })
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '停止生成' })) })
-    await waitFor(() => { expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull() })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '完成当前步骤后停止' })) })
+    await waitFor(() => { expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull() })
     expect(owner.cancellations).toEqual(['fx-alpha'])
 
     const userText = 'source artifact typing → Send 精确消息'
@@ -163,8 +163,8 @@ describe('Assembled liveshare viewer page on a writable share', () => {
       && event.data.message.content.some(block => block.type === 'text' && block.text === replyText))).toHaveLength(1)
 
     await inputFixture.send('fx-alpha', 'held generation for Stop', '发送消息')
-    await waitFor(() => { expect(screen.getByRole('button', { name: '停止生成' })).toBeDefined() }, { timeout: 15_000 })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '停止生成' })) })
+    await waitFor(() => { expect(screen.getByRole('button', { name: '完成当前步骤后停止' })).toBeDefined() }, { timeout: 15_000 })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '完成当前步骤后停止' })) })
     await waitFor(() => { expect(owner?.cancellations).toEqual(['fx-alpha', 'fx-alpha']) }, { timeout: 15_000 })
     expect(owner.history('fx-alpha').at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'aborted' } } })
 
@@ -177,7 +177,7 @@ describe('Assembled liveshare viewer page on a writable share', () => {
       expect(document.querySelector('[contenteditable="true"]')).toBeNull()
     }, { timeout: 15_000 })
     expect(document.body.textContent).toContain('仅可查看')
-    expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull()
     expect(screen.getAllByRole('button', { name: '在新对话中分支' }).length).toBeGreaterThan(0)
     const beforeDeniedSend = owner.prompts.length
     const scope = inputFixture.context().get('sessions')?.scope('fx-alpha' as import('@deepseek-ai/dsh-session/types').SessionId)
@@ -199,6 +199,6 @@ describe('Assembled liveshare viewer page on a writable share', () => {
       expect(screen.queryAllByRole('button', { name: '在新对话中分支' })).toHaveLength(0)
     }, { timeout: 15_000 })
     expect(document.body.textContent).toContain('仅可查看')
-    expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull()
   }, 180_000)
 })

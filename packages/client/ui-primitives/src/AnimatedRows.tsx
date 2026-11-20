@@ -1,5 +1,6 @@
 /** React-commit-driven movement and entry/exit fades for keyed rows. */
 import { Component, createRef, type AriaRole, type ReactNode } from 'react'
+import { prefersReducedMotion } from './reduced-motion.ts'
 import css from './AnimatedRows.module.css'
 
 const ROW_FADE_MS = 100
@@ -68,7 +69,7 @@ export class AnimatedRows extends Component<AnimatedRowsProps> {
     if (!this.armed || sameRows(previous, this.props) || previous.resetKey !== this.props.resetKey
       || !previous.ready || !this.props.ready || list === null
       || typeof list.animate !== 'function'
-      || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
+      || prefersReducedMotion()) return null
 
     const viewport = visibleViewport(list)
     const positions = this.readPositions()

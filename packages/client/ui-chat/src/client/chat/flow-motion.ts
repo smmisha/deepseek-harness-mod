@@ -5,6 +5,7 @@
  * and clears temporary styles.
  */
 import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react'
+import { prefersReducedMotion } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useSearchableHidden, type HiddenTransition } from './searchable-hidden.ts'
 
 const FADE_OUT_MS = 70
@@ -95,7 +96,7 @@ export interface FlowMotion extends FlowMotionRows {
  */
 export function motionEnabled(element: HTMLElement): boolean {
   if (element.closest(MOTION_SCOPE) === null) return false
-  return typeof matchMedia !== 'function' || !matchMedia('(prefers-reduced-motion: reduce)').matches
+  return !prefersReducedMotion()
 }
 
 /**
@@ -241,7 +242,7 @@ export function createFlowMotion(
       }
     }
     freezeTravelling()
-    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduced = prefersReducedMotion()
     let started: number | undefined
     let displacement = 0
     const settle = (finishCancelled: boolean): void => {
@@ -320,7 +321,7 @@ export function createFlowMotion(
     if (batch) return
     const current = [...boxes.values()].some(box => box.closing) ? driver() : null
     if (current !== null && runBatch(current)) return
-    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduced = prefersReducedMotion()
     // Without a batch, a held closing row finishes at once and a held revealing row starts its own transition.
     for (const box of [...boxes.values()]) {
       if (reduced || (box.held && box.closing)) box.finish()

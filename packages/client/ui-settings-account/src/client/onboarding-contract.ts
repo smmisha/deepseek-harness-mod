@@ -31,7 +31,7 @@ export interface DesktopOnboardingProps {
   update(this: void, change: OnboardingChange): Promise<boolean>
   complete(this: void, reason: 'completed' | 'skipped'): Promise<boolean>
   retry(this: void): Promise<boolean>
-  /** Active interface language selects the matching illustration artwork. */
-  locale: string
+  /** Active interface language: the page's `lang`, and the artwork family it selects. */
+  language: string
   t: (key: AccountKey) => string
 }

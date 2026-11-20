@@ -1,5 +1,11 @@
+/* The seat anchors its card: the model trigger and the effort chip share it,
+   so the card stays above the seat whichever control opened it. */
 .root {
+  anchor-name: var(--dsh-model-anchor);
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -7,7 +13,6 @@
    12px caption chevron; 28px chip height matches the sibling Plan /
    Read-only selects in the same tool row. */
 .trigger {
-  anchor-name: var(--dsh-model-anchor);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -77,6 +82,48 @@
 .triggerLabel,
 .triggerEffort {
   display: var(--dsh-composer-model-text-display, block);
+}
+
+/* Effort chip: the trigger's chip chrome with the effort in the caption tone.
+   It keeps its text in the compact row, where the model collapses to its icon. */
+.effortChip {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .effortChip:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.effortChip:focus-visible:not([data-selection-focus]) {
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.effortChip:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.effortChipLabel {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chevron {

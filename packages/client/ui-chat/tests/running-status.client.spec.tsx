@@ -12,13 +12,13 @@ const t = makeTranslate(zh, commonZh)
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(5_000) })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-function statusHarness(startTime?: number) {
-  const view = render(<RunningStatus startTime={startTime} paused={false} t={t} />)
+function statusHarness(startTime?: number, stopping?: 'graceful' | 'immediate') {
+  const view = render(<RunningStatus startTime={startTime} paused={false} stopping={stopping} t={t} />)
   return {
     ...view,
     content: () => view.container.querySelector('[data-chat-running] > :last-child'),
-    set: (nextStartTime?: number, paused = false) => {
-      view.rerender(<RunningStatus startTime={nextStartTime} paused={paused} t={t} />)
+    set: (nextStartTime?: number, paused = false, nextStopping?: 'graceful' | 'immediate') => {
+      view.rerender(<RunningStatus startTime={nextStartTime} paused={paused} stopping={nextStopping} t={t} />)
     },
   }
 }
@@ -77,6 +77,23 @@ describe('RunningStatus', () => {
     expect(view.content()?.textContent).toBe('深度求索中，用时 4秒 ···')
     view.set(1_000)
     expect(view.content()?.textContent).toBe('深度求索中，用时 9秒 ···')
+    expect(vi.getTimerCount()).toBe(1)
+  })
+
+  it('names the requested ending instead of the clock while a stop is pending', () => {
+    const view = statusHarness(1_000)
+    expect(vi.getTimerCount()).toBe(1)
+    view.set(1_000, false, 'graceful')
+    expect(view.content()?.textContent).toBe('正在完成当前步骤，随后停止')
+    expect(view.getByRole('status').textContent).toBe('正在完成当前步骤，随后停止')
+    // A pending ending has no clock to advance.
+    expect(vi.getTimerCount()).toBe(0)
+    view.set(1_000, false, 'immediate')
+    expect(view.content()?.textContent).toBe('正在停止…')
+    expect(view.getByRole('status').textContent).toBe('正在停止…')
+    // Clearing the pending stop resumes the clock from the same Turn start.
+    view.set(1_000)
+    expect(view.content()?.textContent).toBe('深度求索中，用时 4秒 ···')
     expect(vi.getTimerCount()).toBe(1)
   })
 })

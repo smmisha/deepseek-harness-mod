@@ -1,0 +1,196 @@
+/* The skill detail panel: a 360px region beside the catalog, divided by the
+   same hairline the catalog rows use. Labels are quiet mono-free small text;
+   machine facts (path, file names, commit) are monospace. */
+
+.detail {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 20px;
+  border-inline-start: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.title {
+  margin: 0 0 2px;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.state[data-state='enabled'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.state[data-state='overridden'] {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.state[data-state='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.section + .section {
+  margin-top: 20px;
+}
+
+.label {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+.description {
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.languageTag {
+  display: inline-flex;
+  margin-top: 8px;
+}
+
+.pathChip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* A path may break anywhere; this is the one place the tab allows it. */
+.path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.copy {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.file[data-script='true'] {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.filePath {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.fileSize {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.scripts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: break-word;
+}
+
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.provenance code {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.commit {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 16px 0 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Under the single-column breakpoint the panel leads the catalog, so opening a
+   row is visible without scrolling past the rest of the list. */
+@media (max-width: 960px) {
+  .detail {
+    order: -1;
+    border-inline-start: 0;
+    border-block-end: 0.5px solid var(--dsw-alias-border-l2);
+  }
+}
+
+/* The remove action sits under the install record it can delete. */
+.remove {
+  margin-top: 10px;
+}

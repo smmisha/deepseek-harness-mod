@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Utilisation",
+    "description": "Utilisation des jetons par jour et par modèle estimée à partir des journaux de session, budgets de jetons par fournisseur sur cinq heures, une semaine et un mois glissants, et solde du compte DeepSeek."
+  }
+}

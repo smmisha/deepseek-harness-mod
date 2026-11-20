@@ -144,7 +144,11 @@ export interface ModelCatalog {
 export type QueueAction =
   | {
     readonly kind: 'edit'
-    /** Non-empty text-only replacement content. */
+    /**
+     * Non-empty text-only replacement content. The Host keeps the queued
+     * message's own image and file blocks, so editing never drops or re-uploads
+     * an attachment the caller cannot name here.
+     */
     readonly content: readonly TextBlock[]
   }
   | { readonly kind: 'remove' }
@@ -204,6 +208,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/attachment-invalid': { readonly reason: string }
     'session/queue-item-not-found': { readonly itemId: MessageId }
     'session/steer-unavailable': { readonly itemId: MessageId }
+    /** The message cannot be edited: it is not a sent user message, left the model's view, or queued input is pending. */
+    'session/edit-unavailable': {
+      readonly reason: 'NOT_A_USER_MESSAGE' | 'NOT_ON_SURFACE' | 'PENDING_INPUT'
+    }
     'session/title-invalid': { readonly sessionId: SessionId }
     'session/fork-unavailable': { readonly sessionId: SessionId }
     'session/migration-required': { readonly sessionId: SessionId }
@@ -362,9 +370,42 @@ export interface SessionUpdateQueueValue {
   readonly accepted: true
 }
 
+/**
+ * Rewind an idle Session to a settled turn-opening user message and send its
+ * edited text in place of it. The Host retracts that message's whole Turn and
+ * every later model-visible message, then queues the edited message as a new
+ * Turn; the retracted records stay in the Session log.
+ */
+export interface SessionEditMessageRequest {
+  /** Client-minted identity persisted on the retraction and on the edited message. */
+  readonly requestId: SessionRequestId
+  readonly sessionId: SessionId
+  /** Exact seq of the `user/message` that opened the edited Turn. */
+  readonly seq: number
+  /** Replacement text; the message's attachments are kept in place. */
+  readonly text: string
+}
+
+/** Receipt after the retraction commits and the edited message is queued. */
+export interface SessionEditMessageValue {
+  readonly accepted: true
+}
+
+/**
+ * How an operator stop request ends the active turn: `graceful` finishes the
+ * current step — the in-flight model response and the tool batch it requested —
+ * and then closes the turn as `stopped`; `immediate` aborts the turn now.
+ */
+export type SessionStopMode = 'graceful' | 'immediate'
+
 /** Active-turn cancellation request. */
 export interface SessionCancelRequest {
   readonly sessionId: SessionId
+  /**
+   * Stop mode. Omission means `immediate`, preserving the behaviour of Clients
+   * that predate stop modes; new Clients always send the chosen mode.
+   */
+  readonly mode?: SessionStopMode
 }
 
 /** Receipt after cancellation is admitted to the live Agent. */
@@ -400,6 +441,12 @@ declare module '@deepseek-ai/dsh-llm' {
     'user-rpc': { kind: 'user'; rpcId: SessionRequestId; clientTimeZone?: string; principal?: Principal }
     /** Empty retry user message with browser prompt correlation and caller metadata. */
     'retry-rpc': { kind: 'retry'; rpcId: SessionRequestId; clientTimeZone?: string; principal?: Principal }
+    /**
+     * Empty user message that retracts an edited Turn and everything after it
+     * from the model-visible surface. It projects to no model message; human
+     * transcripts hide the retracted span through it.
+     */
+    'rewind-rpc': { kind: 'rewind'; rpcId: SessionRequestId; principal?: Principal }
   }
 }
 

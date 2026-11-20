@@ -5,6 +5,7 @@ import type {
   ISessions, SessionBinding, SessionEventSource, SessionEventWindow,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import { WeakMapWithValues } from '@deepseek-ai/dsh-util-values'
 import {
   createSnapshotStore, type ObservableSnapshot, type SnapshotStore,
@@ -299,6 +300,51 @@ export class UiConversation extends Service {
    */
   peekImageUrl(sessionId: SessionId, attachment: ImageAttachmentRef): string | undefined {
     return this.images.peek(sessionId, attachment)
+  }
+
+  /**
+   * Replace the text of, or remove, one steering message the Host has not yet admitted into the running step.
+   * @param sessionId - Session whose Conversation owns the pending message.
+   * @param itemId - identity of the pending message in the Session's Inbox projection.
+   * @param action - replacement text for an edit, or removal.
+   * @returns resolves when the Host accepts the action; rejects when the Host refuses it.
+   */
+  async updatePendingSteer(
+    sessionId: SessionId,
+    itemId: MessageId,
+    action: { readonly kind: 'edit'; readonly text: string } | { readonly kind: 'remove' },
+  ): Promise<void> {
+    const actx = this.sessions.scope(sessionId)
+    const conversation = actx?.get('conversation')
+    if (conversation === undefined) throw new Error(`ui-conversation: session "${sessionId}" has no conversation service`)
+    await conversation.updateQueue(itemId, action.kind === 'edit'
+      ? { kind: 'edit', content: [{ type: 'text', text: action.text }] }
+      : { kind: 'remove' })
+  }
+
+  /**
+   * Rewind one Session to a sent user message and send its edited text as a new Turn.
+   * @param sessionId - Session that owns the message.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns resolves when the Host accepts the edit; rejects when the Host refuses it.
+   */
+  async editMessage(sessionId: SessionId, seq: number, text: string): Promise<void> {
+    const conversation = this.sessions.scope(sessionId)?.get('conversation')
+    if (conversation === undefined) throw new Error(`ui-conversation: session "${sessionId}" has no conversation service`)
+    await conversation.editMessage(seq, text)
+  }
+
+  /**
+   * Show a notice in the composer of one Session.
+   * @param sessionId - Session whose composer shows the notice.
+   * @param text - localized notice text.
+   */
+  notifyPendingSteer(sessionId: SessionId, text: string): void {
+    const actx = this.sessions.scope(sessionId)
+    const conversation = actx?.get('conversation')
+    if (actx === undefined || conversation === undefined) return
+    conversation.input.for(actx).notify('info', text)
   }
 
   /**

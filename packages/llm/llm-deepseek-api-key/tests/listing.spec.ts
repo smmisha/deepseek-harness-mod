@@ -1,5 +1,5 @@
 /** The API-key route serves the official /models listing while its catalog is the built-in one. */
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
@@ -173,6 +173,85 @@ it('keeps following the listing across an update the adapter rejects', async () 
   await live.replace({})
   expect(await ids(ctx)).toEqual(BUILT_IN)
   expect(requests).toHaveLength(1)
+})
+
+describe('on-demand listing reload', () => {
+  const namespaceOf = (ctx: Context): string => {
+    const entry = ctx.llm.listConfigurableProviders().find(row => row.provider === 'deepseek-official')
+    if (entry === undefined) throw new Error('the official route is not declared')
+    return entry.settingsNs
+  }
+
+  it('advertises the capability on the official route the page reads', async () => {
+    const { ctx } = await host()
+    await ctx.plugin(ApiKey, {})
+    expect(ctx.llm.listConfigurableProviders()).toEqual([
+      expect.objectContaining({ provider: 'deepseek-official', listingRefresh: true }),
+    ])
+  })
+
+  it('discards the cached listing and reloads it now', async () => {
+    let payload = listing(FLASH)
+    const requests = officialListing(() => payload())
+    const { ctx } = await host()
+    await ctx.plugin(ApiKey, {})
+    expect(await ids(ctx)).toEqual(['deepseek-flash'])
+    const changed = vi.fn()
+    ctx.on('llm/models-updated', changed)
+
+    payload = listing(FLASH, PRO)
+    await ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-official')
+
+    expect(requests).toHaveLength(2)
+    expect(changed).toHaveBeenCalledExactlyOnceWith('deepseek-official')
+    expect(await ids(ctx)).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
+  })
+
+  it('refuses a catalog or endpoint that follows no listing', async () => {
+    officialListing(listing(FLASH))
+    const customized = await host()
+    await customized.ctx.plugin(ApiKey, { models: [{ id: 'custom' }] })
+    await expect(customized.ctx.llm.refreshListing(namespaceOf(customized.ctx), 'deepseek-official'))
+      .rejects.toMatchObject({ code: 'LISTING_NOT_FOLLOWED' })
+
+    const elsewhere = await host()
+    await elsewhere.ctx.plugin(ApiKey, { baseURL: 'http://127.0.0.1:9/anthropic' })
+    await expect(elsewhere.ctx.llm.refreshListing(namespaceOf(elsewhere.ctx), 'deepseek-official'))
+      .rejects.toMatchObject({ code: 'LISTING_NOT_FOLLOWED' })
+  })
+
+  it('refuses without a stored key before touching the network', async () => {
+    const requests = officialListing(listing(FLASH))
+    const { ctx } = await host('')
+    await ctx.plugin(ApiKey, {})
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-official'))
+      .rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
+    expect(requests).toEqual([])
+  })
+
+  it('reports a failed reload and falls back to the built-in catalog', async () => {
+    const requests = officialListing((_request, index) => (index === 0 ? listing(FLASH)() : new Response('down', { status: 503 })))
+    const { ctx } = await host()
+    await ctx.plugin(ApiKey, {})
+    expect(await ids(ctx)).toEqual(['deepseek-flash'])
+
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-official'))
+      .rejects.toMatchObject({ code: 'LISTING_REFRESH_FAILED' })
+    expect(requests).toHaveLength(2)
+    expect(await ids(ctx)).toEqual(BUILT_IN)
+  })
+
+  it('refuses a route another namespace serves and carries caller cancellation', async () => {
+    const { ctx } = await host()
+    await ctx.plugin(ApiKey, {})
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'other-route'))
+      .rejects.toMatchObject({ code: 'NO_LISTING_REFRESH' })
+
+    const caller = new AbortController()
+    caller.abort(new Error('caller left'))
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-official', caller.signal))
+      .rejects.toThrow('caller left')
+  })
 })
 
 it.each([undefined, null])('notifies an idle client when a badge is replaced and cleared with %s', async (clear) => {

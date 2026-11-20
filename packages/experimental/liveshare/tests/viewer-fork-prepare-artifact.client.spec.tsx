@@ -104,7 +104,7 @@ describe('Assembled liveshare viewer page prompting an unprepared branch', () =>
         'preparing this fork failed: token=FIXTURE_ONLY_NOT_A_REAL_CREDENTIAL; file=/private/unshared-fixture/credential.txt; url=https://internal.invalid/creds (fork-prepare-failed)',
       )
     }, { timeout: 15_000 })
-    expect(screen.queryByRole('button', { name: '停止生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '完成当前步骤后停止' })).toBeNull()
     expect(document.querySelectorAll('[data-slot="sidebar.session.row.leading"] span')).toHaveLength(1)
     expect(document.querySelector('[role="treeitem"][aria-selected="true"]')).toBe(childRow)
     expect(composer.textContent).toContain('hello')

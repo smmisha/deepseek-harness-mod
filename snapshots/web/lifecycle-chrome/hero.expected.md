@@ -26,3 +26,6 @@
 - 'button "Access mode, current: Workspace Write"': Workspace Write
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
+- radiogroup "Working mode":
+  - radio "Chat"
+  - radio "Harness" [checked]

@@ -658,6 +658,12 @@ export interface RouteCatalogRequest {
   baseURL?: string
   /** Configured catalog; absent means the whole installed catalog for this route. */
   models?: readonly PiAiModelProfile[]
+  /**
+   * Models a live listing served for this route, keyed by id. When present they
+   * replace the installed catalog as the route's defaults; a known id keeps its
+   * installed entry in the listing, so its compatibility and endpoint are unchanged.
+   */
+  liveModels?: ReadonlyMap<string, Model<Api>>
   /** Installed-catalog customizations by model id; only meaningful while `models` is absent. */
   modelOverrides?: Readonly<Record<string, PiAiModelOverride>>
   /** Route-level wire-compatibility switches, landing on each model whose protocol declares them; entries override per field. */
@@ -860,7 +866,7 @@ export function resolveRouteModels(
   validation: 'strict' | 'deferred' = 'strict',
 ): RouteCatalog {
   const { provider } = request
-  const defaults = catalogModels(provider)
+  const defaults: ReadonlyMap<string, Model<Api>> = request.liveModels ?? catalogModels(provider)
   const providerBaseUrl = catalogProvider(provider)?.baseUrl
   // An absent `models` key and an empty one are the same request: the config
   // schema materializes `[]` for the absent case, and an empty catalog could

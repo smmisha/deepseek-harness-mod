@@ -526,7 +526,7 @@ describe('Conversation inject API', () => {
     b.sessionFake.cancel.mockResolvedValueOnce({
       ok: false, error: new RemoteError('gateway/internal', 'stop failed', {}),
     })
-    b.composerApi(ROOT).stop!()
+    b.composerApi(ROOT).stop!('graceful')
     await vi.waitFor(() => { expect(b.sessionFake.cancel).toHaveBeenCalledOnce() })
     await b.runtime.dispose()
   })
@@ -647,7 +647,7 @@ describe('Conversation inject API', () => {
     const injectBar = entry.inject as unknown as (
       sessionId: SessionId | undefined,
     ) => ComposerBarInjected
-    expect(() => { injectBar('ghost' as SessionId).stop!() }).toThrow(/resolved no binding/)
+    expect(() => { injectBar('ghost' as SessionId).stop!('graceful') }).toThrow(/resolved no binding/)
 
     const absent = injectBar(undefined)
     expect(absent.keyboard).toBeUndefined()
@@ -659,7 +659,7 @@ describe('Conversation inject API', () => {
 
     const stop = injectBar(ROOT).stop!
     await b.feature.dispose()
-    expect(() => { stop() }).toThrow(/unavailable through the session scope/)
+    expect(() => { stop('graceful') }).toThrow(/unavailable through the session scope/)
     await b.runtime.dispose()
   })
 

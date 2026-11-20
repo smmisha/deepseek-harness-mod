@@ -261,7 +261,7 @@ function bench(over?: BenchOptions) {
     : over?.fileUploads?.[attachment.id] !== undefined && over.fileUploads[attachment.id]?.status !== 'ready')
   const plainMessageDraft = sendableDraft && !uploadsPending && !(over?.draft?.trimStart().startsWith('/') ?? false)
   const primaryLabel = primaryStops
-    ? '停止生成'
+    ? '完成当前步骤后停止'
     : over?.retryableFailure !== undefined && !sendableDraft && over.running !== true && over.subagent === undefined && !composerLocked
       && !(over.nextStep ?? []).some(message => message.source.kind === 'user')
       ? '继续生成'
@@ -269,7 +269,7 @@ function bench(over?: BenchOptions) {
         ? (over.busyEnter === 'steer' ? '插话发送' : '排队发送')
         : '发送消息'
   const button = view.container.querySelector<HTMLButtonElement>(`button[aria-label="${primaryLabel}"]`)!
-  const interruptButton = view.container.querySelector<HTMLButtonElement>('button[aria-label="停止生成"]')
+  const interruptButton = view.container.querySelector<HTMLButtonElement>('button[data-stop]')
   return {
     view, textarea, button, interruptButton, props, sink, shell, wiring: shell, session, stop, removeAttachment, slotCalls,
     menuLauncher, busyEnter, stopShortcut, retry,
@@ -1148,7 +1148,7 @@ describe('running and lock semantics', () => {
         fireEvent.pointerLeave(control)
         act(() => { vi.advanceTimersByTime(500) })
       }
-      expect(shown).toEqual(expect.arrayContaining(['添加文件或调用指令', '停止生成']))
+      expect(shown).toEqual(expect.arrayContaining(['添加文件或调用指令', '完成当前步骤后停止']))
     } finally {
       vi.useRealTimers()
     }
@@ -1160,7 +1160,7 @@ describe('running and lock semantics', () => {
       const { button, view, session } = bench({ running: true })
       fireEvent.pointerEnter(button)
       act(() => { vi.advanceTimersByTime(500) })
-      expect(view.getByRole('tooltip').getAttribute('aria-label')).toBe('停止生成 Esc Esc')
+      expect(view.getByRole('tooltip').getAttribute('aria-label')).toBe('完成当前步骤后停止 Esc Esc')
 
       // Disabling a hovered native button need not deliver mouseleave.
       act(() => { session.set(snapshotOf({ running: false })) })
@@ -1175,19 +1175,19 @@ describe('running and lock semantics', () => {
   it('running switches the primary between Stop and Queue Send with the draft', async () => {
     const { textarea, button, stop, sink, shell } = bench({ running: true })
     expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
-    expect(button.getAttribute('aria-label')).toBe('停止生成')
+    expect(button.getAttribute('aria-label')).toBe('完成当前步骤后停止')
     fireEvent.click(button)
     expect(stop).toHaveBeenCalledTimes(1)
 
     writeDraft(shell, '排队消息')
     expect(button.getAttribute('aria-label')).toBe('排队发送')
     writeDraft(shell, '   ')
-    expect(button.getAttribute('aria-label')).toBe('停止生成')
+    expect(button.getAttribute('aria-label')).toBe('完成当前步骤后停止')
     writeDraft(shell, '排队消息2')
     expect(button.getAttribute('aria-label')).toBe('排队发送')
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('排队消息2', [], 'queue', expect.any(AbortSignal), expect.any(Function))
-    await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('停止生成') })
+    await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('完成当前步骤后停止') })
     expect(stop).toHaveBeenCalledTimes(1)
   })
 
@@ -1198,13 +1198,70 @@ describe('running and lock semantics', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' })
     const sending = view.getByRole('button', { name: '正在发送消息' }) as HTMLButtonElement
     expect(sending.disabled).toBe(true)
-    fireEvent.click(view.getByRole('button', { name: '停止生成' }))
+    fireEvent.click(view.getByRole('button', { name: '完成当前步骤后停止' }))
     expect(stop).toHaveBeenCalledTimes(1)
 
     await act(async () => { settle({ kind: 'success' }) })
 
     expect(view.queryByRole('button', { name: '正在发送消息' })).toBeNull()
-    expect(view.getAllByRole('button', { name: '停止生成' })).toHaveLength(1)
+    expect(view.getAllByRole('button', { name: '完成当前步骤后停止' })).toHaveLength(1)
+  })
+
+  it('defaults the stop seat to the graceful mode and exposes the immediate stop in its menu', () => {
+    const { button, stop, view } = bench({ running: true })
+    expect(button.getAttribute('aria-label')).toBe('完成当前步骤后停止')
+    fireEvent.click(button)
+    expect(stop).toHaveBeenCalledExactlyOnceWith('graceful')
+
+    fireEvent.click(view.getByRole('button', { name: '停止选项' }))
+    // The list is named by its localized purpose, not by its rows concatenated.
+    expect(view.getByRole('menu', { name: '停止选项' })).toBeTruthy()
+    expect(view.getAllByRole('menuitem').map(item => item.textContent))
+      .toEqual(['完成当前步骤后停止', '立即停止'])
+    fireEvent.click(view.getByRole('menuitem', { name: '立即停止' }))
+    expect(stop).toHaveBeenLastCalledWith('immediate')
+  })
+
+  it('shows the armed stop mode while the run finishes the current step', () => {
+    const { session, stop, view } = bench({ running: true })
+    act(() => { session.set(snapshotOf({ running: true, stopRequested: 'graceful' })) })
+
+    const armed = view.getByRole('button', { name: '正在完成当前步骤…' }) as HTMLButtonElement
+    expect(armed.disabled).toBe(true)
+    expect(armed.getAttribute('aria-busy')).toBe('true')
+    expect(view.queryByLabelText('完成当前步骤后停止')).toBeNull()
+
+    // The armed stop can still escalate: the menu disables the pending graceful
+    // row and keeps the immediate stop available.
+    fireEvent.click(view.getByRole('button', { name: '停止选项' }))
+    const pendingRow = view.getByRole('menuitem', { name: '完成当前步骤后停止' }) as HTMLButtonElement
+    expect(pendingRow.disabled).toBe(true)
+    fireEvent.click(view.getByRole('menuitem', { name: '立即停止' }))
+    expect(stop).toHaveBeenLastCalledWith('immediate')
+  })
+
+  it('renders the armed stop as a visible composer status, not only as the disabled button name', () => {
+    const { session, view } = bench({ running: true })
+    act(() => { session.set(snapshotOf({ running: true, stopRequested: 'graceful' })) })
+    const status = view.getByRole('status')
+    expect(status.textContent).toBe('正在完成当前步骤…')
+    // The status sits above the card as composer chrome; no hover reveals it.
+    expect(status.closest('[data-composer-card]')).toBeNull()
+    expect(view.queryByRole('tooltip')).toBeNull()
+
+    act(() => { session.set(snapshotOf({ running: true, stopRequested: 'immediate' })) })
+    expect(view.getByRole('status').textContent).toBe('正在停止…')
+
+    act(() => { session.set(snapshotOf({ running: false })) })
+    expect(view.queryByRole('status')).toBeNull()
+  })
+
+  it('shows the armed immediate stop while the abort lands', () => {
+    const { session, view } = bench({ running: true })
+    act(() => { session.set(snapshotOf({ running: true, stopRequested: 'immediate' })) })
+    const armed = view.getByRole('button', { name: '正在停止…' }) as HTMLButtonElement
+    expect(armed.disabled).toBe(true)
+    expect(view.queryByLabelText('完成当前步骤后停止')).toBeNull()
   })
 
   it('running Send follows the busy-state Steer preference and labels the delivery', () => {
@@ -1339,7 +1396,7 @@ describe('running and lock semantics', () => {
     expect(button.getAttribute('aria-label')).toBe('排队发送')
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('', ['draft-1'], 'queue', expect.any(AbortSignal), expect.any(Function))
-    await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('停止生成') })
+    await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('完成当前步骤后停止') })
   })
 
   it('running blocked composer keeps Stop with a retained draft', () => {
@@ -1351,7 +1408,7 @@ describe('running and lock semantics', () => {
     })
     expect(textarea.getAttribute('aria-disabled')).toBe('true')
     expect(textarea.getAttribute('data-placeholder')).toBe('请选择可用模型')
-    expect(button.getAttribute('aria-label')).toBe('停止生成')
+    expect(button.getAttribute('aria-label')).toBe('完成当前步骤后停止')
     expect(button.disabled).toBe(false)
     fireEvent.click(button)
     expect(stop).toHaveBeenCalledTimes(1)
@@ -1373,14 +1430,14 @@ describe('running and lock semantics', () => {
       blocked: { reason: '只读查看：本页由 owner 分享，无法发送消息' },
       placeholder: '只读查看：本页由 owner 分享，无法发送消息',
     })
-    expect(view.container.querySelector('button[aria-label="停止生成"]')).toBeNull()
+    expect(view.container.querySelector('button[data-stop]')).toBeNull()
     expect(view.container.querySelector('button[aria-label="发送消息"]')).toBeNull()
     expect(stop).not.toHaveBeenCalled()
   })
 
   it('a running composer whose access excludes only prompting keeps Stop but offers no busy Send', () => {
     const empty = bench({ running: true, deniedEndpoints: ['session/prompt'] })
-    expect(empty.view.getByLabelText('停止生成')).toBeTruthy()
+    expect(empty.view.getByLabelText('完成当前步骤后停止')).toBeTruthy()
     cleanup()
     // A draft would make the primary action the busy Send, which the snapshot excludes.
     const drafted = bench({ running: true, deniedEndpoints: ['session/prompt'], draft: '排到下一轮' })
@@ -1435,7 +1492,7 @@ describe('running and lock semantics', () => {
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('后续消息', [], 'queue', expect.any(AbortSignal), expect.any(Function))
     fireEvent.click(interruptButton!)
-    expect(stop).toHaveBeenCalledTimes(1)
+    expect(stop).toHaveBeenCalledExactlyOnceWith('immediate')
   })
 
   it('running continuable subagent Send follows the Steer preference like an ordinary session', () => {
@@ -1510,7 +1567,7 @@ describe('running and lock semantics', () => {
     expect(button.disabled).toBe(false)
     expect(interruptButton?.disabled).toBe(false)
     fireEvent.click(interruptButton!)
-    expect(stop).toHaveBeenCalledTimes(1)
+    expect(stop).toHaveBeenCalledExactlyOnceWith('immediate')
   })
 
   it('running one-shot subagent never exposes Stop', () => {
@@ -2159,16 +2216,16 @@ describe('command launcher chrome and control seats', () => {
   it('follows the access answers over a running Session, and restores the actions when they return', () => {
     const { view, props } = bench({ running: true })
     // While the page may stop the running Session, the primary action is its Stop.
-    expect(view.getByLabelText('停止生成')).toBeTruthy()
+    expect(view.getByLabelText('完成当前步骤后停止')).toBeTruthy()
 
     // The access snapshot now excludes the Session's writes: the bar offers neither Stop nor Send.
     view.rerender(<InputBar {...props} useAccess={() => false} />)
-    expect(view.queryByLabelText('停止生成')).toBeNull()
+    expect(view.queryByLabelText('完成当前步骤后停止')).toBeNull()
     expect(view.queryByLabelText('发送消息')).toBeNull()
 
     // The answers return: the bar offers the action the page holds again.
     view.rerender(<InputBar {...props} />)
-    expect(view.getByLabelText('停止生成')).toBeTruthy()
+    expect(view.getByLabelText('完成当前步骤后停止')).toBeTruthy()
   })
 
   it('opening the command menu from the button puts the keyboard in the editor first', () => {

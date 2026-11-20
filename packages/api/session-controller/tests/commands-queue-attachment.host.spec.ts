@@ -141,6 +141,59 @@ describe('Session queue commands', () => {
     } finally { await ctx.fiber.dispose() }
   })
 
+  it('edits one pending message text while preserving its durable attachments', async () => {
+    const { ctx, controller, agent, inbox } = await commandHarness()
+    try {
+      const image: ImageAttachmentRef = {
+        attachmentId: AttachmentId('queued-edit-image'),
+        mediaType: 'image/png', bytes: 4, width: 1, height: 1,
+      }
+      const file = { attachmentId: AttachmentId('queued-edit-file'), name: 'report.csv', bytes: 427 }
+      const message = createUserMessage({
+        content: [
+          { type: 'text', text: 'before' },
+          { type: 'image', attachment: image },
+          { type: 'file', attachment: file },
+          { type: 'text', text: 'stale tail' },
+        ],
+        source: { kind: 'user', rpcId: 'edit-attachments' as import('../src/types.ts').SessionRequestId },
+      })
+      inbox.append('next-turn', message)
+
+      expect(await controller.updateQueue({
+        sessionId: agent.id,
+        itemId: message.id,
+        action: { kind: 'edit', content: [{ type: 'text', text: 'after' }] },
+      })).toEqual({ accepted: true })
+
+      const edited = inbox.nextTurn[0]
+      // Only the text moves: both attachments keep their exact identity, order,
+      // and position relative to the text, and the occurrence keeps its id.
+      expect(edited?.content).toEqual([
+        { type: 'text', text: 'after' },
+        { type: 'image', attachment: image },
+        { type: 'file', attachment: file },
+      ])
+      expect(edited?.id).toBe(message.id)
+      expect(edited?.source).toMatchObject({ kind: 'user', rpcId: 'edit-attachments' })
+
+      // An attachment-only row gains its text after the attachment it keeps.
+      const imageOnly = createUserMessage({
+        content: [{ type: 'image', attachment: image }], source: { kind: 'user' },
+      })
+      inbox.append('next-turn', imageOnly)
+      expect(await controller.updateQueue({
+        sessionId: agent.id,
+        itemId: imageOnly.id,
+        action: { kind: 'edit', content: [{ type: 'text', text: 'caption' }] },
+      })).toEqual({ accepted: true })
+      expect(inbox.nextTurn[1]?.content).toEqual([
+        { type: 'image', attachment: image },
+        { type: 'text', text: 'caption' },
+      ])
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('preserves the cold Agent resolver rejection', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -245,6 +298,13 @@ describe('Session queue commands', () => {
     })), 'session/not-found')
     expect(controller.cancel({ sessionId: agent.id })).toEqual({ accepted: true })
     expect(cancel).toHaveBeenCalledWith({ kind: 'user' }, { keepInbox: true })
+
+    // A graceful request asks the loop to end at its step boundary instead of
+    // aborting the live turn; the omission default above stays immediate.
+    expect(controller.cancel({ sessionId: agent.id, mode: 'graceful' })).toEqual({ accepted: true })
+    expect(cancel).toHaveBeenLastCalledWith({ kind: 'user' }, { mode: 'graceful' })
+    expect(controller.cancel({ sessionId: agent.id, mode: 'immediate' })).toEqual({ accepted: true })
+    expect(cancel).toHaveBeenCalledTimes(3)
     await ctx.fiber.dispose()
   })
 

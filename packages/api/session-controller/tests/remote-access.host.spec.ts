@@ -269,6 +269,20 @@ describe('Session Controller access', () => {
     ])
   })
 
+  it('records a non-owner caller on an edit retraction and on the edited message', async () => {
+    const { shared, as } = await harness()
+    // A message outside any Turn (seeded history) is edited from the surface head onward.
+    const sent = shared.session.append('user/message', message('seeded'), { surfaceOp: 'append' })
+    await expect(as(GUEST, 'editMessage').sessionController.editMessage({
+      sessionId: SHARED, requestId: 'guest-edit' as SessionRequestId, seq: sent.seq, text: 'edited',
+    })).resolves.toEqual({ accepted: true })
+    const events = shared.session.snapshotEvents()
+    expect(events.find(event => event.type === 'user/message' && event.data.source.kind === 'rewind'))
+      .toMatchObject({ data: { source: { kind: 'rewind', rpcId: 'guest-edit', principal: GUEST } }, surfaceOp: { startSeq: sent.seq } })
+    const queued = events.flatMap(event => event.type === 'agent/inbox/spliced' ? event.data.inserted.map(item => item.source) : [])
+    expect(queued).toEqual([{ kind: 'user', rpcId: 'guest-edit', principal: GUEST }])
+  })
+
   it('keeps gateway permission checks while allowing an image referenced only by another Session', async () => {
     const { ctx, hidden } = await harness()
     await ctx.plugin(TypertGatewayService)

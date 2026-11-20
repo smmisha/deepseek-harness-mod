@@ -63,6 +63,8 @@ import type {
   SessionProjectionsRequest,
   SessionProjectionsValue,
   SessionUpdateQueueRequest,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
   SessionUpdateQueueValue,
 } from './types.ts'
 
@@ -509,6 +511,16 @@ export class SessionController extends TypertRemoteService {
   @Remote('updateQueue')
   updateQueue(request: SessionUpdateQueueRequest): Promise<SessionUpdateQueueValue> {
     return this.commands.updateQueue(request)
+  }
+
+  /**
+   * Rewind an idle Session to one sent user message and queue its edited text as a new Turn.
+   * @param request - Session, edited message seq, replacement text, and request identity.
+   * @returns acknowledgement once the retraction is committed and the edited message is queued.
+   */
+  @Remote('editMessage')
+  editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue> {
+    return this.commands.editMessage(request, principalOf(this.ctx.invocation))
   }
 
   /**

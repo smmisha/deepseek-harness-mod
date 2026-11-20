@@ -47,7 +47,7 @@ import { AssistantNodeView } from '../src/client/chat/AssistantNodeView.tsx'
 import { CommandNodeView, ManualCompactionNodeView } from '../src/client/chat/CommandNodeView.tsx'
 import {
   CompactionNodeView, ContextMessageNodeView, RetryNodeView, TurnErrorNodeView,
-  TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
+  SteeringMessageNodeView, TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
 } from '../src/client/chat/MessageItem.tsx'
 import { TurnTailNodeView } from '../src/client/chat/TurnTailNodeView.tsx'
 import { TurnProcessNodeView } from '../src/client/chat/TurnProcessNodeView.tsx'
@@ -337,7 +337,7 @@ function HarnessChatNode({
     case 'user':
       return <UserMessageNodeView {...nodeProps} node={owner.node} renderSlotChain={renderUserChain} />
     case 'steering':
-      return <UserMessageNodeView {...nodeProps} node={owner.node} renderSlotChain={() => null} />
+      return <SteeringMessageNodeView {...nodeProps} node={owner.node} />
     case 'context':
       return <ContextMessageNodeView {...nodeProps} node={owner.node} />
     case 'assistant-step':
@@ -493,6 +493,7 @@ function makeHarness(
     return <HarnessUserOrigin useRenderer={useOriginRenderer} owner={owner as UserBeforeOwnerProps} options={opts} />
   }
   const renderFactorySlot: PropsRenderFactories['renderFactorySlot'] = (name, owner) => {
+    if (name === 'conversation.chat.user.actions') return null
     if (name !== 'conversation.chat.user.content') throw new Error(`Unexpected Chat Factory: ${name}`)
     return renderUserContent(owner as UserContentInput, renderImages, props.t)
   }
@@ -522,6 +523,7 @@ function makeHarness(
   const props: HarnessStandardProps = {
     fileDrag,
     resolveFilePath: vi.fn((path: string) => path),
+    pendingSteer: { update: vi.fn(() => Promise.resolve()), notify: vi.fn() },
     renderFactorySlot,
     usePanelInfo: selector => selector({ activePanelId: null }),
     sessionId: SID,
@@ -557,6 +559,7 @@ function makeHarness(
       removeAttachment: () => {},
       pruneAttachments: () => {},
       submit: () => {},
+      focus: () => {},
     },
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
@@ -578,6 +581,7 @@ function makeHarness(
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     chatScroll,
     forkAt,
+    editMessage: vi.fn(() => Promise.resolve()),
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
     t,
@@ -3628,6 +3632,25 @@ describe('ChatView', () => {
     expect(view.getByText('任务已停止')).toBeTruthy()
   })
 
+  it('summarizes a graceful stop at its settled step, without elapsed time, and keeps it open', () => {
+    const answer: AssistantMessageNode = {
+      kind: 'assistant', seq: 2, time: 2_000, turn: 1, step: 1, blocks: [{ kind: 'text', text: 'answer' }],
+    }
+    const h = makeHarness({ chat: chatSnapshotFixture({
+      nodes: [user(1, 'hi'), answer],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 20_000 }]]),
+      turnEnds: new Map([[1, 3]]),
+      turnEndReasons: new Map([[1, { kind: 'stopped' }]]),
+    }) })
+    const view = render(<h.ChatView {...h.props} />)
+    const control = turnProcessControl(view.container)
+    // The settled content stays visible; only the summary names the boundary.
+    expect(control?.textContent).toBe('当前步骤完成后已停止')
+    expect(control?.disabled).toBe(true)
+    expect(view.getByText('answer')).toBeTruthy()
+    expect(view.queryByText('已停止')).toBeNull()
+  })
+
   it('withholds the usage-details trigger when turn usage is outside the window', () => {
     const settled: AssistantMessageNode = {
       kind: 'assistant', seq: 2, time: 2_000, turn: 1, step: 1, blocks: [{ kind: 'text', text: 'answer' }],
@@ -4873,6 +4896,24 @@ describe('ChatView', () => {
     expect(within(held!).queryByRole('status')).toBeNull()
     act(() => { h.setChat({ turnEnds: new Map([[1, 2]]) }) })
     expect(column.querySelector('[data-chat-running]')).toBeNull()
+  })
+
+  it('names a pending stop in the running status row without adding transcript chrome', () => {
+    const h = makeHarness({ nodes: [user(1, 'do the thing'), assistant(2, 'working')] }, { running: true })
+    const view = render(<h.ChatView {...h.props} />)
+    const column = view.container.querySelector('[data-chat-flow]')!
+    const row = runningContent(view.container)
+    expect(row?.textContent).toBe('深度求索中')
+    act(() => { h.setSession({ stopRequested: 'graceful' }) })
+    // The same status row carries the pending ending: no second row and no
+    // banner joins the transcript.
+    expect(runningContent(view.container)).toBe(row)
+    expect(row?.textContent).toBe('正在完成当前步骤，随后停止')
+    expect(column.querySelectorAll('[data-chat-running]')).toHaveLength(1)
+    expect(within(column.querySelector<HTMLElement>('[data-chat-running]')!).getByRole('status').textContent)
+      .toBe('正在完成当前步骤，随后停止')
+    act(() => { h.setSession({ stopRequested: 'immediate' }) })
+    expect(row?.textContent).toBe('正在停止…')
   })
 
   it('marks the steering row whose data carries a batch start, and no other input', () => {

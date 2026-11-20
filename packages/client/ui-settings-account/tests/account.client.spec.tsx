@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, act, within } from '@testing-librar
 import { useMemo, useSyncExternalStore } from 'react'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
+import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import type { AccountDetails, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PlatformBridge } from '../src/client/PlatformOverlay.tsx'
@@ -12,11 +13,22 @@ import { AccountSection, type AccountSectionInjected, type AccountSnapshot } fro
 import type { AccountMenuProps } from '../src/client/AccountMenu.tsx'
 import type { AccountNotificationsOwnerProps } from '../src/client/account-ui.ts'
 import type {} from '../src/client/index.ts'
-import { en, zh, type AccountKey } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 import css from '../src/client/AccountSection.module.css'
 import type { AccountAvatarSnapshot } from '../src/client/account-avatar.ts'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+/** One locale snapshot per language; the slot's locale hook serves these in the application. */
+const localeSnapshot = (language = 'en'): LocaleSnapshot => ({ active: language, locales: [], revision: 0 })
+/** Dictionary lookup with the locale service's `{name}` interpolation. */
+const translate = (copy: typeof en | typeof zh) => (key: string, params?: Record<string, unknown>): string => {
+  const template = (copy as Record<string, string>)[key] ?? key
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => params !== undefined && name in params ? String(params[name]) : match)
+}
+/** Account launcher accessible name, which states the account when one is signed in. */
+const triggerName = (copy: typeof en | typeof zh, name: string | null = null): string =>
+  name === null ? translate(copy)('menuSignedOut') : translate(copy)('menuSignedIn', { name })
 
 /** One resolved theme snapshot per scheme; the slot's theme hook serves these in the application. */
 const themeOf = (colorScheme: 'light' | 'dark'): ThemeSnapshot => ({
@@ -34,6 +46,7 @@ function operationsOf(state: Omit<AccountView, 'links'>, details?: Partial<Accou
         subscribe: () => () => {},
       },
       theme: { getSnapshot: () => themeOf('light'), subscribe: () => () => {} },
+      locale: { getSnapshot: () => localeSnapshot(), subscribe: () => () => {} },
     },
     hasRunningAccountTasks: vi.fn(async () => false),
     contactUs: vi.fn(), showLogin: vi.fn(), setOnboarding: vi.fn(),
@@ -44,7 +57,7 @@ function operationsOf(state: Omit<AccountView, 'links'>, details?: Partial<Accou
 }
 
 function mount(state: Omit<AccountView, 'links'>, copy: typeof en | typeof zh = en, details?: Partial<AccountDetails>,
-  platform?: PlatformBridge, avatar?: AccountAvatarSnapshot) {
+  platform?: PlatformBridge, avatar?: AccountAvatarSnapshot, language = 'en') {
   const pages = platform === undefined ? undefined : createPlatformPages()
   const operations = operationsOf(state, details, pages, avatar)
   // AccountSection consumes no global hooks; the slot supplies them in the application.
@@ -53,7 +66,8 @@ function mount(state: Omit<AccountView, 'links'>, copy: typeof en | typeof zh = 
     <AccountSection {...globals} {...operations}
       useAccount={selector => selector(operations.hooks.account.getSnapshot())}
       useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
-      close={() => {}} t={key => key in copy ? copy[key as AccountKey] : key} />
+      useLocale={selector => selector(localeSnapshot(language))}
+      close={() => {}} t={translate(copy)} />
     {/* The application renders this from `shell.overlay`; the settings page only requests a page. */}
     {platform !== undefined && pages !== undefined
       && <SharedPlatformHost Globals={globals} pages={pages} platform={platform} copy={copy}
@@ -83,7 +97,7 @@ function SharedPlatformHost({ Globals, pages, platform, copy, refreshAccount }: 
       const page = pages.getSnapshot()?.page
       pages.close()
       if (page === 'top-up') void refreshAccount()
-    }} t={key => key in copy ? copy[key as AccountKey] : key} />
+    }} t={translate(copy)} />
 }
 
 /**
@@ -99,7 +113,8 @@ async function accountMenu(operations: AccountSectionInjected, snapshot: () => A
   return <AccountMenu renderSlot={renderSlot} {...({} as GlobalStandardProps)} {...operations}
     settingsOpen={settingsOpen} useAccount={selector => selector(snapshot())} wide={wide}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
-    openOnboarding={() => {}} openSettings={openSettings} t={key => en[key as AccountKey]} />
+    useLocale={selector => selector(localeSnapshot())}
+    openOnboarding={() => {}} openSettings={openSettings} t={translate(en)} />
 }
 
 it.each([en, zh])('renders account cards without inventing profile or balance data', async (copy) => {
@@ -133,17 +148,18 @@ it.each([en, zh].flatMap(copy => ([false, true, 'unknown'] as const).map(running
     hasRunningAccountTasks={async () => { if (running === 'unknown') throw new Error('offline'); return running }}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={openSettings}
-    t={key => key in copy ? copy[key as AccountKey] : key} />)
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+    useLocale={selector => selector(localeSnapshot())}
+    t={translate(copy)} />)
+  fireEvent.click(screen.getByRole('button', { name: triggerName(copy, copy.signedIn) }))
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([copy.settings, copy.contactUs, copy.signOut])
   await expect(`${screen.getByRole('menu').textContent}\n`).toMatchFileSnapshot(`./expected/menu-${copy === en ? 'en' : 'zh'}.txt`)
   fireEvent.click(screen.getByRole('menuitem', { name: copy.settings }))
   expect(openSettings).toHaveBeenCalledOnce()
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  fireEvent.click(screen.getByRole('button', { name: triggerName(copy, copy.signedIn) }))
   fireEvent.click(screen.getByRole('menuitem', { name: copy.contactUs }))
   expect(operations.contactUs).toHaveBeenCalledOnce()
   expect(screen.queryByRole('menu')).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  fireEvent.click(screen.getByRole('button', { name: triggerName(copy, copy.signedIn) }))
   await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: copy.signOut })) })
   expect(signOut).not.toHaveBeenCalled()
   expect(screen.getByText(running === 'unknown' ? copy.signOutUnknownDescription : running ? copy.signOutRunningDescription : copy.signOutDescription)).toBeTruthy()
@@ -160,12 +176,13 @@ it.each([en, zh])('updates the Settings menu keycaps and accessible combination 
     ...({} as GlobalStandardProps), ...operations, wide: true, settingsOpen: false,
     useAccount: selector => selector(operations.hooks.account.getSnapshot()),
     useTheme: selector => selector(operations.hooks.theme.getSnapshot()),
-    openSettings: vi.fn(() => { expect(document.activeElement).toBe(screen.getByRole('button', { name: copy.menu })) }),
+    useLocale: selector => selector(localeSnapshot()),
+    openSettings: vi.fn(() => { expect(document.activeElement).toBe(screen.getByRole('button', { name: triggerName(copy) })) }),
     openOnboarding: vi.fn(),
-    t: key => key in copy ? copy[key as AccountKey] : key,
+    t: translate(copy),
   }
   const view = render(<AccountMenu {...props} settingsShortcut={{ keys: ['⌘', ','], aria: 'Meta+,' }} />)
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  fireEvent.click(screen.getByRole('button', { name: triggerName(copy) }))
   const settings = screen.getByRole('menuitem', { name: copy.settings })
   expect(settings.getAttribute('aria-keyshortcuts')).toBe('Meta+,')
   expect([...settings.querySelectorAll('kbd')].map(key => key.textContent)).toEqual(['⌘', ','])
@@ -188,16 +205,20 @@ it.each([en, zh])('offers settings, contact and sign-in from the signed-out acco
   render(<AccountMenu renderSlot={() => null} {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={openSettings}
-    t={key => key in copy ? copy[key as AccountKey] : key} />)
-  const trigger = screen.getByRole('button', { name: copy.menu })
+    useLocale={selector => selector(localeSnapshot())}
+    t={translate(copy)} />)
+  const trigger = screen.getByRole('button', { name: triggerName(copy) })
   expect(trigger.textContent).toBe(copy.more)
+  // The signed-out launcher's name includes its visible label instead of replacing it.
+  expect(trigger.getAttribute('aria-label')).toBe(copy.menuSignedOut)
+  expect(trigger.getAttribute('aria-label')).toContain(copy.more)
   expect(trigger.querySelector('svg')).not.toBeNull()
   fireEvent.click(trigger)
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([copy.settings, copy.contactUs, copy.signIn])
   await expect(`${screen.getByRole('menu').textContent}\n`).toMatchFileSnapshot(`./expected/menu-signed-out-${copy === en ? 'en' : 'zh'}.txt`)
   fireEvent.click(screen.getByRole('menuitem', { name: copy.settings }))
   expect(openSettings).toHaveBeenCalledOnce()
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  fireEvent.click(screen.getByRole('button', { name: triggerName(copy) }))
   fireEvent.click(screen.getByRole('menuitem', { name: copy.contactUs }))
   expect(operations.contactUs).toHaveBeenCalledOnce()
 })
@@ -209,17 +230,18 @@ it.each([true, false])('keeps the account inset local through sign-in changes wi
     ...({} as GlobalStandardProps), ...operations, wide, settingsOpen: false,
     useAccount: selector => selector(operations.hooks.account.getSnapshot()),
     useTheme: selector => selector(operations.hooks.theme.getSnapshot()),
-    openSettings: vi.fn(), openOnboarding: vi.fn(), t: key => en[key as AccountKey],
+    useLocale: selector => selector(localeSnapshot()),
+    openSettings: vi.fn(), openOnboarding: vi.fn(), t: translate(en),
   }
   const view = render(<AccountMenu {...props} />)
   const root = view.container.firstElementChild
-  const trigger = screen.getByRole('button', { name: en.menu })
+  const trigger = screen.getByRole('button', { name: triggerName(en) })
   trigger.focus()
   expect(root?.getAttribute('data-inset')).toBe('false')
   operations = operationsOf({ status: 'credential-stored', attempt: null })
   view.rerender(<AccountMenu {...props} />)
   expect(root?.getAttribute('data-inset')).toBe(String(wide))
-  expect(screen.getByRole('button', { name: en.menu })).toBe(trigger)
+  expect(screen.getByRole('button', { name: triggerName(en, en.signedIn) })).toBe(trigger)
   expect(document.activeElement).toBe(trigger)
   operations = operationsOf({ status: 'signed-out', attempt: null })
   view.rerender(<AccountMenu {...props} />)
@@ -240,17 +262,19 @@ it('reports a failed start in the login dialog, not as a sidebar alert', async (
   const view = render(<AccountMenu renderSlot={() => null} {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
     start={start}
     useAccount={selector => selector(snapshot)} useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+    useLocale={selector => selector(localeSnapshot())}
     wide openOnboarding={() => {}} openSettings={() => {}}
-    t={key => key in en ? en[key as AccountKey] : key} />)
-  fireEvent.click(screen.getByRole('button', { name: en.menu }))
+    t={translate(en)} />)
+  fireEvent.click(screen.getByRole('button', { name: triggerName(en) }))
   await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: en.signIn })) })
   expect(start).toHaveBeenCalledOnce()
   expect(screen.queryByRole('alert')).toBeNull()
   view.rerender(<AccountMenu renderSlot={() => null} {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
     start={start}
     useAccount={selector => selector(snapshot)} useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+    useLocale={selector => selector(localeSnapshot())}
     wide openOnboarding={() => {}} openSettings={() => {}}
-    t={key => key in en ? en[key as AccountKey] : key} />)
+    t={translate(en)} />)
   expect(screen.getByRole('dialog').textContent).toContain(en.failed)
   expect(screen.queryByRole('alert')).toBeNull()
   // The dialog is the only place that reports the failure, so its copy appears once.
@@ -267,8 +291,9 @@ it('keeps the confirmation dialog open after a failed sign-out', async () => {
     signOut={signOut}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide
-    openOnboarding={() => {}} openSettings={() => {}} t={key => key in en ? en[key as AccountKey] : key} />)
-  fireEvent.click(screen.getByRole('button', { name: en.menu }))
+    useLocale={selector => selector(localeSnapshot())}
+    openOnboarding={() => {}} openSettings={() => {}} t={translate(en)} />)
+  fireEvent.click(screen.getByRole('button', { name: triggerName(en, en.signedIn) }))
   await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: en.signOut })) })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.signOut })) })
   // The confirmation dialog owns the failure; the launcher renders no error of its own.
@@ -286,6 +311,13 @@ it.each([en, zh])('renders Platform profile and recharge wallet balances', async
   expect(screen.getByText('¥1,234.56')).toBeTruthy()
   expect(screen.getByText('<$0.01')).toBeTruthy()
   await expect(`${screen.getByRole('region').textContent}\n`).toMatchFileSnapshot(`./expected/details-${copy === en ? 'en' : 'zh'}.txt`)
+})
+
+it('groups balances in the active UI language', () => {
+  mount({ status: 'credential-stored', attempt: null }, en, {
+    balance: { status: 'ready', value: [{ currency: 'USD', balance: '1234.56' }, { currency: 'CNY', balance: '0.5' }], bonusWallets: [] },
+  }, undefined, undefined, 'de')
+  expect(screen.getByText(en.balance).parentElement!.textContent).toBe(`${en.balance}1.234,56\u00a0$0,50\u00a0¥`)
 })
 
 it.each([en, zh])('shows the signed-out settings prompt without balance or Platform links', async (copy) => {
@@ -307,6 +339,8 @@ it('opens usage inside Desktop and returns to the same Account settings', async 
   act(() => { usage.focus() })
   await act(async () => { fireEvent.click(usage) })
   expect(platform.open).toHaveBeenCalledWith('usage', { x: 0, y: 0, width: 0, height: 0 })
+  // The overlay is named for the page it shows, not for its Back action.
+  expect(screen.getByRole('dialog', { name: en.usage })).toBeTruthy()
   const back = screen.getByRole('button', { name: en.backToHarness })
   await expect(`${back.parentElement!.parentElement!.textContent}\n`).toMatchFileSnapshot('./expected/platform-header-en.txt')
   await act(async () => { fireEvent.click(back) })
@@ -326,6 +360,7 @@ it('keeps a return action available when the native document fails to load', asy
   mount({ status: 'credential-stored', attempt: null }, zh, undefined, platform)
   await act(async () => { fireEvent.click(screen.getByRole('link', { name: zh.topUp })) })
   expect(platform.open).toHaveBeenCalledWith('top-up', { x: 0, y: 0, width: 0, height: 0 })
+  expect(screen.getByRole('dialog', { name: zh.topUp })).toBeTruthy()
   expect(screen.getByText(zh.platformFailed)).toBeTruthy()
   const back = screen.getByRole('button', { name: zh.backToHarness })
   await expect(`${back.parentElement!.parentElement!.textContent}\n`).toMatchFileSnapshot('./expected/platform-header-zh.txt')
@@ -428,8 +463,23 @@ it.each([
   render(<AccountMenu renderSlot={() => null} {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
-    wide openSettings={() => {}} openOnboarding={() => {}} t={key => en[key as AccountKey]} />)
-  expect(screen.getByRole('button', { name: en.menu }).textContent).toBe(expected)
+    useLocale={selector => selector(localeSnapshot())}
+    wide openSettings={() => {}} openOnboarding={() => {}} t={translate(en)} />)
+  expect(screen.getByRole('button', { name: triggerName(en, expected) }).textContent).toBe(expected)
+})
+
+it('names the account menu trigger for the signed-in account', async () => {
+  const operations = mount({ status: 'credential-stored', attempt: null }, en, {
+    profile: { status: 'ready', value: { id: null, name: 'Alex', contact: '138****0000' } },
+  })
+  cleanup()
+  const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
+  render(<AccountMenu renderSlot={() => null} {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
+    useAccount={selector => selector(operations.hooks.account.getSnapshot())}
+    useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+    useLocale={selector => selector(localeSnapshot())}
+    wide openOnboarding={() => {}} openSettings={() => {}} t={translate(en)} />)
+  expect(screen.getByRole('button', { name: 'Alex account menu' })).toBeTruthy()
 })
 
 it('shows the same shared picture outcome in settings and the sidebar', async () => {
@@ -441,7 +491,8 @@ it('shows the same shared picture outcome in settings and the sidebar', async ()
   render(<AccountMenu renderSlot={() => null} {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
-    wide openSettings={() => {}} openOnboarding={() => {}} t={key => en[key as AccountKey]} />)
+    useLocale={selector => selector(localeSnapshot())}
+    wide openSettings={() => {}} openOnboarding={() => {}} t={translate(en)} />)
   const images = document.querySelectorAll('img')
   expect(images).toHaveLength(2)
   for (const image of images) expect(image.getAttribute('src')).toBe('https://example.test/avatar.png')
@@ -513,7 +564,8 @@ it.each([en, zh])('shows a localized toast when the account credential expires',
     settingsOpen={false} subscribeSessionExpired={(listener) => { expire = listener; return unsubscribe }}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={() => {}}
-    t={key => key in copy ? copy[key as AccountKey] : key} />
+    useLocale={selector => selector(localeSnapshot())}
+    t={translate(copy)} />
   const view = render(element)
   expect(screen.queryByRole('alert')).toBeNull()
   act(() => { expire!() })
@@ -540,7 +592,7 @@ it('opens the authorization link with the active application palette and follows
   const operations = operationsOf({ status: 'signed-out', attempt: { id: 'attempt' as SignInAttemptId, phase: 'waiting-browser', authorizeUrl } })
   const element = (theme: ThemeSnapshot) => <AccountSection {...({} as GlobalStandardProps)} {...operations}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
-    useTheme={selector => selector(theme)} close={() => {}} t={key => key in en ? en[key as AccountKey] : key} />
+    useTheme={selector => selector(theme)} useLocale={selector => selector(localeSnapshot())} close={() => {}} t={translate(en)} />
   const view = render(element(themeOf('dark')))
   expect(screen.getByRole('link', { name: en.open }).getAttribute('href'))
     .toBe('https://platform.deepseek.com/dsh/authorize?state=example&theme=dark')
@@ -562,10 +614,16 @@ it('shows unavailable details and keeps external Platform links usable in a brow
   // The failed read keeps its copy in both balance rows, now as links into Platform.
   const unavailable = screen.getAllByRole('link', { name: en.balanceUnavailable })
   expect(unavailable).toHaveLength(2)
-  for (const link of unavailable) expect(link.getAttribute('href')).toBe('http://localhost:8081/usage')
+  for (const link of unavailable) {
+    expect(link.getAttribute('href')).toBe('http://localhost:8081/usage')
+    // A working link is never announced as disabled.
+    expect(link.hasAttribute('aria-disabled')).toBe(false)
+  }
   for (const name of [en.usage, en.topUp, en.balanceUnavailable]) {
     const event = new MouseEvent('click', { bubbles: true, cancelable: true })
-    screen.getAllByRole('link', { name })[0]!.dispatchEvent(event)
+    const link = screen.getAllByRole('link', { name })[0]!
+    expect(link.hasAttribute('href')).toBe(true)
+    link.dispatchEvent(event)
     expect(event.defaultPrevented).toBe(false)
   }
 })
@@ -590,8 +648,10 @@ it('reports a rejected settings login and disables login while initial state is 
   const props = { ...({} as GlobalStandardProps), ...operations,
     start: vi.fn(async () => { throw new Error('unavailable') }),
     useAccount: <T,>(select: (value: AccountSnapshot) => T) => select(snapshot),
-    useTheme: <T,>(select: (value: ThemeSnapshot) => T) => select(operations.hooks.theme.getSnapshot()), close: () => {},
-    t: (key: string) => en[key as AccountKey],
+    useTheme: <T,>(select: (value: ThemeSnapshot) => T) => select(operations.hooks.theme.getSnapshot()),
+    useLocale: <T,>(select: (value: LocaleSnapshot) => T) => select(localeSnapshot()),
+    close: () => {},
+    t: translate(en),
   }
   const view = render(<AccountSection {...props} />)
   expect(screen.getByRole('button', { name: en.signIn }).hasAttribute('disabled')).toBe(true)
@@ -612,10 +672,11 @@ it('dismisses a collapsed menu and hands its login dialog to the API-key onboard
     openSettings: vi.fn(), openOnboarding,
     useAccount: <T,>(select: (value: AccountSnapshot) => T) => select(snapshot),
     useTheme: <T,>(select: (value: ThemeSnapshot) => T) => select(operations.hooks.theme.getSnapshot()),
-    t: (key: string) => en[key as AccountKey] }
+    useLocale: <T,>(select: (value: LocaleSnapshot) => T) => select(localeSnapshot()),
+    t: translate(en) }
   const view = render(<AccountMenu {...props} />)
-  expect(screen.getByRole('button', { name: en.menu }).textContent).toBe('')
-  fireEvent.click(screen.getByRole('button', { name: en.menu }))
+  expect(screen.getByRole('button', { name: triggerName(en, en.signedIn) }).textContent).toBe('')
+  fireEvent.click(screen.getByRole('button', { name: triggerName(en, en.signedIn) }))
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
   snapshot = { ...snapshot, view: { ...snapshot.view!, status: 'signed-out' }, loginVisible: true }
@@ -701,7 +762,8 @@ it.each([en, zh])('shows live model sign-in guidance without replaying it after 
     settingsOpen={false}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={() => {}}
-    t={key => key in copy ? copy[key as AccountKey] : key} />
+    useLocale={selector => selector(localeSnapshot())}
+    t={translate(copy)} />
   const view = render(element)
   expect(screen.queryByRole('alert')).toBeNull()
   act(() => { listener?.() })

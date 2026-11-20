@@ -261,6 +261,7 @@ const unusedFactoryProps = {
     removeAttachment: unusedFrameworkProp,
     pruneAttachments: unusedFrameworkProp,
     submit: unusedFrameworkProp,
+    focus: () => {},
   },
 }
 

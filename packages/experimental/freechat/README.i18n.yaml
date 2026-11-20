@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/freechat/README.md
+/:
+  en: 8472f8671d98d408
+  zh: 779522a24d395069
+/deepseek-ai-dsh-freechat:
+  en: 7fa0f46b98696d30
+  zh: 67ffe5b86a5e7304
+/deepseek-ai-dsh-freechat/summary:
+  en: c5fe23f6d9c15f5a
+  zh: 02ca959d3873a6c2
+/deepseek-ai-dsh-freechat/table-of-contents:
+  en: 1134b915224d75b4
+  zh: 5ff5b6014756df39
+/deepseek-ai-dsh-freechat/use-this-package:
+  en: 9bbd905de9947251
+  zh: 66d89bc99428a949
+/deepseek-ai-dsh-freechat/use-this-package/plugins-page-card:
+  en: 5eebf97be3a6588c
+  zh: 670aa13f3957f843
+/deepseek-ai-dsh-freechat/use-this-package/browser-transport:
+  en: 692a1ad62c3f1de9
+  zh: 111e0aa4aeb31261
+/deepseek-ai-dsh-freechat/understand-the-implementation:
+  en: 32c12091fa4a8100
+  zh: dfc12414570a37d9
+/deepseek-ai-dsh-freechat/model-experience:
+  en: 82f66583c7a28391
+  zh: 808fe4dd8c5fa2ac
+/deepseek-ai-dsh-freechat/model-experience/kv-cache-effect:
+  en: bb787097df38c173
+  zh: 23150357425e9279
+/deepseek-ai-dsh-freechat/known-limitations-and-deferred-work:
+  en: 48462d889287e923
+  zh: 7494f90eb3340757
+/deepseek-ai-dsh-freechat/further-exploration:
+  en: 4253b181ab17e7a5
+  zh: 7a0305623baaaf33
+/deepseek-ai-dsh-freechat/further-exploration/dev-note:
+  en: e67f633dc6fe7773
+  zh: e88aeb617ffb74ea

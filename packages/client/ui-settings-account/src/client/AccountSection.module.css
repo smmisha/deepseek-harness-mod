@@ -41,7 +41,7 @@
   height: 32px;
   border-radius: 50%;
   corner-shape: round;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   background: var(--dsw-alias-bg-skeleton);
 }
 
@@ -59,7 +59,7 @@
 .status,
 .secondary,
 .unavailable {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .balanceCard {
@@ -123,7 +123,7 @@
 /* A failed wallet read keeps its muted copy, but as a link: the user can still
    inspect the balance on Platform through the same destination as Usage. */
 .unavailableLink {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -190,7 +190,7 @@
 }
 
 .signedOutDescription {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
 }

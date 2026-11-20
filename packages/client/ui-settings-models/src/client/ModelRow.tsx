@@ -64,7 +64,7 @@ export function ModelRow(props: ModelRowProps): ReactNode {
         ? <span className={`${styles['modelFieldLabel']} ${styles['modelNameLabel']}`}>{t('modelName')}</span>
         : null}
       <input
-        className={styles['input']}
+        className={`${styles['input']} ${field === 'id' ? styles['modelIdInput'] : ''}`}
         type="text"
         value={typeof model[field] === 'string' ? model[field] : ''}
         placeholder={t(field === 'id' ? 'modelId' : 'modelName')}

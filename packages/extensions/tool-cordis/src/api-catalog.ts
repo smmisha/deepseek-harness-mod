@@ -1633,6 +1633,38 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'freechatAdmin',
+    summary: 'Host Remote behind the free web chat administration page.',
+    description: 'Host Remote behind the free web chat administration page.',
+    methods: [
+      {
+        signature: '@Remote async state(): Promise<FreeChatState>',
+        description: 'Read the routes and thread rows.',
+        parameters: [],
+        returns: 'the playable routes and the known threads.',
+      },
+      {
+        signature: '@Remote async resetThread(id: string): Promise<{ closedSession: boolean }>',
+        description: 'Drop one thread\'s live web conversation; its local memory stays.',
+        parameters: [{ name: 'id', description: 'sanitized thread id from {@link FreeChatState.threads}.' }],
+        returns: 'whether a live conversation was closed.',
+      },
+    ],
+  },
+  {
+    key: 'freeChatGuestPort',
+    summary: 'Bridge to the Electron guest page that owns the signed-in chat site.',
+    description: 'Bridge to the Electron guest page that owns the signed-in chat site. The desktop shell implements it over its own `<webview>` automation channel; the transport never imports Electron itself, so the package stays Host-runtime agnostic and testable with a fake port.',
+    methods: [
+      {
+        signature: 'evaluate<T>(script: string): Promise<T>',
+        description: 'Run one script inside the guest page and return its JSON value.',
+        parameters: [{ name: 'script', description: 'self-contained expression evaluated in the guest\'s main world.' }],
+        returns: 'the script\'s JSON-serializable result.',
+      },
+    ],
+  },
+  {
     key: 'fs',
     summary: 'Abstract filesystem provider.',
     description: 'Abstract filesystem provider. Targets must preserve identity across aliases; reads expose regular UTF-8 text or typed errors, listings are stable and content-free, and single-file publication is atomic. Moves can retain their source after publishing the destination. Optional guards add stale protection without changing the unguarded provider contract.',
@@ -2135,6 +2167,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'settingsNs', description: 'namespace whose registered discovery serves this draft.' }, { name: 'request', description: 'endpoint, protocol, and one-shot credential to use.' }, { name: 'signal', description: 'caller cancellation supplied by the Remote carrier.' }],
         returns: 'advertised models in endpoint order.',
         throws: ['RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.'],
+      },
+      {
+        signature: 'registerListingRefresh( settingsNs: string, refresh: (provider: string, signal?: AbortSignal) => Promise<void>, ): () => void',
+        description: 'Offer to reload the model listings this plugin\'s settings namespace follows, on demand. The namespace is the key because that is what a configuration surface already holds from the configurable-provider directory. Disposed with the fiber.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose routes this reload serves.' }, { name: 'refresh', description: 'reloads one provider route\'s followed listing and must honor the supplied signal.' }],
+        returns: 'the disposer that withdraws the offer.',
+      },
+      {
+        signature: 'async refreshListing(settingsNs: string, provider: string, signal?: AbortSignal): Promise<void>',
+        description: 'Reload one provider route\'s followed model listing now, discarding its cached copy first. Nothing here reads or writes settings: the registered owner resolves the route\'s current configuration and refuses with its own diagnostic when the route follows no listing.',
+        parameters: [{ name: 'settingsNs', description: 'namespace whose registered refresh serves this route.' }, { name: 'provider', description: 'route to reload; one namespace may own several.' }, { name: 'signal', description: 'caller cancellation.' }],
+      },
+      {
+        signature: '@Remote(\'refreshListing\') async remoteRefreshListing( settingsNs: string, provider: string, signal: AbortSignal, ): Promise<void>',
+        description: 'Remote adapter for one on-demand listing reload.',
+        parameters: [{ name: 'settingsNs', description: 'namespace whose registered refresh serves this route.' }, { name: 'provider', description: 'route to reload.' }, { name: 'signal', description: 'caller cancellation supplied by the Remote carrier.' }],
+        throws: ['RemoteError with `llm/model-listing-refresh-rejected` when the refresh refuses or fails.'],
       },
       {
         signature: 'providerRetryPolicy(provider: string): ResolvedRetryPolicy',
@@ -2993,6 +3042,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'acknowledgement that the queue mutation was applied.',
       },
       {
+        signature: '@Remote(\'editMessage\') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>',
+        description: 'Rewind an idle Session to one sent user message and queue its edited text as a new Turn.',
+        parameters: [{ name: 'request', description: 'Session, edited message seq, replacement text, and request identity.' }],
+        returns: 'acknowledgement once the retraction is committed and the edited message is queued.',
+      },
+      {
         signature: '@Remote(\'cancel\') cancel(request: SessionCancelRequest): SessionCancelValue',
         description: 'Cancel one active Agent turn without dropping its pending inbox.',
         parameters: [{ name: 'request', description: 'Session whose active Agent turn is cancelled.' }],
@@ -3682,6 +3737,70 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Load and validate the winning candidate, passing its opaque discovery locator back to the provider. Cancellation is rechecked after selection, including cache hits, and raced against loading so an uncooperative provider cannot hang the caller.',
         parameters: [{ name: 'name', description: 'kebab-case skill name.' }, { name: 'options', description: 'view options; `scope` selects the viewing agent\'s layers, `cwd` selects workspace-sensitive skills, and `signal` cancels work.' }],
         returns: 'the full skill, including body content, or `undefined`.',
+      },
+    ],
+  },
+  {
+    key: 'skillSources',
+    summary: 'The one service a provider and the Skills tab both use.',
+    description: 'The one service a provider and the Skills tab both use.',
+    methods: [
+      {
+        signature: 'read(): SkillVisibilityState',
+        description: 'Current switches.',
+        parameters: [],
+        returns: 'the source and per-skill switches as stored.',
+      },
+      {
+        signature: 'applications(): readonly SkillApplication[]',
+        description: 'Configured other-application folders.',
+        parameters: [],
+        returns: 'the application folders in configuration order.',
+      },
+      {
+        signature: 'categories(): readonly SkillCategory[]',
+        description: 'Configured category rules.',
+        parameters: [],
+        returns: 'the rules in configuration order.',
+      },
+      {
+        signature: 'folders(): readonly SkillFolder[]',
+        description: 'Folders the reader added.',
+        parameters: [],
+        returns: 'the added folders in the order they were added.',
+      },
+      {
+        signature: 'visibility(): SkillVisibility',
+        description: 'One read of the switches, applications, and added folders, answering which sources and skills are visible.',
+        parameters: [],
+        returns: 'the visibility view over the current configuration.',
+      },
+      {
+        signature: 'addFolder(dir: string): Promise<boolean>',
+        description: 'Add one local absolute folder, switched off until the reader turns its source on; refuses any other path.',
+        parameters: [{ name: 'dir', description: 'local absolute folder to scan for skill bundles.' }],
+        returns: 'false when the folder is already listed, true when it was added.',
+      },
+      {
+        signature: 'removeFolder(dir: string): Promise<void>',
+        description: 'Remove one added folder; its files and switches stay untouched.',
+        parameters: [{ name: 'dir', description: 'absolute folder as it was added.' }],
+      },
+      {
+        signature: 'setSource(source: SkillSource, enabled: boolean): Promise<void>',
+        description: 'Switch one source; the per-skill switches are preserved.',
+        parameters: [{ name: 'source', description: 'source to switch.' }, { name: 'enabled', description: 'whether the source contributes skills.' }],
+      },
+      {
+        signature: 'setSkill(source: SkillSource, name: string, enabled: boolean): Promise<void>',
+        description: 'Switch one skill inside its source.',
+        parameters: [{ name: 'source', description: 'source that holds the skill.' }, { name: 'name', description: 'skill name inside that source.' }, { name: 'enabled', description: 'whether the skill is visible.' }],
+      },
+      {
+        signature: 'register(invalidate: () => void): () => void',
+        description: 'Register the invalidator of one provider instance.',
+        parameters: [{ name: 'invalidate', description: 'called after every write so the provider republishes its catalog.' }],
+        returns: 'the disposer that unregisters the invalidator.',
       },
     ],
   },
@@ -4504,6 +4623,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Open one live stream Remote method without assuming a physical carrier.',
         parameters: [{ name: 'request', description: 'decoded endpoint, named wire arguments, and the Client uplink when the carrier has one.' }],
         returns: 'a cancellation-aware iterable over the business results.',
+      },
+    ],
+  },
+  {
+    key: 'usage',
+    summary: 'Host Remote behind the Usage page.',
+    description: 'Host Remote behind the Usage page.',
+    methods: [
+      {
+        signature: '@Remote async view(since: number): Promise<UsageView>',
+        description: 'Read new Session events and sum the calls.',
+        parameters: [{ name: 'since', description: 'earliest call time the rows include, in epoch milliseconds.' }],
+        returns: 'quarter-hour rows since then and rolling-window totals ending now.',
+      },
+      {
+        signature: '@Remote async balance(): Promise<UsageBalance>',
+        description: 'Read the DeepSeek account balance.',
+        parameters: [],
+        returns: 'the balance, or why it cannot be shown.',
       },
     ],
   },
@@ -6986,6 +7124,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ForgeWorktreeWaiting = \'creation\' | \'restoration\';',
   },
   {
+    name: 'FreeChatModelRow',
+    declaration: 'export interface FreeChatModelRow {\n    readonly id: string;\n    readonly name: string;\n    readonly contextWindow: number;\n    readonly maxOutputTokens: number;\n    readonly reasoning: boolean;\n}',
+  },
+  {
+    name: 'FreeChatState',
+    declaration: 'export interface FreeChatState {\n    readonly models: readonly FreeChatModelRow[];\n    readonly threads: readonly FreeChatThreadRow[];\n}',
+  },
+  {
+    name: 'FreeChatThreadRow',
+    declaration: 'export interface FreeChatThreadRow {\n    readonly id: string;\n    readonly generation: number;\n    readonly turns: number;\n    readonly updatedAt?: string | undefined;\n    readonly live: boolean;\n}',
+  },
+  {
     name: 'FsDeleteOutcome',
     declaration: 'export interface FsDeleteOutcome {\n    before: string | null;\n}',
   },
@@ -7395,7 +7545,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmConfigurableProvider',
-    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n    defaultBaseURL?: string;\n    baseURLEnv?: readonly string[];\n    nativeAuth?: LlmNativeAuth;\n    error?: string;\n}',
+    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n    defaultBaseURL?: string;\n    baseURLEnv?: readonly string[];\n    nativeAuth?: LlmNativeAuth;\n    listingRefresh?: true;\n    error?: string;\n}',
   },
   {
     name: 'LlmDiscoveredModel',
@@ -7463,7 +7613,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(conf /* …truncated — full shape in source */',
+    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    registerListingRefresh(settingsNs: string, refresh: (provider: string, signal?: AbortSignal) => Promise<void>): () => void;\n    async refreshListing(settingsNs: string, provider: string, signal?: AbortSignal): Promise<void>;\n    @Remote(\'refreshListing\')\n    async remoteRefreshListing(settingsNs: string, provider: string, signal: AbortSignal): Promise<void>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageReques /* …truncated — full shape in source */',
   },
   {
     name: 'LocalAtInput',
@@ -8815,7 +8965,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionCancelRequest',
-    declaration: 'export interface SessionCancelRequest {\n    readonly sessionId: SessionId;\n}',
+    declaration: 'export interface SessionCancelRequest {\n    readonly sessionId: SessionId;\n    readonly mode?: SessionStopMode;\n}',
   },
   {
     name: 'SessionCancelValue',
@@ -8844,6 +8994,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionCreateValue',
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'SessionEditMessageRequest',
+    declaration: 'export interface SessionEditMessageRequest {\n    readonly requestId: SessionRequestId;\n    readonly sessionId: SessionId;\n    readonly seq: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SessionEditMessageValue',
+    declaration: 'export interface SessionEditMessageValue {\n    readonly accepted: true;\n}',
   },
   {
     name: 'SessionEndInput',
@@ -9298,6 +9456,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionStateRequest {\n    readonly sessionId: SessionId;\n}',
   },
   {
+    name: 'SessionStopMode',
+    declaration: 'export type SessionStopMode = \'graceful\' | \'immediate\';',
+  },
+  {
     name: 'SessionStorageMetadata',
     declaration: 'export interface SessionStorageMetadata {\n    readonly meta: SessionHeader;\n    readonly inheritedEventCount: SessionLogOffset;\n}',
   },
@@ -9534,6 +9696,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SignInErrorCode = \'no-response\' | \'network\' | \'protocol\' | \'expired\' | \'storage\';',
   },
   {
+    name: 'SkillApplication',
+    declaration: 'export interface SkillApplication {\n    readonly id: string;\n    readonly dir: string;\n    readonly title: string;\n}',
+  },
+  {
     name: 'SkillCandidate',
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -9542,12 +9708,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillCatalogSnapshot {\n    readonly skills: SkillSummary[];\n    readonly complete: boolean;\n}',
   },
   {
+    name: 'SkillCategory',
+    declaration: 'export interface SkillCategory {\n    readonly id: string;\n    readonly title: string;\n    readonly prefixes?: string[];\n    readonly namespaces?: string[];\n}',
+  },
+  {
     name: 'SkillDefinition',
     declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
   {
     name: 'SkillEntry',
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
+  },
+  {
+    name: 'SkillFolderSource',
+    declaration: 'export interface SkillFolderSource {\n    readonly id: string;\n    readonly dir: string;\n}',
   },
   {
     name: 'SkillInvocationPolicy',
@@ -9596,6 +9770,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillViewOptions',
     declaration: 'export interface SkillViewOptions extends SkillLookupOptions {\n    readonly scope?: ScopeKey | undefined;\n}',
+  },
+  {
+    name: 'SkillVisibility',
+    declaration: 'export interface SkillVisibility {\n    readonly applications: readonly SkillApplication[];\n    readonly folders: readonly SkillFolderSource[];\n    readonly categories: readonly SkillCategory[];\n    sourceEnabled(source: string): boolean;\n    skillEnabled(source: string, name: string): boolean;\n}',
+  },
+  {
+    name: 'SkillVisibilityState',
+    declaration: 'export interface SkillVisibilityState {\n    readonly sources: Readonly<Record<string, {\n        readonly enabled?: boolean;\n    }>>;\n    readonly skills: Readonly<Record<string, Readonly<Record<string, boolean>>>>;\n}',
   },
   {
     name: 'SpeechCatalog',
@@ -10299,7 +10481,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TurnEndReasonMap',
-    declaration: 'export interface TurnEndReasonMap {\n    completed: {\n        kind: \'completed\';\n    };\n    aborted: {\n        kind: \'aborted\';\n        reason: TurnEndCancelCause;\n    };\n    blocked: {\n        kind: \'blocked\';\n    };\n    error: {\n        kind: \'error\';\n        error: LlmFailure;\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    interrupted: {\n        kind: \'interrupted\';\n    };\n    forked: {\n        kind: \'forked\';\n    };\n}',
+    declaration: 'export interface TurnEndReasonMap {\n    completed: {\n        kind: \'completed\';\n    };\n    aborted: {\n        kind: \'aborted\';\n        reason: TurnEndCancelCause;\n    };\n    blocked: {\n        kind: \'blocked\';\n    };\n    error: {\n        kind: \'error\';\n        error: LlmFailure;\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    stopped: {\n        kind: \'stopped\';\n    };\n    interrupted: {\n        kind: \'interrupted\';\n    };\n    forked: {\n        kind: \'forked\';\n    };\n}',
   },
   {
     name: 'TurnStartInput',
@@ -10476,6 +10658,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: SessionId;\n}',
+  },
+  {
+    name: 'UsageBalance',
+    declaration: 'export type UsageBalance = {\n    readonly status: \'available\';\n    readonly sufficient: boolean;\n    readonly entries: readonly UsageBalanceEntry[];\n} | {\n    readonly status: \'unconfigured\';\n} | {\n    readonly status: \'failed\';\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'UsageBalanceEntry',
+    declaration: 'export interface UsageBalanceEntry {\n    readonly currency: string;\n    readonly total: string;\n    readonly granted: string;\n    readonly toppedUp: string;\n}',
+  },
+  {
+    name: 'UsageSlotRow',
+    declaration: 'export interface UsageSlotRow extends UsageTokens {\n    readonly slot: number;\n    readonly provider: string;\n    readonly model: string;\n    readonly calls: number;\n}',
+  },
+  {
+    name: 'UsageTokens',
+    declaration: 'export interface UsageTokens {\n    readonly input: number;\n    readonly cacheRead: number;\n    readonly cacheWrite: number;\n    readonly output: number;\n}',
+  },
+  {
+    name: 'UsageView',
+    declaration: 'export interface UsageView {\n    readonly rows: readonly UsageSlotRow[];\n    readonly windows: readonly UsageWindowTotals[];\n    readonly scannedAt: number;\n}',
+  },
+  {
+    name: 'UsageWindowTotals',
+    declaration: 'export interface UsageWindowTotals {\n    readonly provider: string;\n    readonly fiveHours: number;\n    readonly week: number;\n    readonly month: number;\n}',
   },
   {
     name: 'UserMessage',

@@ -29,7 +29,10 @@ import type { ProviderRow } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
 import { settingsSchema } from './settings-schema.client.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 const t: ModelsSectionInjected['t'] = key => en[key]
 const OPENAI_TARGET = { provider: 'openai', displayName: 'openai' }
@@ -163,12 +166,14 @@ function remoteOk<T>(value: T) {
   return { ok: true as const, value }
 }
 /** The codes this page's scripted Host answers refuse with. */
-type RefusalCode = 'credential/rejected' | 'gateway/internal' | 'settings/conflict' | 'settings/rejected'
+type RefusalCode = 'credential/rejected' | 'gateway/internal' | 'llm/model-listing-refresh-rejected' | 'settings/conflict' | 'settings/rejected'
 
 /** One refusal per code, each carrying the details its own code declares. */
 const REFUSALS: { [Code in RefusalCode]: (message: string) => RemoteError<Code> } = {
   'credential/rejected': message => new RemoteError('credential/rejected', message, { ref: 'DEEPSEEK_API_KEY' }),
   'gateway/internal': message => new RemoteError('gateway/internal', message, {}),
+  'llm/model-listing-refresh-rejected': message =>
+    new RemoteError('llm/model-listing-refresh-rejected', message, { settingsNs: 'llm-deepseek', provider: 'deepseek-official' }),
   'settings/conflict': message =>
     new RemoteError('settings/conflict', message, { ns: 'llm-pi-ai', expected: 4, actual: 5 }),
   'settings/rejected': message => new RemoteError('settings/rejected', message, { ns: 'llm-pi-ai' }),
@@ -210,6 +215,15 @@ function scriptedFace(overrides: {
         { provider: 'plain', displayName: 'plain', settingsNs: 'llm-plain', settingsPath: ['profiles', 'plain'], active: false },
       ].map(({ active: _active, ...entry }) => entry)))),
       discoverModels: vi.fn(() => Promise.resolve(remoteOk([]))),
+      refreshListing: vi.fn<(_settingsNs: string, _provider: string) => Promise<RemoteResult<void>>>(
+        () => Promise.resolve(remoteOk(undefined)),
+      ),
+    },
+    session: {
+      /** Account rows only appear while the account catalog reports them usable. */
+      modelCatalog: vi.fn(() => Promise.resolve(remoteOk({
+        groups: [] as { id: string; models: { id: string }[] }[],
+      }))),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(remoteOk({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),
@@ -245,8 +259,9 @@ const contexts = new WeakMap<object, PageContext>()
 function ctxWith(face: object): PageContext {
   const existing = contexts.get(face)
   if (existing !== undefined) return existing
+  const session = (face as { session?: object }).session ?? {}
   const ctx = Object.assign(new Context(), { remote: { ...face,
-    session: { initializeDefaultModel: async () => ({ ok: true, value: undefined }) },
+    session: { initializeDefaultModel: async () => ({ ok: true, value: undefined }), ...session },
   } })
   contexts.set(face, ctx)
   return ctx
@@ -733,12 +748,13 @@ describe('ModelsSection', () => {
     // openai's key is stored, so the user is not blocked and nothing on the
     // page opens itself over them.
     expect(screen.queryByLabelText(en.keyInput)).toBeNull()
-    const configured = screen.getByRole('img', { name: en.credentialConfigured })
-    expect(configured.getAttribute('title')).toBe(en.credentialConfigured)
-    expect(configured.className).toContain('credentialDotConfigured')
-    expect(configured.closest('li')?.textContent).toContain('openai')
-    const missing = screen.getByRole('img', { name: en.credentialMissing })
-    expect(missing.closest('li')?.textContent).toContain('DeepSeek')
+    const configuredRow = screen.getByText('openai').closest('li')!
+    expect(within(configuredRow).getByText(en.credentialConfigured)).toBeTruthy()
+    // The model name is the row's title; the route id is the quiet chip beside it.
+    expect(within(configuredRow).getByTitle('openai')).toBeTruthy()
+    const missingRow = screen.getByText('DeepSeek').closest('li')!
+    expect(within(missingRow).getByText(en.credentialMissing)).toBeTruthy()
+    expect(within(missingRow).getByTitle('deepseek-official')).toBeTruthy()
     // The card is still one click away.
     fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
     expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
@@ -760,12 +776,13 @@ describe('ModelsSection', () => {
       renderSlot={() => null}
     />)
 
-    const missing = screen.getByRole('img', { name: en.credentialMissing })
-    expect(missing.getAttribute('title')).toBe(en.credentialMissing)
-    expect(missing.className).toContain('credentialDotMissing')
-    expect(missing.closest('li')?.textContent).toContain('openai')
-    expect(screen.queryByRole('img', { name: en.credentialConfigured })).toBeNull()
-    expect(screen.getByText('zombie').closest('li')?.querySelector('[role="img"]')).toBeNull()
+    const missingRow = screen.getByText('openai').closest('li')!
+    expect(within(missingRow).getByText(en.credentialMissing)).toBeTruthy()
+    expect(within(missingRow).queryByText(en.credentialConfigured)).toBeNull()
+    // A row whose profile names no reference reports no credential state at all.
+    const nativeRow = screen.getByText('zombie').closest('li')!
+    expect(within(nativeRow).queryByText(en.credentialMissing)).toBeNull()
+    expect(within(nativeRow).queryByText(en.credentialConfigured)).toBeNull()
   })
 
   it('turns the setup card into a row once the credential reports configured', async () => {
@@ -795,6 +812,7 @@ describe('ModelsSection', () => {
       entry,
       configured: true,
       removable: false,
+      listingRefresh: false,
       apiKeyEnv: 'X',
       credential,
     })
@@ -2043,10 +2061,10 @@ describe('ModelsSection', () => {
     fireEvent.click(screen.getAllByText(en.cancel)[0] as HTMLElement)
     // The add card kept its draft…
     expect(screen.getByLabelText(en.provider)).toBeTruthy()
-    // …and DeepSeek collapsed to an ordinary row carrying the missing-key dot.
+    // …and DeepSeek collapsed to an ordinary row carrying the missing-key state.
     expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
-    expect(screen.getAllByRole('img', { name: en.credentialMissing })
-      .some(dot => dot.closest('li')?.textContent?.includes('DeepSeek') === true)).toBe(true)
+    expect(screen.getAllByText(en.credentialMissing)
+      .some(state => state.closest('li')?.textContent?.includes('DeepSeek') === true)).toBe(true)
     // Its card reopens through Edit, which closes the add card as any row does.
     fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
     expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
@@ -2666,4 +2684,265 @@ it.each([es, fr, de, ru, pt])('keeps capacity examples in translated validation 
       expect(parseCapacity(token!)).toBeGreaterThan(0)
     }
   }
+})
+
+
+describe('Models provider rows', () => {
+  it('reads each row as name, then state, then the machine id, with the controls last', async () => {
+    await mountSection()
+    const row = screen.getByText('DeepSeek').closest('li')!
+    expect(row.getAttribute('data-models-row')).toBe('deepseek-official')
+    expect(row.getAttribute('data-provider-state')).toBe('missing')
+    const head = row.querySelector<HTMLElement>('[class*="rowHead"]')!
+    const [titleLine, meta, actions] = [...head.children] as [HTMLElement, HTMLElement, HTMLElement]
+    // Title line: the human name, and no machine id competing with it.
+    expect(titleLine.querySelector('h3')?.textContent).toBe('DeepSeek')
+    expect(titleLine.getAttribute('title')).toBeNull()
+    // Fact line: the state word first, then the route id as the quiet chip.
+    expect(meta.children[0]?.textContent).toBe(en.credentialMissing)
+    expect(meta.children[0]?.getAttribute('data-state')).toBe('missing')
+    expect(meta.children[1]?.getAttribute('title')).toBe('deepseek-official')
+    expect(meta.children[1]?.textContent).toBe('deepseek-official')
+    // Controls keep the trailing column and stay reachable by their own names.
+    expect(within(actions).getByRole('button', { name: deepSeekCopy(en.editProvider) })).toBeTruthy()
+  })
+
+  it('leaves the id chip off a route whose display name is its own id', async () => {
+    await mountSection()
+    const row = screen.getByText('openai').closest('li')!
+    const head = row.querySelector<HTMLElement>('[class*="rowHead"]')!
+    const meta = head.children[1] as HTMLElement
+    expect(meta.children[0]?.textContent).toBe(en.credentialConfigured)
+    expect(meta.querySelector('[title="openai"]')).toBeNull()
+    expect(meta.textContent).toBe(en.credentialConfigured)
+  })
+
+  it('states a declared route with the custom tag on the title line', async () => {
+    const scripted = scriptedFace()
+    const namespaces = wireNamespaces().map(view => view.ns === 'llm-pi-ai'
+      ? piAiNamespaceWith('acme', { apiKeyEnv: 'ACME_API_KEY' })
+      : view)
+    scripted.face.settings.describe.mockImplementation(() => Promise.resolve(remoteOk(
+      { writable: true, hasDocument: false, namespaces },
+    )))
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true },
+      {
+        provider: 'acme', displayName: 'Acme Gateway', settingsNs: 'llm-pi-ai',
+        settingsPath: ['providers', 'acme'], declared: true, active: true,
+      },
+      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
+    ])))
+    scripted.face.credentials.describe.mockImplementation((refs: string[]) => Promise.resolve(remoteOk(
+      Object.fromEntries(refs.map(ref => [ref, { configured: true, writable: true }])),
+    )))
+    await mountFace(scripted)
+    const row = screen.getByText('Acme Gateway').closest('li')!
+    const head = row.querySelector<HTMLElement>('[class*="rowHead"]')!
+    const titleLine = head.children[0] as HTMLElement
+    expect(within(titleLine).getByText(en.customTag)).toBeTruthy()
+    expect(titleLine.querySelector('h3')?.textContent).toBe('Acme Gateway')
+    expect((head.children[1] as HTMLElement).children[1]?.textContent).toBe('acme')
+    expect(row.getAttribute('data-provider-state')).toBe('configured')
+  })
+
+  it('states a directory failure as the unavailable row state above its message', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+      {
+        provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek',
+        settingsPath: [], active: true, error: 'route unavailable',
+      },
+      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
+    ])))
+    await mountFace(scripted)
+    const row = screen.getByText('DeepSeek').closest('li')!
+    expect(row.getAttribute('data-provider-state')).toBe('unavailable')
+    const meta = row.querySelector<HTMLElement>('[class*="rowHead"]')!.children[1] as HTMLElement
+    expect(meta.children[0]?.textContent).toBe(en.providerUnavailable)
+    expect(meta.children[0]?.getAttribute('data-state')).toBe('unavailable')
+    expect(within(row).getByRole('alert').textContent).toBe('route unavailable')
+  })
+
+  it('sets the model id field in the code face and leaves the display name in the reading face', async () => {
+    await mountDeepSeekCard()
+    fireEvent.click(screen.getByText(en.customized))
+    const id = screen.getAllByLabelText(new RegExp(en.modelId))[0] as HTMLInputElement
+    const name = screen.getAllByLabelText(new RegExp(en.modelName))[0] as HTMLInputElement
+    expect(id.className).toContain('modelIdInput')
+    expect(name.className).not.toContain('modelIdInput')
+  })
+  it('states the loading posture as a spinner dot plus its word', async () => {
+    const scripted = scriptedFace()
+    const ctx = ctxWith(scripted.face)
+    const controller = new ModelsSettingsStore(ctx, settingsSchema, new SettingsDescribeMirror(ctx))
+    render(<ModelsSection
+      controller={controller}
+      useSnapshot={bindSnapshotSelector(controller.store)}
+      operations={operationsWith(scripted.face)}
+      schema={settingsSchema}
+      t={t}
+      renderSlot={stubRenderSlot() as unknown as ModelsSectionProps['renderSlot']}
+    />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe(en.loadingProviders)
+    expect(status.querySelector('[data-state="ongoing"]')).toBeTruthy()
+  })
+})
+
+/** Directory rows for the refresh specs: only the DeepSeek routes follow a reloadable catalog. */
+const REFRESHABLE_DIRECTORY = [
+  {
+    provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [],
+    listingRefresh: true,
+  },
+  {
+    provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'],
+    defaultBaseURL: 'https://api.openai.com/v1', baseURLEnv: ['FIXTURE_ENDPOINT'],
+    nativeAuth: { env: ['OPENAI_API_KEY'], oauth: false },
+  },
+]
+
+describe('listing refresh', () => {
+  /** Mount the page with the adapter reporting the refreshable DeepSeek route. */
+  async function mountRefreshable(overrides: Parameters<typeof scriptedFace>[0] = {}) {
+    const scripted = scriptedFace(overrides)
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+    return mountFace(scripted)
+  }
+
+  it('offers the refresh on the official row while its catalog is inherited', async () => {
+    await mountRefreshable()
+    const refresh = screen.getByRole<HTMLButtonElement>('button', { name: deepSeekCopy(en.refreshProvider) })
+    expect(refresh.textContent).toBe(en.refreshModels)
+    expect(refresh.disabled).toBe(false)
+  })
+
+  it('hides the refresh when the user layer replaces the model catalog', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+    scripted.face.settings.describe.mockImplementation(() => Promise.resolve(remoteOk({
+      writable: true,
+      hasDocument: false,
+      namespaces: wireNamespaces().map(view => view.ns === 'llm-deepseek'
+        ? { ...view, user: { models: [{ id: 'pinned-model' }] } }
+        : view),
+    })))
+    await mountFace(scripted)
+    // The row itself is still there; only the reload of the adapter's own
+    // followed catalog has nothing left to act on.
+    expect(screen.getByText('DeepSeek')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: deepSeekCopy(en.refreshProvider) })).toBeNull()
+  })
+
+  it('leaves a third-party row without the adapter capability unlisted', async () => {
+    await mountSection()
+    expect(screen.getByRole('button', { name: openaiCopy(en.editProvider) })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: openaiCopy(en.refreshProvider) })).toBeNull()
+  })
+
+  it('offers the refresh on the account row once its catalog reports usable', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+      {
+        provider: 'deepseek-account', displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account',
+        settingsPath: [], listingRefresh: true,
+      },
+    ])))
+    scripted.face.session.modelCatalog.mockResolvedValue(remoteOk({
+      groups: [{ id: 'deepseek-account', models: [{ id: 'deepseek-v4-flash' }] }],
+    }))
+    await mountFace(scripted)
+    expect(screen.getByRole('button', {
+      name: providerCopy(en.refreshProvider, { provider: 'deepseek-account', displayName: en.deepSeekAccount }),
+    })).toBeTruthy()
+  })
+
+  it('reloads through the wired operation and clears the confirmation after four seconds', async () => {
+    vi.useFakeTimers()
+    try {
+      const scripted = scriptedFace()
+      scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+      const pending = Promise.withResolvers<RemoteResult<void>>()
+      scripted.face.llm.refreshListing.mockImplementationOnce(() => pending.promise)
+      await mountFace(scripted)
+
+      const refresh = screen.getByRole<HTMLButtonElement>('button', { name: deepSeekCopy(en.refreshProvider) })
+      expect(refresh.textContent).toBe(en.refreshModels)
+      fireEvent.click(refresh)
+
+      // The row names itself to the Host and reports the in-flight reload.
+      expect(scripted.face.llm.refreshListing).toHaveBeenCalledExactlyOnceWith('llm-deepseek', 'deepseek-official')
+      expect(refresh.textContent).toBe(en.refreshingModels)
+      expect(refresh.disabled).toBe(true)
+
+      await act(async () => {
+        pending.resolve(remoteOk(undefined))
+        await pending.promise
+        await Promise.resolve()
+      })
+      expect(refresh.textContent).toBe(en.refreshModels)
+      expect(refresh.disabled).toBe(false)
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+
+      // The confirmation is transient: it clears four seconds after it appears.
+      act(() => { vi.advanceTimersByTime(3_999) })
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('surfaces a refused reload as the host message on its row', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk(REFRESHABLE_DIRECTORY)))
+    scripted.face.llm.refreshListing.mockResolvedValueOnce(
+      remoteFail('the listing endpoint refused the reload', 'llm/model-listing-refresh-rejected'),
+    )
+    await mountFace(scripted)
+    fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.refreshProvider) }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('the listing endpoint refused the reload')
+    expect(screen.queryByText(en.modelsRefreshed)).toBeNull()
+  })
+
+  it('keeps a newer confirmation when an earlier one expires', async () => {
+    vi.useFakeTimers()
+    try {
+      const scripted = scriptedFace()
+      scripted.face.llm.listConfigurableProviders.mockImplementation(() => Promise.resolve(remoteOk([
+        ...REFRESHABLE_DIRECTORY,
+        {
+          provider: 'deepseek-account', displayName: 'DeepSeek Account', settingsNs: 'llm-deepseek-account',
+          settingsPath: [], listingRefresh: true,
+        },
+      ])))
+      scripted.face.session.modelCatalog.mockResolvedValue(remoteOk({
+        groups: [{ id: 'deepseek-account', models: [{ id: 'deepseek-v4-flash' }] }],
+      }))
+      await mountFace(scripted)
+      const official = screen.getByRole<HTMLButtonElement>('button', { name: deepSeekCopy(en.refreshProvider) })
+      const account = screen.getByRole<HTMLButtonElement>('button', {
+        name: providerCopy(en.refreshProvider, { provider: 'deepseek-account', displayName: en.deepSeekAccount }),
+      })
+
+      fireEvent.click(official)
+      await act(async () => { await Promise.resolve() })
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(account)
+      await act(async () => { await Promise.resolve() })
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+
+      // The official row's timer expires first and must leave the account
+      // row's confirmation alone; its own timer clears it a second later.
+      act(() => { vi.advanceTimersByTime(3_000) })
+      expect(screen.getByRole('status').textContent).toBe(en.modelsRefreshed)
+      act(() => { vi.advanceTimersByTime(1_000) })
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

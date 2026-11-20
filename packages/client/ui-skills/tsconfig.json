@@ -14,10 +14,12 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../api/remotes/tsconfig.client.json" },
     { "path": "../locale/tsconfig.client.json" },
+    { "path": "../store" },
     { "path": "../ui-plugin-manager/tsconfig.client.json" },
     { "path": "../ui-primitives" },
     { "path": "../ui-renderer" },
     { "path": "../ui-slots" },
-    { "path": "../ui-workspace" }
+    { "path": "../ui-workspace" },
+    { "path": "../../skill/skill-install" }
   ]
 }

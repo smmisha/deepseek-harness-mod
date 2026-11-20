@@ -12,7 +12,7 @@ Open **Settings → Models**. The DeepSeek card exposes one API-key field; enter
 
 Keys are write-only. The page receives a redacted descriptor after saving, never the literal secret. The key is stored in `$DSH_HOME/.credentials.yaml`, while settings retain only its credential reference.
 
-With a key saved and the default endpoint, DeepSeek's models follow the list the DeepSeek API publishes. The list loads when the models are first needed, refreshes in the background about every ten minutes while they are in use, and falls back to the built-in models when it cannot load. Editing **Models** under **Customized settings** keeps your own list instead and stops following the published one; **Restore defaults** follows it again and reloads it. While the published list is in use, the card shows the built-in models, so a newly published model appears only in the model picker. The [API-key provider reference](../../../packages/llm/llm-deepseek-api-key/README.md) owns the listing, fallback, and gating rules.
+With a key saved and the default endpoint, DeepSeek's models follow the list the DeepSeek API publishes. The list loads when the models are first needed, refreshes in the background about every ten minutes while they are in use, and falls back to the built-in models when it cannot load. **Refresh models** on the DeepSeek row reloads the published list immediately — choose it when a model the API lists is still missing — and changes no setting; a refused reload shows its reason under the row. Editing **Models** under **Customized settings** keeps your own list instead and stops following the published one, which also hides **Refresh models**; **Restore defaults** follows it again and reloads it. Refresh reloads what the route already follows, while restore removes your own list first. While the published list is in use, the card shows the built-in models, so a newly published model appears only in the model picker. The [API-key provider reference](../../../packages/llm/llm-deepseek-api-key/README.md) owns the listing, fallback, and gating rules.
 
 ## Add a third-party provider
 
@@ -118,7 +118,7 @@ Both fields state a claim about your endpoint rather than checking it. A model t
 
 ### DeepSeek account models
 
-A signed-in DeepSeek account lists its models from the account service, so the Models page offers no model editor for it. Adjust a single model with `modelOverrides` in `$DSH_HOME/profiles/<profile>/cordis.patch.yml`; the fields match a DeepSeek `models` entry, and unset fields keep the listed values:
+A signed-in DeepSeek account lists its models from the account service, so the Models page offers no model editor for it; its row offers **Refresh models**, which reloads that listing immediately. Adjust a single model with `modelOverrides` in `$DSH_HOME/profiles/<profile>/cordis.patch.yml`; the fields match a DeepSeek `models` entry, and unset fields keep the listed values:
 
 ```yaml
 - id: llm-deepseek-account

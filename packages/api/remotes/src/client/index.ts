@@ -12,6 +12,8 @@ import accountRemote from '@deepseek-ai/dsh-deepseek-account/remote'
 import settingsControllerRemote from '@deepseek-ai/dsh-api-settings-controller/remote'
 import skillSourcesRemote from '@deepseek-ai/dsh-skill-filesystem/remote'
 export type {} from '@deepseek-ai/dsh-skill-filesystem/remote'
+import skillInstallRemote from '@deepseek-ai/dsh-skill-install/remote'
+export type {} from '@deepseek-ai/dsh-skill-install/remote'
 import officeKitRemote from '@deepseek-ai/dsh-office-kit/remote'
 import goalsRemote from '@deepseek-ai/dsh-goal/remote'
 import scheduleRemote from '@deepseek-ai/dsh-schedule/remote'
@@ -200,7 +202,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   try {
     for (const contribution of [
       productAnalyticsRemote, agentPresetsRemote, commandsRemote, agentTeamsRemote, settingsControllerRemote,
-      skillSourcesRemote, accountRemote,
+      skillSourcesRemote, skillInstallRemote, accountRemote,
       goalsRemote, llmRemote, dynamicRemote, scheduleRemote,
       pluginInventoryRemote, pluginManagerRemote, mcpManagerRemote, pluginMarketRemote, pluginRegistryProbeRemote,
       toolResultsRemote,

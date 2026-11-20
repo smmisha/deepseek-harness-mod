@@ -1,17 +1,24 @@
-/** Unit coverage for the profile-owned switches and the application list. */
+/** Unit coverage for the profile-owned switches, the application list, and the category rules. */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolve } from 'node:path'
-import SkillSources, { type Config, type SkillApplication } from '../src/index.ts'
+import SkillSources, { type Config, type SkillApplication, type SkillCategory } from '../src/index.ts'
 import { bindVisibility, folderSourceId, sameFolder, skillEnabled, sourceEnabled } from '../src/visibility.ts'
 
 const APPS: readonly SkillApplication[] = [
   { id: 'claude-code', dir: '~/.claude/skills', title: 'Claude Code' },
 ]
 
+/** One category rule over prefixes, and one over a plugin namespace. */
+const CATEGORIES: readonly SkillCategory[] = [
+  { id: 'video', title: 'Video and animation', prefixes: ['hyperframes', 'remotion'] },
+  { id: 'plugin-ckm', title: 'ckm', namespaces: ['ckm'] },
+]
+
 /** Boot the service with a settings stub that records writes. */
 async function setup(config: {
   applications?: SkillApplication[]
+  categories?: SkillCategory[]
   sources?: Record<string, { enabled: boolean }>
   skills?: Record<string, Record<string, boolean>>
   folders?: { dir: string }[]
@@ -75,6 +82,48 @@ describe('skill-sources configuration', () => {
     ])
     expect(resolved.applications.every(application => application.title.length > 0)).toBe(true)
   })
+
+  it('ships the built-in category rules with their name tokens', () => {
+    const categories = SkillSources.Config({}).categories
+    expect(categories.map(rule => rule.id)).toEqual([
+      'google-cloud', 'firebase', 'video', 'design', 'content', 'office', 'development', 'automation', 'notes', 'security',
+    ])
+    expect(categories.find(rule => rule.id === 'google-cloud')?.prefixes)
+      .toEqual(['gcp', 'google', 'bigquery', 'gemini'])
+    expect(categories.find(rule => rule.id === 'video')?.prefixes)
+      .toEqual(['hyperframes', 'remotion', 'faceless', 'reverse', 'product', 'style', 'blender', 'media'])
+    expect(categories.every(rule => rule.namespaces?.length === 0)).toBe(true)
+    // No rule claims the unmatched bucket: the client owns that name.
+    expect(categories.some(rule => rule.id === 'other')).toBe(false)
+  })
+
+  it('validates the category rule fields through the Loader schema', () => {
+    expect(SkillSources.Config({ categories: [{ id: 'video', title: 'Video', prefixes: ['video'] }] }).categories)
+      .toEqual([{ id: 'video', title: 'Video', prefixes: ['video'], namespaces: [] }])
+    expect(() => SkillSources.Config({ categories: [{ title: 'No id' }] })).toThrow()
+    expect(() => SkillSources.Config({ categories: [{ id: 'video', title: '' }] })).toThrow()
+    expect(() => SkillSources.Config({ categories: [{ id: 'video', title: 'Video', prefixes: [''] }] })).toThrow()
+  })
+
+  it('refuses category rules that cannot be applied unambiguously', () => {
+    const refuse = (categories: SkillCategory[]): void => {
+      const ctx = new Context()
+      ctx.provide('settings', { update: async () => undefined })
+      new SkillSources(ctx, { categories })
+    }
+    expect(() => { refuse([...CATEGORIES]) }).not.toThrow()
+    expect(() => { refuse([{ id: ' ', title: 'Blank' }]) }).toThrow('a category needs a non-empty id')
+    expect(() => { refuse([{ id: 'video', title: '  ' }]) }).toThrow('needs a non-empty title')
+    expect(() => { refuse([{ id: 'video', title: 'Video' }, { id: 'Video', title: 'Again' }]) }).toThrow('declared twice')
+    expect(() => {
+      refuse([{ id: 'video', title: 'Video', prefixes: ['gcp'] }, { id: 'cloud', title: 'Cloud', prefixes: ['gcp'] }])
+    }).toThrow('categories "video" and "cloud" both claim "gcp"')
+    expect(() => { refuse([{ id: 'video', title: 'Video', prefixes: [''] }]) }).toThrow('empty prefix or namespace')
+    // A token a rule already claims as its id cannot become another rule's namespace.
+    expect(() => {
+      refuse([{ id: 'video', title: 'Video' }, { id: 'other', title: 'Other', namespaces: ['VIDEO'] }])
+    }).toThrow('both claim "VIDEO"')
+  })
 })
 
 describe('visibility rules', () => {
@@ -119,6 +168,11 @@ describe('visibility rules', () => {
     expect(sourceEnabled({ sources: {}, skills: {} }, 'my-editor', [{ id: 'my-editor', dir: '~/.editor', title: 'Editor' }]))
       .toBe(false)
   })
+
+  it('carries the category rules into one visibility read', () => {
+    expect(bindVisibility({ sources: {}, skills: {} }, APPS).categories).toEqual([])
+    expect(bindVisibility({ sources: {}, skills: {} }, APPS, [], [...CATEGORIES]).categories).toEqual(CATEGORIES)
+  })
 })
 
 describe('SkillSources service', () => {
@@ -126,6 +180,17 @@ describe('SkillSources service', () => {
     const { ctx } = await setup()
     expect(ctx.skillSources.applications()).toHaveLength(6)
     expect(ctx.skillSources.read()).toEqual({ sources: {}, skills: {} })
+  })
+
+  it('exposes the configured category rules and threads them through one visibility read', async () => {
+    const { ctx } = await setup({ applications: [...APPS], categories: [...CATEGORIES] })
+    // The Loader schema fills the token lists a rule leaves out.
+    const resolved = [
+      { id: 'video', title: 'Video and animation', prefixes: ['hyperframes', 'remotion'], namespaces: [] },
+      { id: 'plugin-ckm', title: 'ckm', prefixes: [], namespaces: ['ckm'] },
+    ]
+    expect(ctx.skillSources.categories()).toEqual(resolved)
+    expect(ctx.skillSources.visibility().categories).toEqual(resolved)
   })
 
   it('writes switches through the settings service and invalidates registered providers', async () => {
@@ -154,11 +219,12 @@ describe('SkillSources service', () => {
     expect(warn).toHaveBeenCalledWith(failure)
   })
 
-  it('falls back to no applications and empty switches when built without configuration', () => {
+  it('falls back to no applications, no category rules, and empty switches when built without configuration', () => {
     const ctx = new Context()
     ctx.provide('settings', { update: async () => undefined })
     const service = new SkillSources(ctx, {})
     expect(service.applications()).toEqual([])
+    expect(service.categories()).toEqual([])
     expect(service.folders()).toEqual([])
     expect(service.read()).toEqual({ sources: {}, skills: {} })
   })

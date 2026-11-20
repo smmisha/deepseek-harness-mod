@@ -516,6 +516,12 @@ interface LlmConfigurableProvider {
   baseURLEnv?: readonly string[]
   /** Authentication the adapter performs when the profile names no credential reference; absent when it reports none. */
   nativeAuth?: LlmNativeAuth
+  /**
+   * The adapter caches a followed `/models` listing for this route and offers
+   * to reload it on demand; absent when the route's models are configuration
+   * alone and no cached listing exists.
+   */
+  listingRefresh?: true
   /** Configuration diagnostic for repair; unaffected models may remain serviceable. */
   error?: string
 }
@@ -1023,6 +1029,46 @@ async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeek
 
 Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages/llm/deepseek-llm-api-extensions/src/index.ts)
 
+<a id="ctxfreechatadmin--freechatadmin"></a>
+
+### `ctx.freechatAdmin` — `FreeChatAdmin`
+
+Host Remote behind the free web chat administration page.
+
+```ts cordis-catalog
+/**
+ * Read the routes and thread rows.
+ * @returns the playable routes and the known threads.
+ */
+@Remote async state(): Promise<FreeChatState>
+
+/**
+ * Drop one thread's live web conversation; its local memory stays.
+ * @param id - sanitized thread id from {@link FreeChatState.threads}.
+ * @returns whether a live conversation was closed.
+ */
+@Remote async resetThread(id: string): Promise<{ closedSession: boolean }>
+```
+
+Source: [`packages/experimental/freechat/src/admin.ts`](../../packages/experimental/freechat/src/admin.ts)
+
+<a id="ctxfreechatguestport--guestport"></a>
+
+### `ctx.freeChatGuestPort` — `GuestPort`
+
+Bridge to the Electron guest page that owns the signed-in chat site. The desktop shell implements it over its own `<webview>` automation channel; the transport never imports Electron itself, so the package stays Host-runtime agnostic and testable with a fake port.
+
+```ts cordis-catalog
+/**
+ * Run one script inside the guest page and return its JSON value.
+ * @param script - self-contained expression evaluated in the guest's main world.
+ * @returns the script's JSON-serializable result.
+ */
+evaluate<T>(script: string): Promise<T>
+```
+
+Source: [`packages/experimental/freechat/src/types.ts`](../../packages/experimental/freechat/src/types.ts)
+
 <a id="ctxllm--llmruntime"></a>
 
 ### `ctx.llm` — `LlmRuntime`
@@ -1095,6 +1141,38 @@ async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, sig
  * @throws RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.
  */
 @Remote('discoverModels') async remoteDiscoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal, ): Promise<LlmDiscoveredModel[]>
+
+/**
+ * Offer to reload the model listings this plugin's settings namespace
+ * follows, on demand. The namespace is the key because that is what a
+ * configuration surface already holds from the configurable-provider
+ * directory. Disposed with the fiber.
+ * @param settingsNs - the namespace whose routes this reload serves.
+ * @param refresh - reloads one provider route's followed listing and must
+ *   honor the supplied signal.
+ * @returns the disposer that withdraws the offer.
+ */
+registerListingRefresh( settingsNs: string, refresh: (provider: string, signal?: AbortSignal) => Promise<void>, ): () => void
+
+/**
+ * Reload one provider route's followed model listing now, discarding its
+ * cached copy first. Nothing here reads or writes settings: the registered
+ * owner resolves the route's current configuration and refuses with its own
+ * diagnostic when the route follows no listing.
+ * @param settingsNs - namespace whose registered refresh serves this route.
+ * @param provider - route to reload; one namespace may own several.
+ * @param signal - caller cancellation.
+ */
+async refreshListing(settingsNs: string, provider: string, signal?: AbortSignal): Promise<void>
+
+/**
+ * Remote adapter for one on-demand listing reload.
+ * @param settingsNs - namespace whose registered refresh serves this route.
+ * @param provider - route to reload.
+ * @param signal - caller cancellation supplied by the Remote carrier.
+ * @throws RemoteError with `llm/model-listing-refresh-rejected` when the refresh refuses or fails.
+ */
+@Remote('refreshListing') async remoteRefreshListing( settingsNs: string, provider: string, signal: AbortSignal, ): Promise<void>
 
 /**
  * Resolve the retry policy captured when one provider route was registered.

@@ -43,6 +43,7 @@ import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/d
 import type { ModelLabelOwner, ModelSelectInjected } from './slots.ts'
 import css from './ModelSelect.module.css'
 import { orderModelProviders } from './provider-order.ts'
+import { effortOrder } from './effort-cycle.ts'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort'
@@ -71,6 +72,8 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  // Which control opened the menu: the model trigger, or the effort chip straight into its levels.
+  const [entry, setEntry] = useState<'trigger' | 'effort'>('trigger')
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
   const [selectionFocus, setSelectionFocus] = useState(false)
@@ -83,6 +86,7 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const effortRef = useRef<HTMLButtonElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const groupsRef = useRef<HTMLDivElement | null>(null)
@@ -135,18 +139,16 @@ export function ModelSelect(
       : effectiveEffort === undefined
         ? t('effort.providerDefault')
         : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
+  // The cycle shortcut walks the same order, so the list and the shortcut agree.
   const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
     ? []
-    : [
-      ...reasoning.defaultEffort === undefined
-        ? [{ key: 'provider-default', effort: undefined, label: t('effort.providerDefault') }]
-        : [],
-      ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
-        key: `effort:${effort.id}`,
-        effort: effort.id,
-        label: effort.name,
-      })),
-    ], [reasoning, t])
+    : effortOrder(reasoning).map(effort => effort === undefined
+      ? { key: 'provider-default', effort: undefined, label: t('effort.providerDefault') }
+      : {
+        key: `effort:${effort}`,
+        effort,
+        label: reasoning.efforts.find((level: ModelReasoningEffort) => level.id === effort)?.name ?? effort,
+      }), [reasoning, t])
   const { pending } = state
   const busy = pending !== null
 
@@ -195,12 +197,12 @@ export function ModelSelect(
       const target = checked ?? itemRefs.current.find(item => item !== null && !item.disabled)
       // Rows a selection in flight disabled cannot take the keyboard; the
       // trigger does, so the card's keys still reach the menu.
-      ;(target ?? triggerRef.current)?.focus()
+      ;(target ?? (entry === 'effort' ? effortRef.current : triggerRef.current))?.focus()
       return
     }
     const cell = itemRefs.current[intent === 'effort' ? 1 : 0]
     ;(cell !== null && cell !== undefined && !cell.disabled ? cell : triggerRef.current)?.focus()
-  }, [open, pane, showSearch])
+  }, [open, pane, showSearch, entry])
 
   useEffect(() => {
     const viewport = groupsRef.current
@@ -222,10 +224,27 @@ export function ModelSelect(
     setQuery('')
     setHighlightedIndex(null)
     if (currentChoice === undefined) paneFocus.current = 'drill'
+    setEntry('trigger')
     setPane(currentChoice === undefined ? 'model' : 'root')
     setOpen(true)
     reload()
   }
+
+  /** Open the effort levels directly from the effort chip. */
+  const showEffort = (): void => {
+    setSelectionFocus(false)
+    effortRef.current?.focus()
+    setQuery('')
+    setHighlightedIndex(null)
+    paneFocus.current = 'drill'
+    setEntry('effort')
+    setPane('effort')
+    setOpen(true)
+    reload()
+  }
+
+  /** The control the menu returns the keyboard to: the chip that opened the levels, or the trigger. */
+  const opener = (): HTMLButtonElement | null => entry === 'effort' && effortRef.current !== null ? effortRef.current : triggerRef.current
 
   const changeQuery = (next: string): void => {
     setQuery(next)
@@ -235,7 +254,10 @@ export function ModelSelect(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
-    if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
+    if (restoreFocus) {
+      const target = opener()
+      queueMicrotask(() => { target?.focus() })
+    }
   }
 
   const closeAfterSelection = (): void => {
@@ -276,7 +298,7 @@ export function ModelSelect(
     if (event.key === 'Escape' && open) {
       event.preventDefault()
       // Escape backs out of a drilled pane first, then closes.
-      if (pane !== 'root' && currentChoice !== undefined) back(pane)
+      if (pane !== 'root' && currentChoice !== undefined && entry !== 'effort') back(pane)
       else close(true)
       return
     }
@@ -304,7 +326,7 @@ export function ModelSelect(
     if (event.key === 'Tab') {
       if (event.shiftKey) {
         event.preventDefault()
-        if (pane !== 'root' && currentChoice !== undefined) back(pane)
+        if (pane !== 'root' && currentChoice !== undefined && entry !== 'effort') back(pane)
         else close(true)
         return
       }
@@ -321,7 +343,7 @@ export function ModelSelect(
         focused.click()
         return
       }
-      if (focused !== triggerRef.current) return
+      if (focused !== opener()) return
       event.preventDefault()
       if (pane === 'model' && showSearch) {
         setHighlightedIndex(null)
@@ -366,7 +388,7 @@ export function ModelSelect(
     lastActionRef.current = 'select'
     // Disabled option rows cannot retain focus while a selection is pending.
     setSelectionFocus(true)
-    triggerRef.current?.focus()
+    opener()?.focus()
     void select(selection).then(settleSelection)
   }
 
@@ -397,14 +419,21 @@ export function ModelSelect(
     ? t('trigger.loading')
     : currentChoice?.model.name
       ?? t('trigger.fallback')
-  const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
+  // With more than one level the effort gets its own chip, one click from its list;
+  // the model trigger then names the model alone.
+  const effortChip = currentChoice !== undefined && effortChoices.length > 1 && effortLabel !== undefined
+  const triggerEffortLabel = effortChip ? undefined : effortLabel
+  // A pending change of effort alone spins on the chip; any other pending change spins on the trigger.
+  const effortPending = effortChip && pending !== null
+    && pending.provider === state.current?.provider && pending.model === state.current.model
+  const triggerLabel = triggerEffortLabel === undefined ? modelLabel : `${modelLabel} · ${triggerEffortLabel}`
   const triggerAria = waiting
     ? t('trigger.loading')
     : currentChoice === undefined
       ? t('trigger.selectAria')
-      : effortLabel === undefined
+      : triggerEffortLabel === undefined
         ? t('trigger.aria', { model: modelLabel })
-        : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+        : t('trigger.ariaEffort', { model: modelLabel, effort: triggerEffortLabel })
   const renderModelLabel = (
     provider: ModelLabelOwner['provider'], model: ModelLabelOwner['model'],
     placement: ModelLabelOwner['placement'], selected: boolean,
@@ -434,6 +463,7 @@ export function ModelSelect(
     <div
       ref={rootRef}
       className={css.root}
+      style={anchorStyle}
       onKeyDown={onRootKeyDown}
       onBlur={onBlur}
       onMouseDown={(event) => {
@@ -445,18 +475,17 @@ export function ModelSelect(
         ref={triggerRef}
         type="button"
         className={css.trigger}
-        style={anchorStyle}
         aria-label={triggerAria}
         aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? `${id}-menu` : undefined}
+        aria-expanded={open && entry === 'trigger'}
+        aria-controls={open && entry === 'trigger' ? `${id}-menu` : undefined}
         title={triggerLabel}
         aria-busy={busy}
         data-selection-focus={selectionFocus ? '' : undefined}
         onBlur={() => { setSelectionFocus(false) }}
         disabled={locked}
         onClick={() => {
-          if (open) {
+          if (open && entry === 'trigger') {
             close(true)
           } else {
             show()
@@ -467,11 +496,36 @@ export function ModelSelect(
         <span className={css.triggerLabel}>
           {currentChoice === undefined ? modelLabel : renderModelLabel(currentChoice.group.provider, currentChoice.model, 'trigger', true)}
         </span>
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
-        {busy
+        {triggerEffortLabel !== undefined && <span className={css.triggerEffort}>{triggerEffortLabel}</span>}
+        {busy && !effortPending
           ? <StateDot state="ongoing" />
-          : <IconChevronDownOutlineRegular className={clsx(css.chevron, open && css.chevronOpen)} />}
+          : <IconChevronDownOutlineRegular className={clsx(css.chevron, open && entry === 'trigger' && css.chevronOpen)} />}
       </button>
+      {effortChip && (
+        <button
+          ref={effortRef}
+          type="button"
+          className={css.effortChip}
+          aria-label={t('effort.chipAria', { effort: effortLabel })}
+          aria-haspopup="menu"
+          aria-expanded={open && entry === 'effort'}
+          aria-controls={open && entry === 'effort' ? `${id}-menu` : undefined}
+          title={t('effort.chipAria', { effort: effortLabel })}
+          aria-busy={effortPending}
+          data-selection-focus={selectionFocus ? '' : undefined}
+          onBlur={() => { setSelectionFocus(false) }}
+          disabled={locked}
+          onClick={() => {
+            if (open && entry === 'effort') close(true)
+            else showEffort()
+          }}
+        >
+          <span className={css.effortChipLabel}>{effortLabel}</span>
+          {effortPending
+            ? <StateDot state="ongoing" />
+            : <IconChevronDownOutlineRegular className={clsx(css.chevron, open && entry === 'effort' && css.chevronOpen)} />}
+        </button>
+      )}
 
       {/* Portaled to body (Menu primitive's portal mode) so the sidebar and
           column overflow clips cannot crop the card; synthetic events still

@@ -19,6 +19,7 @@ import type { ModelSelection } from '@deepseek-ai/dsh-agent/types'
 import type { ModelSelectionProjection } from '@deepseek-ai/dsh-agent/types'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import type { CommandContribution, PopupSelectSpec, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { ShortcutCommand } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { ModelSelectInjected } from '../src/client/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
@@ -157,6 +158,13 @@ async function bench(locale: 'zh' | 'en' = 'zh') {
   })
   const track = vi.fn()
   ctx.provide('productAnalytics', { enabled: true, track } as never)
+  let shortcut: ShortcutCommand | undefined
+  ctx.provide('shortcuts', {
+    register(command: ShortcutCommand) {
+      shortcut = command
+      return () => { shortcut = undefined }
+    },
+  } as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   await ctx.plugin(function probe() {}).await()
@@ -183,6 +191,7 @@ async function bench(locale: 'zh' | 'en' = 'zh') {
   return {
     ctx, fiber, mint, calls, remote, track,
     contribution: () => contribution!,
+    shortcut: () => shortcut,
     popup: (): PopupSelectSpec => {
       const ui = contribution!.ui
       if (ui.kind !== 'popupSelect') throw new Error('expected the popupSelect kind')
@@ -587,4 +596,66 @@ it.each([false, true])('reports accepted switches with blank=%s and no refused s
     await face.select({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
     expect(b.track).not.toHaveBeenCalled()
   } finally { await scope.fiber.dispose(); await b.ctx.fiber.dispose() }
+})
+
+describe('cycle-effort shortcut', () => {
+  /** A focus target inside one Session's conversation, as the composer renders it (this lane has no DOM). */
+  function insideSession(id: string): Element {
+    return { closest: () => ({ dataset: { conversationSession: id } }) } as never
+  }
+
+  /** A focus target outside any conversation. */
+  const outside: Element = { closest: () => null } as never
+
+  it('moves the focused Session through its model levels, wrapping after the last', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const command = b.shortcut()
+    expect(command?.id).toBe('model.cycleEffort')
+    expect(command?.label()).toBe(zh['shortcut.cycleEffort'])
+    const press = async (): Promise<void> => {
+      const resolution = command!.resolve({ region: 'editable', modal: null, target: insideSession('s1') })
+      if (resolution.status !== 'handled') throw new Error(`expected a handled press, got ${resolution.status}`)
+      resolution.run()
+      await vi.waitFor(() => { expect(b.calls.select).toBeGreaterThan(0) })
+    }
+    // The default selection runs at the model default, High; the next levels follow the list order.
+    await press()
+    await vi.waitFor(() => { expect(b.hostCurrent()).toMatchObject({ reasoningEffort: 'max' }) })
+    await press()
+    await vi.waitFor(() => { expect(b.hostCurrent()).toMatchObject({ reasoningEffort: 'off' }) })
+    expect(b.hostCurrent()).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+  })
+
+  it('leaves the keys unclaimed outside a Session, in an addressed subagent, and during a pending selection', async () => {
+    const b = await bench()
+    b.mint('s1')
+    b.mint('child')
+    b.address(sid('child'))
+    const command = b.shortcut()!
+    expect(command.resolve({ region: 'page', modal: null, target: null })).toEqual({ status: 'pass' })
+    expect(command.resolve({ region: 'page', modal: null, target: outside })).toEqual({ status: 'pass' })
+    expect(command.resolve({ region: 'editable', modal: null, target: insideSession('child') })).toEqual({ status: 'pass' })
+    b.seat().inject!(sid('s1')).select({ provider: 'deepseek-official', model: 'deepseek-v4-pro' }).catch(() => {})
+    expect(command.resolve({ region: 'editable', modal: null, target: insideSession('s1') })).toEqual({ status: 'pass' })
+  })
+
+  it('does nothing for a model with a single level', async () => {
+    const b = await bench()
+    b.mint('s1')
+    b.setProjected(sid('s1'), { lastUsed: null, next: { provider: 'external', model: 'deepseek-v4-flash' } })
+    const resolution = b.shortcut()!.resolve({ region: 'editable', modal: null, target: insideSession('s1') })
+    if (resolution.status !== 'handled') throw new Error('expected a handled press')
+    resolution.run()
+    await vi.waitFor(() => { expect(b.calls.models).toBeGreaterThan(0) })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(b.calls.select).toBe(0)
+  })
+
+  it('withdraws the command with the plugin', async () => {
+    const b = await bench()
+    expect(b.shortcut()).toBeDefined()
+    b.fiber.dispose()
+    await vi.waitFor(() => { expect(b.shortcut()).toBeUndefined() })
+  })
 })

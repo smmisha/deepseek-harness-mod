@@ -23,6 +23,7 @@ export function OnboardingProcessStep({ t, heading, busy, process, onSelect, onC
   onComplete: () => void
 }) {
   const onKeyDown = (event: KeyboardEvent, value: OnboardingProcess) => {
+    // A programmatically dispatched key event can still reach a natively disabled radio.
     if (busy) return
     const direction = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1
       : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
@@ -40,16 +41,16 @@ export function OnboardingProcessStep({ t, heading, busy, process, onSelect, onC
     </div>
     <div className={css.processCards} role="radiogroup" aria-labelledby="desktop-onboarding-title">
       {options.map(option => <button type="button" role="radio" key={option.value}
-        data-process={option.value} aria-checked={process === option.value}
+        data-process={option.value} aria-checked={process === option.value} disabled={busy}
         tabIndex={process === option.value || (process === null && option.value === 'compact') ? 0 : -1}
         className={`${css.card} ${process === option.value ? css.selected : ''}`}
-        aria-disabled={busy} onClick={() => { if (!busy) onSelect(option.value) }}
+        onClick={() => { onSelect(option.value) }}
         onKeyDown={(event) => { onKeyDown(event, option.value) }}>
         <span className={css.processIcon}><img src={option.icon} width={option.size} height={option.size} alt="" /></span>
         <span className={css.cardTitle}>{t(option.titleKey)}</span>
         <span className={css.cardDescription}>{t(option.descriptionKey)}</span>
       </button>)}
     </div>
-    <div className={css.primaryAction}>{process !== null && <Button className={css.action} variant="primary" aria-disabled={busy} onClick={() => { if (!busy) onComplete() }}>{t('onboardingEnter')}</Button>}</div>
+    <div className={css.primaryAction}>{process !== null && <Button className={css.action} variant="primary" disabled={busy} onClick={onComplete}>{t('onboardingEnter')}</Button>}</div>
   </div>
 }

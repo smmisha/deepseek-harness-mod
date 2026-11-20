@@ -355,6 +355,43 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(1)
   })
 
+  it('pauses an admitted round when a graceful stop closes its step', async () => {
+    const holder: { agent?: Agent } = {}
+    const test = await harness([() => {
+      holder.agent?.cancel({ kind: 'user' }, { mode: 'graceful' })
+      return textResponse('round finished')
+    }])
+    holder.agent = test.agent
+    test.ctx.goals.create(test.agent, { objective: 'finish the step then stop' })
+    await test.agent.whenIdle()
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'paused')
+
+    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
+    expect(test.adapter.requests).toHaveLength(1)
+    expect(test.agent.session.snapshotEvents().findLast(event => event.type === 'turn/end')?.data.reason)
+      .toEqual({ kind: 'stopped' })
+  })
+
+  it('disarms without pausing when a graceful stop closes unrelated human work', async () => {
+    const holder: { ctx?: Context; agent?: Agent } = {}
+    const test = await harness([() => {
+      if (holder.ctx !== undefined && holder.agent !== undefined) {
+        holder.ctx.goals.create(holder.agent, { objective: 'drive after human work' })
+      }
+      holder.agent?.cancel({ kind: 'user' }, { mode: 'graceful' })
+      return textResponse('human answer')
+    }])
+    holder.ctx = test.ctx
+    holder.agent = test.agent
+    test.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'human work' }], source: { kind: 'user' } }))
+
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.activation === 'disarmed')
+    await test.agent.whenIdle()
+
+    expect(goal).toMatchObject({ phase: 'active', activation: 'disarmed', roundsStarted: 0 })
+    expect(test.adapter.requests).toHaveLength(1)
+  })
+
   it('aborts an in-flight round when a host-initiated pause lands mid-step', async () => {
     const test = await harness(['hang'])
     test.ctx.goals.create(test.agent, { objective: 'stop on host pause' })

@@ -37,7 +37,7 @@ const standard: GlobalStandardProps & SessionStandardProps = {
   ...allowAllAccess,
   useContextMenu: contextMenuHook(),
   inputActions: { insertQuote: () => false, captureInsertion: unused, insertText: unused, setDraft: unused, persistDraft: unused,
-    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused },
+    addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused, focus: unused },
 }
 
 const TAB = { id: 'tab-1' as TabId, kind: 'guide', contentId: 'sidebar://guide', title: 'Start' }

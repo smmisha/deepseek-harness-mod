@@ -33,8 +33,8 @@ The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it
 To run from a repository checkout:
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/smmisha/deepseek-harness-mod.git
+cd deepseek-harness-mod
 pnpm install
 pnpm run build
 pnpm dsh web

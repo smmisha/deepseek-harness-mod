@@ -12,7 +12,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { PromptContentPart, QueueAction, SessionRequestId } from '../../types.ts'
+import type { PromptContentPart, QueueAction, SessionRequestId, SessionStopMode } from '../../types.ts'
 import type { PendingSubmissionAttachment, SessionSnapshot } from './snapshot.ts'
 
 /**
@@ -117,11 +117,22 @@ export interface ISession {
    */
   updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<{ accepted: true }>>
   /**
-   * Cancel the running turn. Pending queued work remains and resumes in FIFO
-   * order after the Host reaches cancellation quiescence.
+   * Rewind this idle Session to one sent user message and send its edited text
+   * as a new Turn; the edited Turn and every later message leave the model's view.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns acceptance, or the business error that refused the edit.
+   */
+  editMessage(seq: number, text: string): Promise<RemoteResult<{ accepted: true }>>
+  /**
+   * Stop the running turn. `graceful` finishes the current step and then closes
+   * the turn as `stopped`; `immediate` aborts it now. Pending queued work
+   * remains in both modes and resumes in FIFO order after the Host reaches
+   * quiescence.
+   * @param mode - stop mode; omitted uses `graceful`, the product default.
    * @returns acceptance, or the business error.
    */
-  cancel(): Promise<RemoteResult<{ accepted: true }>>
+  cancel(mode?: SessionStopMode): Promise<RemoteResult<{ accepted: true }>>
   /**
    * Rename this session (explicit user title; pins it against automatic
    * regeneration).

@@ -44,10 +44,9 @@
   }
 }
 
-.tab[aria-selected='true'] {
-  font-weight: 600;
-}
-
+/* The selected tab keeps the label weight: bolding it widens that track, and an
+ * auto-width grid sized by its widest track would resize the whole bar on every
+ * switch. Selection reads from the sliding indicator and the primary ink. */
 .tabs[data-size='sm'] {
   --segmented-tabs-inset: 2px;
 
@@ -58,9 +57,6 @@
   height: 30px;
 }
 
-.tabs[data-size='sm'] .tab[aria-selected='true'] {
-  font-weight: 500;
-}
 
 .tab:focus-visible {
   outline: none;

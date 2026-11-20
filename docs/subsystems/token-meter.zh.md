@@ -148,4 +148,27 @@ estimateMessage(message: Message): number
 Types: [EpochHeader](session.zh.md) · [Message](llm-streaming.zh.md) · [Session](session.zh.md)
 
 Source: [`packages/llm/token-meter/src/index.ts`](../../packages/llm/token-meter/src/index.ts)
+
+<a id="ctxusage--usageservice"></a>
+
+### `ctx.usage` — `UsageService`
+
+Host Remote behind the Usage page.
+
+```ts cordis-catalog
+/**
+ * Read new Session events and sum the calls.
+ * @param since - earliest call time the rows include, in epoch milliseconds.
+ * @returns quarter-hour rows since then and rolling-window totals ending now.
+ */
+@Remote async view(since: number): Promise<UsageView>
+
+/**
+ * Read the DeepSeek account balance.
+ * @returns the balance, or why it cannot be shown.
+ */
+@Remote async balance(): Promise<UsageBalance>
+```
+
+Source: [`packages/experimental/usage/src/index.ts`](../../packages/experimental/usage/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -72,7 +72,7 @@ Every inbox mutation commits one normalized `agent/inbox/spliced` event. The pro
 
 ### What a step does
 
-Each step sends the session's derived history — with the latest non-empty `system/message` node as the effective prompt, or no system messages when the rendered prompt is empty — and its visible tool schemas; the model's tool calls run through the guarded tool pipeline and every accepted fact is appended to the session log before the next step derives from it. The loop passes the complete raw call batch to `ctx.tools.execute()`; built-in executors preserve model-order results and exclusive barriers. Cancellation is cooperative: `agent.cancel()` aborts the current activity and, unless `keepInbox` is set, clears pending work; a cancelled stream finalizes the text already delivered to the user.
+Each step sends the session's derived history — with the latest non-empty `system/message` node as the effective prompt, or no system messages when the rendered prompt is empty — and its visible tool schemas; the model's tool calls run through the guarded tool pipeline and every accepted fact is appended to the session log before the next step derives from it. The loop passes the complete raw call batch to `ctx.tools.execute()`; built-in executors preserve model-order results and exclusive barriers. Cancellation is cooperative: `agent.cancel()` aborts the current activity and, unless `keepInbox` is set, clears pending work; a cancelled stream finalizes the text already delivered to the user. `mode: 'graceful'` instead selects the next step boundary: the in-flight model response and the tool batch it requested settle and are recorded, the turn closes as `stopped`, and pending inbox work stays parked for a later wake; a request with no running turn arms nothing.
 
 -----
 
@@ -125,7 +125,7 @@ The runtime-context projection compares the ordered names and text in committed 
 
 ### Failure and cancellation
 
-`turn/end` declares `TurnEndCancelCause`; cancellation records a fresh `AgentCancelCause` there, retaining the caller's `kind` and the hook's `reason` text. The live `AbortSignal.reason` remains the caller's object, which a transport may extend — Node's fetch assigns a `stack` onto it — so the copy keeps that trace out of the log and keeps the ending appendable.
+`turn/end` declares `TurnEndCancelCause`; cancellation records a fresh `AgentCancelCause` there, retaining the caller's `kind` and the hook's `reason` text. The live `AbortSignal.reason` remains the caller's object, which a transport may extend — Node's fetch assigns a `stack` onto it — so the copy keeps that trace out of the log and keeps the ending appendable. A graceful stop records `{ kind: 'stopped' }` instead of an abort cause: its assistant message is complete and no interrupted prefix exists, so consumers can tell a settled step boundary from a cancellation.
 
 Final adapter selection, dispatch, and iteration failures arrive as terminal finishes and enter `agent/request-error`; a handling listener returns `{ kind: 'retry' }` without calling `next()`, while an unhandled failure is terminal. Middleware, result-processing, tool, and other extension failures remain thrown and close the turn directly — plugin failure ends the turn, not the loop. Undispatched model tool calls after cancellation receive synthetic `tool/call` plus `ABORTED_BEFORE_DISPATCH` result pairs.
 

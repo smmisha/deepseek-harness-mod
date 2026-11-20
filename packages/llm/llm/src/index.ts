@@ -373,6 +373,10 @@ export class LlmRuntime extends TypertRemoteService {
     string,
     (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>
   >()
+  private listingRefreshes = new Map<
+    string,
+    (provider: string, signal?: AbortSignal) => Promise<void>
+  >()
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
@@ -670,6 +674,77 @@ export class LlmRuntime extends TypertRemoteService {
           settingsNs,
           ...request.baseURL === undefined ? {} : { baseURL: request.baseURL },
         },
+        { cause: error },
+      )
+    }
+  }
+
+  /**
+   * Offer to reload the model listings this plugin's settings namespace
+   * follows, on demand. The namespace is the key because that is what a
+   * configuration surface already holds from the configurable-provider
+   * directory. Disposed with the fiber.
+   * @param settingsNs - the namespace whose routes this reload serves.
+   * @param refresh - reloads one provider route's followed listing and must
+   *   honor the supplied signal.
+   * @returns the disposer that withdraws the offer.
+   */
+  registerListingRefresh(
+    settingsNs: string,
+    refresh: (provider: string, signal?: AbortSignal) => Promise<void>,
+  ): () => void {
+    const dispose = this.ctx.effect(function* (this: LlmRuntime) {
+      if (settingsNs.length === 0) {
+        throw new LlmError('a listing refresh needs a non-empty settings namespace', 'INVALID_LISTING_REFRESH')
+      }
+      if (this.listingRefreshes.has(settingsNs)) {
+        throw new LlmError(`a listing refresh for "${settingsNs}" is already registered`, 'DUPLICATE_LISTING_REFRESH')
+      }
+      this.listingRefreshes.set(settingsNs, refresh)
+      yield () => {
+        this.listingRefreshes.delete(settingsNs)
+      }
+    }.bind(this), 'llm.registerListingRefresh()')
+    return () => void dispose()
+  }
+
+  /**
+   * Reload one provider route's followed model listing now, discarding its
+   * cached copy first. Nothing here reads or writes settings: the registered
+   * owner resolves the route's current configuration and refuses with its own
+   * diagnostic when the route follows no listing.
+   * @param settingsNs - namespace whose registered refresh serves this route.
+   * @param provider - route to reload; one namespace may own several.
+   * @param signal - caller cancellation.
+   */
+  async refreshListing(settingsNs: string, provider: string, signal?: AbortSignal): Promise<void> {
+    const refresh = this.listingRefreshes.get(settingsNs)
+    if (refresh === undefined) {
+      throw new LlmError(`no listing refresh is registered for "${settingsNs}"`, 'NO_LISTING_REFRESH')
+    }
+    await (signal === undefined ? refresh(provider) : refresh(provider, signal))
+  }
+
+  /**
+   * Remote adapter for one on-demand listing reload.
+   * @param settingsNs - namespace whose registered refresh serves this route.
+   * @param provider - route to reload.
+   * @param signal - caller cancellation supplied by the Remote carrier.
+   * @throws RemoteError with `llm/model-listing-refresh-rejected` when the refresh refuses or fails.
+   */
+  @Remote('refreshListing')
+  async remoteRefreshListing(
+    settingsNs: string,
+    provider: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      await this.refreshListing(settingsNs, provider, signal)
+    } catch (error: unknown) {
+      throw new RemoteError(
+        'llm/model-listing-refresh-rejected',
+        error instanceof Error ? error.message : String(error),
+        { settingsNs, provider },
         { cause: error },
       )
     }

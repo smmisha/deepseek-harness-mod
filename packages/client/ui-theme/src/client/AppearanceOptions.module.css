@@ -1,0 +1,110 @@
+/* Palette previews and accent swatches beside the Appearance tiles. The tiles,
+   titles, focus ring, and selected material come from AppearanceRow.module.css;
+   this file only adds what those tiles do not draw. */
+
+/* A palette tile previews its canvas, sidebar strip, and accent dot for the
+   current scheme, at the 16px box the Appearance icons occupy. */
+.preview {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-xs);
+  overflow: hidden;
+  background: var(--preview-bg-light);
+}
+
+.previewSide {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 9px;
+  background: var(--preview-side-light);
+}
+
+.previewAccent {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--preview-accent-light);
+}
+
+:global(body[data-ds-dark-theme]) .preview { background: var(--preview-bg-dark); }
+:global(body[data-ds-dark-theme]) .previewSide { background: var(--preview-side-dark); }
+:global(body[data-ds-dark-theme]) .previewAccent { background: var(--preview-accent-dark); }
+
+/* Motion tiles carry text only, so they keep the tile height without an icon. */
+.textTile {
+  height: 40px;
+}
+
+/* Accent swatches: 24px circles in one wrapping row; the selected one draws a
+   ring in its own color outside a canvas gap, so the choice reads on any
+   palette. */
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.swatch {
+  position: relative;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+.swatchSelected {
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-base), 0 0 0 4px var(--swatch, var(--dsw-alias-label-secondary));
+}
+
+.swatch:has(input:focus-visible) {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 5px;
+}
+
+/* The default accent: an empty circle crossed by a stroke, in the border tone. */
+.defaultSwatch {
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  background:
+    linear-gradient(135deg, transparent calc(50% - 0.75px), var(--dsw-alias-label-tertiary) calc(50% - 0.75px),
+      var(--dsw-alias-label-tertiary) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+}
+
+/* The custom swatch shows the hue wheel (set inline as --swatch-wheel) until a
+   custom color is chosen. */
+.customSwatch {
+  background: var(--swatch, var(--swatch-wheel));
+}
+
+/* The color input covers the swatch, invisible, so a click opens the native picker. */
+.colorInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.colorInput:focus-visible {
+  outline: none;
+}
+
+.customSwatch:has(.colorInput:focus-visible) {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 5px;
+}

@@ -17,9 +17,11 @@ import { describe, expect, it, onTestFinished } from 'vitest'
 import type {} from '../src/index.ts'
 import { apply } from '../src/host/share-host.ts'
 
-const START = Date.parse('2026-10-15T00:00:00.000Z')
-const PAST = new Date(START).toISOString()
-const LIVE = new Date(START + 30 * 24 * 60 * 60_000).toISOString()
+// Horizons are anchored to the clock the host reads, so PAST stays expired and LIVE stays usable
+// whenever the suite runs; a fixed calendar date turns LIVE into a past instant once that day arrives.
+const NOW = Date.now()
+const PAST = new Date(NOW - 30 * 24 * 60 * 60_000).toISOString()
+const LIVE = new Date(NOW + 30 * 24 * 60 * 60_000).toISOString()
 const STORED_TOKEN = 'stored-payload.stored-signature'
 
 /**

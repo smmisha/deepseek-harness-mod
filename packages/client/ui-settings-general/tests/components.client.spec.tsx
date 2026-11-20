@@ -126,19 +126,45 @@ describe('chrome content', () => {
 })
 
 describe('GeneralSection', () => {
-  function mount() {
+  const GROUPS = [
+    { id: 'interface', labelKey: 'general.group.interface' as const, items: ['language', 'font-size'] },
+    { id: 'work', labelKey: 'general.group.work' as const, items: ['permission'] },
+  ]
+
+  function mount(groups: readonly { id: string; labelKey: 'general.group.interface' | 'general.group.work'; items: readonly string[] }[] = GROUPS) {
     const renderSlot = vi.fn(
-      ((key: string) => <div data-testid={`slot-${key}`} />) as GeneralSectionComponentProps['renderSlot'],
+      ((key: string, _owner: unknown, opts?: { only?: string }) =>
+        <div data-testid={`slot-${key}-${opts?.only ?? 'all'}`} />) as GeneralSectionComponentProps['renderSlot'],
     )
-    const props: GeneralSectionComponentProps = { ...kit, renderSlot, close: vi.fn() }
+    const props: GeneralSectionComponentProps = {
+      ...kit, renderSlot, close: vi.fn(), t, useGroups: select => select(groups),
+    }
     const view = render(<GeneralSection {...props} />)
     return { view, renderSlot }
   }
 
-  it('renders the item slot as the section body', () => {
+  it('renders each item inside its group, in group and item order', () => {
     const { renderSlot } = mount()
-    expect(renderSlot).toHaveBeenCalledWith('settings.general.item', {})
-    expect(screen.getByTestId('slot-settings.general.item')).toBeTruthy()
+    expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.general.item').map(call => call[2]))
+      .toEqual([{ only: 'language' }, { only: 'font-size' }, { only: 'permission' }])
+    expect(screen.getByTestId('slot-settings.general.item-language')).toBeTruthy()
+    expect(screen.getByTestId('slot-settings.general.item-permission')).toBeTruthy()
+  })
+
+  it('names each group with its localized heading, in reading order', () => {
+    mount()
+    const headings = screen.getAllByRole('heading', { level: 2 }).map(node => node.textContent)
+    expect(headings).toEqual(['Interface', 'Working with the agent'])
+    // Every group region is labelled by its own heading.
+    const regions = screen.getAllByRole('region')
+    expect(regions.map(region => region.getAttribute('aria-labelledby')))
+      .toEqual(screen.getAllByRole('heading', { level: 2 }).map(node => node.id))
+  })
+
+  it('omits the heading of a group with no rows', () => {
+    mount([{ id: 'work', labelKey: 'general.group.work', items: ['permission'] }])
+    expect(screen.getAllByRole('heading', { level: 2 }).map(node => node.textContent)).toEqual(['Working with the agent'])
+    expect(screen.queryByText('Interface')).toBeNull()
   })
 })
 

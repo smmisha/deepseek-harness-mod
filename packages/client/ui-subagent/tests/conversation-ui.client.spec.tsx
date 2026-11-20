@@ -143,6 +143,7 @@ function props(
       removeAttachment: unused,
       pruneAttachments: unused,
       submit: unused,
+      focus: () => {},
     },
   }
   return {

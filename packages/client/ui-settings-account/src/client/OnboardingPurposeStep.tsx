@@ -18,6 +18,7 @@ export function OnboardingPurposeStep({ t, heading, busy, purpose, onSelect, onC
 }) {
   const selected = (value: 'office' | 'development') => purpose === value || purpose === 'both'
   const toggle = (value: 'office' | 'development') => {
+    // A programmatically dispatched change can still reach a natively disabled input.
     if (busy) return
     const office = value === 'office' ? !selected('office') : selected('office')
     const development = value === 'development' ? !selected('development') : selected('development')
@@ -29,15 +30,16 @@ export function OnboardingPurposeStep({ t, heading, busy, purpose, onSelect, onC
       <p className={css.subtitle}>{t('onboardingPurposeDescription')}</p>
     </div>
     <div className={css.purposeCards}>
-      {(['office', 'development'] as const).map(value => <PurposeCard key={value} purpose={value} checked={selected(value)} t={t} onToggle={() => { toggle(value) }} />)}
+      {(['office', 'development'] as const).map(value => <PurposeCard key={value} purpose={value} checked={selected(value)} busy={busy} t={t} onToggle={() => { toggle(value) }} />)}
     </div>
-    <div className={css.primaryAction}>{purpose !== null && <Button className={css.action} variant="primary" aria-disabled={busy} onClick={() => { if (!busy) onContinue() }}>{t('onboardingContinue')}</Button>}</div>
+    <div className={css.primaryAction}>{purpose !== null && <Button className={css.action} variant="primary" disabled={busy} onClick={onContinue}>{t('onboardingContinue')}</Button>}</div>
   </div>
 }
 
-function PurposeCard({ purpose, checked, t, onToggle }: {
+function PurposeCard({ purpose, checked, busy, t, onToggle }: {
   purpose: 'office' | 'development'
   checked: boolean
+  busy: boolean
   t: DesktopOnboardingProps['t']
   onToggle: () => void
 }) {
@@ -55,7 +57,7 @@ function PurposeCard({ purpose, checked, t, onToggle }: {
           .map(kind => <FileTypeIcon key={kind} kind={kind} size={28} />)}
       </span> : <img src={purpose === 'office' ? officeIcon : codeIcon} width={40} height={40} alt="" />}
       <label className={css.cardCheckbox}>
-        <input type="checkbox" aria-label={t(titleKey)} checked={checked} onChange={onToggle} />
+        <input type="checkbox" aria-label={t(titleKey)} checked={checked} disabled={busy} onChange={onToggle} />
         <span className={css.indicator} aria-hidden="true"><IconCheckOutlineRegular /></span>
       </label>
     </div>

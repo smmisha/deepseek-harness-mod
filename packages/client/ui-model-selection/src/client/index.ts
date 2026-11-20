@@ -22,6 +22,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { IconDataOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
@@ -29,6 +31,7 @@ import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type ModelKey } from './locales.ts'
 import { orderModelProviders } from './provider-order.ts'
+import { nextEffortSelection } from './effort-cycle.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
@@ -163,6 +166,44 @@ export function apply(ctx: ClientContext): void {
         },
       },
     }), 'ui-model-selection: /model contribution')
+  })
+
+  // Entry 3: a rebindable shortcut that moves the focused Session's model to its next effort,
+  // contributed only where the composition mounts the shortcut registry.
+  ctx.inject(['shortcuts', 'modelDirectories'], (scope: ClientContext) => {
+    const models = scope.modelDirectories
+    const sessions = scope.sessions
+    scope.effect(() => scope.shortcuts.register({
+      id: 'model.cycleEffort' as ShortcutCommandId,
+      label: () => t('shortcut.cycleEffort'),
+      aliases: ['effort', 'reasoning', 'thinking'],
+      defaults: {
+        'desktop:macos': { code: 'KeyE', modifiers: ['primary', 'shift'] },
+        'desktop:windows': { code: 'KeyE', modifiers: ['primary', 'shift'] },
+        'desktop:linux': { code: 'KeyE', modifiers: ['primary', 'shift'] },
+        'web:macos': { code: 'KeyE', modifiers: ['primary', 'shift'] },
+        'web:windows': { code: 'KeyE', modifiers: ['primary', 'shift'] },
+      },
+      regions: ['page', 'editable'],
+      modals: [],
+      resolve: ({ target }) => {
+        // The Session whose conversation holds the keyboard; elsewhere the keys stay unclaimed.
+        const occurrence = target?.closest<HTMLElement>('[data-conversation-session]')
+        const sessionId = occurrence?.dataset.conversationSession as SessionId | undefined
+        if (sessionId === undefined || sessions.subagentAddress(sessionId) !== undefined) return { status: 'pass' }
+        const directory = models.directoryFor(sessionId)
+        if (directory.store.getSnapshot().pending !== null) return { status: 'pass' }
+        return {
+          status: 'handled',
+          run: () => {
+            void directory.load().then((state) => {
+              const next = nextEffortSelection(state)
+              return next === undefined ? undefined : directory.select(next)
+            }).catch(() => { /* surfaced on the directory store */ })
+          },
+        }
+      },
+    }), 'ui-model-selection: cycle effort shortcut')
   })
 
   // Entry 2: the composer's named model seat over the SAME directory.

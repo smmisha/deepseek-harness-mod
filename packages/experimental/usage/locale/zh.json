@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "用量",
+    "description": "根据会话日志估算的每日、每个模型的 Token 用量，按服务商设置的 5 小时、每周和每月滚动 Token 预算，以及 DeepSeek 账户余额。"
+  }
+}

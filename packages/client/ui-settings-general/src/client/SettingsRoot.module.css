@@ -96,7 +96,11 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
+  /* The rail track fits the longest shipped section name on two lines at the
+     cell's 160px text measure ("Ajustes preestablecidos del agente"), so no
+     label is ever clipped and the content column keeps the rest of the 800px
+     panel. */
+  grid-template-columns: 236px minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     'title header'
@@ -154,14 +158,18 @@
   overflow-y: auto;
 }
 
-/* Nav cell (figma .Setting-nav-cell 501:29962): 164x40, r12, pad
-   (12,9,16,9), gap 8; label 14/400 lh22; selected fill #EBEEF2. */
+/* Nav cell (figma .Setting-nav-cell 501:29962): r12, pad (12,8,16,8), gap 8;
+   label 14/400 lh20; selected fill #EBEEF2. The cell's min height holds the
+   label's two lines (40) plus its own 16px vertical padding, so the rail keeps
+   one cell height whether a localized name fits on one line or needs two: the
+   selected cell never grows when its label wraps. A name that needed a third
+   line would grow the cell instead of clipping it. */
 .navCell {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
-  padding: 9px 16px 9px 12px;
+  min-height: 56px;
+  padding: 8px 16px 8px 12px;
   box-sizing: border-box;
   border: none;
   border-radius: var(--dsw-radius-md);
@@ -169,7 +177,7 @@
   cursor: pointer;
   font-family: inherit;
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
   font-weight: 400;
   color: var(--dsw-alias-label-primary);
   text-align: left;
@@ -190,12 +198,15 @@
   flex: none;
 }
 
+/* Section names wrap inside the rail instead of ending in an ellipsis: a
+   translated name is never shortened. Word boundaries break first; a single
+   compound longer than the measure breaks inside the word rather than
+   overflowing the cell. */
 .navLabel {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 /* Header (figma .Header 501:29981): h54, pad (10,20,14,8), close right. */
@@ -309,16 +320,21 @@
 
   /* Cells grow into spare width and hold a 108px floor. The four shipped
      sections already measure more than a 390px viewport, so the next cell shows
-     past the edge and the strip reads as scrollable. */
+     past the edge and the strip reads as scrollable. One row of 40px keeps the
+     strip compact; the strip scrolls horizontally, so a long name extends the
+     cell instead of wrapping into the 40px row. */
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .navCell {
     flex: 1 0 auto;
     justify-content: center;
     min-width: 108px;
+    min-height: 40px;
+    height: 40px;
     padding: 0 14px;
   }
 
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .navLabel {
     flex: none;
+    white-space: nowrap;
   }
 
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .options {

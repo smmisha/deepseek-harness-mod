@@ -223,6 +223,7 @@ export function apply(ctx: Context): void {
         getSnapshot: () => ctx.theme.getTheme(),
         subscribe: listener => ctx.on('theme/change', listener),
       },
+      locale: ctx.locale,
     },
     async start() {
       publish({ ...snapshot, loginVisible: true, loginFailed: false })
@@ -278,7 +279,7 @@ export function apply(ctx: Context): void {
     ctx.slots.inject('shell.overlay', () => ctx.slots.register({
       name: 'shell.overlay', id: 'desktop-onboarding', locale: 'settings.account',
       inject: (): DesktopOnboardingInjected => ({
-        hooks: { account: operations.hooks.account, onboarding: controller.state },
+        hooks: { account: operations.hooks.account, onboarding: controller.state, locale: ctx.locale },
         setVisible: (visible: boolean) => {
           if (snapshot.desktopOnboardingVisible !== visible) publish({ ...snapshot, desktopOnboardingVisible: visible })
         },
@@ -315,21 +316,10 @@ export function apply(ctx: Context): void {
     name: 'settings.launcher', locale: 'settings.account', inject: () => operations,
     children: { 'settings.launcher.notifications': { kind: 'single', scope: 'root' } },
   }, AccountMenu)))
-  ctx.remoteAccess.whenAccess('account/watch', () => ctx.slots.inject('settings.section', () => {
-    let unregister: (() => void) | undefined
-    const update = () => {
-      if (snapshot.view?.status === 'credential-stored') {
-        unregister ??= ctx.slots.register({
-          name: 'settings.section', id: 'account', order: -10, label: () => t('nav'),
-          locale: 'settings.account', inject: () => operations,
-        }, AccountSection)
-      } else {
-        unregister?.()
-        unregister = undefined
-      }
-    }
-    listeners.add(update)
-    update()
-    return () => { listeners.delete(update); unregister?.() }
-  }))
+  // The section owns its signed-out prompt and in-flight attempt, so it is registered for the
+  // account stream's whole lifetime instead of only while a credential is stored.
+  ctx.remoteAccess.whenAccess('account/watch', () => ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'account', order: -10, label: () => t('nav'),
+    locale: 'settings.account', inject: () => operations,
+  }, AccountSection)))
 }

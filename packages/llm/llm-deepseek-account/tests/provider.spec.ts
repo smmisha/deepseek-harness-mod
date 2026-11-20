@@ -1,7 +1,7 @@
 /** The account route serves its /models listing, gates models, and keeps discovery independent of the API-key route. */
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { DeepSeekAccount } from '@deepseek-ai/dsh-deepseek-account'
@@ -192,6 +192,74 @@ it('rejects the retired models setting at load', async () => {
   const ctx = await host('http://127.0.0.1:1')
   await expect(ctx.plugin(Account, { models: [] })).rejects.toThrow(/models is no longer configurable/)
   expect(ctx.llm.listProviders()).toEqual([])
+})
+
+describe('on-demand listing reload', () => {
+  const namespaceOf = (ctx: Context): string => {
+    const entry = ctx.llm.listConfigurableProviders().find(row => row.provider === 'deepseek-account')
+    if (entry === undefined) throw new Error('the account route is not declared')
+    return entry.settingsNs
+  }
+
+  it('advertises the capability and reloads the followed listing now', async () => {
+    let rows: object[] = [FLASH]
+    const server = await listing((request, response) => { json({ data: rows })(request, response) })
+    const ctx = await host(server.origin)
+    await ctx.plugin(Account, { baseURL: server.baseURL })
+    expect(ctx.llm.listConfigurableProviders()).toEqual([
+      expect.objectContaining({ provider: 'deepseek-account', listingRefresh: true }),
+    ])
+    expect((await ctx.llm.listModels('deepseek-account')).map(row => row.id)).toEqual(['deepseek-flash'])
+    const changed = vi.fn()
+    ctx.on('llm/models-updated', changed)
+
+    rows = [FLASH, PRO]
+    await ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-account')
+
+    expect(server.requests).toHaveLength(2)
+    expect(changed).toHaveBeenCalledWith('deepseek-account')
+    expect((await ctx.llm.listModels('deepseek-account')).map(row => row.id)).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
+  })
+
+  it('refuses while signed out before touching the network', async () => {
+    const server = await listing(json({ data: [FLASH] }))
+    const ctx = await host(server.origin, () => undefined)
+    await ctx.plugin(Account, { baseURL: server.baseURL })
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-account'))
+      .rejects.toMatchObject({ code: 'ACCOUNT_SIGN_IN_REQUIRED' })
+    expect(server.requests).toEqual([])
+  })
+
+  it('reports a failed reload and keeps the bundled catalog', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let failing = false
+    const server = await listing((request, response) => {
+      if (failing) { response.writeHead(503).end('down'); return }
+      json({ data: [FLASH] })(request, response)
+    })
+    const ctx = await host(server.origin)
+    await ctx.plugin(Account, { baseURL: server.baseURL })
+    expect((await ctx.llm.listModels('deepseek-account')).map(row => row.id)).toEqual(['deepseek-flash'])
+
+    failing = true
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-account'))
+      .rejects.toMatchObject({ code: 'LISTING_REFRESH_FAILED' })
+    expect(server.requests).toHaveLength(2)
+    expect((await ctx.llm.listModels('deepseek-account')).map(row => row.id)).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
+  })
+
+  it('refuses a route another namespace serves and carries caller cancellation', async () => {
+    const server = await listing(json({ data: [FLASH] }))
+    const ctx = await host(server.origin)
+    await ctx.plugin(Account, { baseURL: server.baseURL })
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-official'))
+      .rejects.toMatchObject({ code: 'NO_LISTING_REFRESH' })
+
+    const caller = new AbortController()
+    caller.abort(new Error('caller left'))
+    await expect(ctx.llm.refreshListing(namespaceOf(ctx), 'deepseek-account', caller.signal))
+      .rejects.toThrow('caller left')
+  })
 })
 
 it('aborts an in-flight listing request when the plugin is disposed', async () => {

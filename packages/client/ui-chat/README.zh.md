@@ -45,15 +45,19 @@ kind: "package-reference"
 
 原生消息图片使用独立的用户与输出位置。`conversation.chat.user.content` Factory 声明 `conversation.chat.user.images`，由 `UserContent` 渲染；Assistant 节点注册声明 `conversation.chat.message.images`，由 `AssistantMarkdown` 渲染。两者通过显式 props 接收图片来源、授权 `loadImage` 和布局参数。官方 `MessageImages` 条目调用共享的 root 作用域 `conversation.images.content` Factory。每个位置均可独立替换，无需复制画廊实现。
 
-Session 作用域的 `conversation.chat.user.content` Factory 只渲染用户内容区域：文本、额外内容块、按输入顺序排列的图片／文件附件及引用摘要。[`UserContentInput`](src/client/contract/slots.ts) 携带预处理的 `content`、变换 `facts`、显示 props 和显式 `loadImage`；引用动作由节点自己的 Injection 提供。正文调用共享 `conversation.user.text` Factory，图片调用自身拥有的图片 Slot。直接调用需要 Session 绑定，行包装层由调用方提供。
+Session 作用域的 `conversation.chat.user.content` Factory 只渲染用户内容区域：文本、额外内容块、按输入顺序排列的图片／文件附件及引用摘要。[`UserContentInput`](src/client/contract/slots.ts) 携带预处理的 `content`、变换 `facts`、显示 props 和显式 `loadImage`；引用动作由节点自己的 Injection 提供。正文调用共享 `conversation.user.text` Factory，图片调用自身拥有的图片 Slot。附件块（同模块的 `UserAttachments`）拥有按序排列的图片与文件呈现，因此隐藏文本的调用方仍然得到与气泡完全相同的附件。直接调用需要 Session 绑定，行包装层由调用方提供。
 
-`UserStyleBubble` 和[各来源包装层](<src/client/chat/MessageItem.tsx#L164-L340>) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
+`UserStyleBubble` 和[各来源包装层](src/client/chat/MessageItem.tsx) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
 
-官方 user 与 steering 共用的渲染器在 `user` 注册项上声明 session-scoped `conversation.chat.user.before` chain slot，并在气泡上方直接通过 `renderSlotChain` 渲染；`steering` 注册项复用该渲染器但不拥有该槽位。owner props 携带 Session 记录的持久化消息 `source` 与行 `kind`；各条目的 `select` 匹配自己负责的来源，首个非 null 结果作为 `matched` 交给获选组件。无匹配时不显示内容。条目自行拥有标记和文案；Chat 不解析消息来源。
+Session 作用域的 `conversation.chat.user.actions` Factory 承载一条已定稿用户消息旁的操作行；官方条目是打开该行编辑器的铅笔按钮。owner props 携带 `beginEdit`、`editUnavailable`，以及可选的 `editTriggerRef`（由条目挂到打开编辑器的控件上）。打开编辑器既不写入 composer 草稿，也不改动会话记录：该行用编辑器替换气泡文本，Enter 发送，Shift+Enter 换行，Esc 取消；发送会请求 Host 把 Session 回退到这条消息，并把编辑后的文本作为新一轮发送；操作按钮组旁的说明指出之后的回复会被替换、文件改动不会撤销。Host 决定期间两个操作都处于等待状态；被拒绝时编辑器与已输入文本保持打开，并以 Host 给出的原因替换该说明。编辑只改动文本，因此带图片或文件的消息会把它们以只读方式保留在输入框上方——由同一个 Content Factory 在抑制文本的情况下渲染；该上下文为 `inert`，不在 Tab 顺序中。编辑面沿用气泡的宽度族——与气泡栈同样止于 0.702 的内容宽度上限——输入框贴合草稿而不是撑满整行，因此单行消息打开的是单行输入框，操作按钮组紧接其下，长草稿在输入框内换行并滚动。Host 的空 `rewind` 消息会撤回被编辑的轮次及其后的所有轮次：Conversation 装配器从被撤回轮次的开始（或已加载窗口的开始）直到撤回消息，把它们从所有 View 中移除，Session 日志仍保留这些记录，编辑后的消息开启下一轮。由于发送会回退整个 Session，Session 运行期间 `editUnavailable` 会标记所有消息：铅笔保持可见但不可用，并通过 `aria-describedby` 关联本地化原因；排队消息则由自己的 QueueDock 编辑器处理。已经打开的编辑器会在运行期间隐藏，Session 空闲后恢复，期间已输入的文本不会丢失。关闭编辑器后，无论是取消还是按 Esc，键盘都会回到铅笔；若条目未提供触发引用，则回到消息行。被接受的发送会把键盘交给 composer：两条路径都不会把焦点丢到 `<body>`，也不会滚动会话记录。Escape 在编辑器内的任何位置都可取消，包括其保存与取消按钮；编辑器会消费该按键，避免外层界面随之关闭。用户气泡与编辑器都从用户文本取得基础方向（`dir="auto"`），因此阿拉伯语或希伯来语消息按从右到左排布，光标与对齐也随之变化。
+
+官方 user 与 steering 渲染器在 `user` 注册项上声明 session-scoped `conversation.chat.user.before` chain slot，并在气泡上方直接通过 `renderSlotChain` 渲染；`steering` 注册项通过 `SteeringMessageNodeView` 渲染同一气泡，但不拥有该槽位，也没有操作行。owner props 携带 Session 记录的持久化消息 `source` 与行 `kind`；各条目的 `select` 匹配自己负责的来源，首个非 null 结果作为 `matched` 交给获选组件。无匹配时不显示内容。条目自行拥有标记和文案；Chat 不解析消息来源。
 
 独立的 Markdown 图片以内嵌预览显示，点击打开共享图片浮层；本地路径在消息落定后基于当前查看的工作区解析。图片文件链接保持点击打开侧栏，鼠标停留或键盘聚焦时显示缩略图，Esc 关闭缩略图。图片加载失败时保留本地化状态与图片说明；不执行重复图片过滤。
 
 设置 → 通用设置 → 网页链接默认打开方式控制普通点击 Chat HTTP(S) 链接时的目标：「应用内侧边栏」（默认）打开新的右侧 Sidebar Browser tab，「默认浏览器」打开外部标签页。该设置项位于快捷键之后，仅在 Sidebar Browser 可用时显示。若 Sidebar Browser 未注册，两种选择均使用外部浏览器；带修饰键的点击保留原生行为。已认证浏览器的 `ui-chat.linkOpening` 偏好在 Host 上持久化，设置无法持久化写入时仅在当前进程内生效。已发送的文件引用及消息日志确认调用的 skill 也可在右侧栏打开预览。文件路径使用当前查看的 Session；skill 名称由该 Session 当前的输入触发源解析。两者悬停或聚焦时均使用正文文件链接的虚线下划线。会话、目录和命令标签仍只作为引用展示。
+
+设置 → 通用设置 → 界面 → 用户消息可选 `bubble`（默认）或 `flat`，存入 `ui-chat.messageLayout`；气泡宽度（`ui-chat.bubbleWidth`：`narrow`、`standard`（默认）、`wide` 或 `full`）仅在消息为气泡时显示。标准宽度保持 0.702 的内容宽度占比，并以行宽的 82% 为上限；其他预设分别为 0.6/72%、0.85/92% 与整行。Chat 在 `body[data-dsh-message-layout]` 上标记布局，并以 `--dsh-chat-bubble-share` 与 `--dsh-chat-bubble-cap` 提供占比与上限，因此用户气泡与其编辑区域保持同一宽度。平铺布局让用户消息整宽并靠起始侧对齐，不带填充与圆角，以 2 px 的起始侧边框标示。
 
 <a id="system-prompt-row"></a>
 ## Chat 隐藏的行
@@ -106,6 +110,8 @@ Chat 在 `MarkdownDelegateProvider.getTriggerProps` 接入处适配 Markdown 目
 
 正常在线时，本地 transcript 与 steering 回显在 Inbox 接受与领取期间保持挂载，直到持久消息到达，不会重复触发跟随底部。跨客户端的待处理 steering 遵循 Inbox 顺序，在匹配位置使用本地回显。已入档的本地 steering 还会排除匹配的旧 Inbox 行，直到领取投影到达；没有本地提交身份的 steering 仍按 Inbox 投影显示。重连后，Host 消息替代已有接收回执的本地回显；已领取但尚未入档时，气泡可能短暂消失。
 
+待处理的 steering 项保留操作行：铅笔在原位编辑文本，垃圾桶移除该项。Host 仅在运行步骤尚未接收该项时执行这两种操作；被拒绝的修改会在 composer 中提示。编辑尚未完成时步骤已接收该项，同样会在 composer 中提示，因为气泡随该项一起消失。
+
 Chat 末尾为进行中的 Turn 控制行，且该轮尚无可见输入时，第一条本地 transcript 回显显示在控制行前。其他回显保留在正文末尾。控制行与回显共用一个 keyed 列表，因此控制行到达时不会重新挂载回显。持久输入在同一次渲染中替换匹配的回显。
 
 工作步骤展示模式控制过程组显示与推理预览。简洁、标准、详细模式收起符合条件的已完成轮次，保留所有 Assistant 回复可见，选「仅最终回答」时只保留最终答案；完全展开模式保留时长或状态抬头，但不支持收起，历史过程行直接显示。[业务规则明细](src/client/conversation-nodes/README.zh.md#display-modes) 统一说明模式表、组头行为、整轮折叠资格、时钟与开合重置。
@@ -127,7 +133,7 @@ Chat Builder 按节点发布 `bottomSource`：节点可见且属于已加载的�
 
 过程组使用稳定的 `div` 布局盒子、滚动正文及不限高的内容盒子，后者报告正文内部的内容增长。业务样式必须适配组内及组边界间距，处理隐藏或空成员以及回答前的间距特例。`conversation.chat.flow` 插槽添加一个 `display: contents` DOM 锚点；行选择器直接匹配该锚点，不重复匹配其正文容器祖先。运行状态与各行共享父级，使分隔线使用同一套可见兄弟节点规则。锚点自身不产生间距。更早历史控件紧邻流锚点之前，两者的兄弟关系决定首行间距。CSS 变量不属于 Group Definition。
 
-运行中的分组标题、思考预览、工具与命令行、当前重试行以及底部运行状态使用共享的 [TextShimmer](../ui-primitives/README.zh.md#component-catalog)。每行的文字共用一道从左到右的高光，包括折叠的分组标题；图标和悬停箭头保留底色。普通流程行之间相隔 4px，同一条 Assistant 消息里相邻的推理行也是如此；展开的分组标题与内容之间相隔 8px；Assistant 回复与相邻过程行之间相隔 12px；每轮完成／耗时控件与其输入、以及紧随其后的可见行之间保留 16px。控件与回复之间隔着已收起的行时，回复保持 12px 回复间距，因此折叠不会改变它的间距。隐藏行与空行（包括保留的空 slot 锚点）不产生间距。“深度求索”运行文字保留蓝色底色，并使用主题专用高光扫过文字。
+运行中的分组标题、思考预览、工具与命令行、当前重试行以及底部运行状态使用共享的 [TextShimmer](../ui-primitives/README.zh.md#component-catalog)。每行的文字共用一道从左到右的高光，包括折叠的分组标题；图标和悬停箭头保留底色。普通流程行之间相隔 4px，同一条 Assistant 消息里相邻的推理行也是如此；展开的分组标题与内容之间相隔 8px；Assistant 回复与相邻过程行之间相隔 12px；每轮完成／耗时控件与其输入、以及紧随其后的可见行之间保留 16px。控件与回复之间隔着已收起的行时，回复保持 12px 回复间距，因此折叠不会改变它的间距。隐藏行与空行（包括保留的空 slot 锚点）不产生间距。“深度求索”运行文字保留蓝色底色，并使用主题专用高光扫过文字。停止请求等待结束时，同一行改为说明所请求的结束方式（正在完成当前步骤，随后停止或正在停止…），不再显示计时，因此 transcript 在轮次摘要出现前就能看出运行正在收尾。
 
 运行状态显示一只鲸鱼，其 APNG 遮罩继承文字颜色。启用减少动态效果或强制颜色模式、或浏览器不支持 alpha 遮罩时，CSS 选择静态 SVG。APNG 是插件样式表引用的[包资源](../AGENTS.md#dependency-declaration)；React 不通过 DOM 样式传递图片数据。
 

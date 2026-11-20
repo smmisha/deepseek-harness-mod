@@ -1,0 +1,68 @@
+# Example profile patch: mount the free web chat bridge and point a provider
+# route at it. Copy this file into a profile's cordis.patch.yml, or pass it as
+# `dsh --profile web --patch freechat.patch.yml`.
+#
+# Two rows are required:
+#   freechat            starts the local OpenAI-compatible proxy.
+#   llm-pi-ai-free-web  declares one openai-completions route over that proxy.
+#
+# `FREECHAT_TOKEN` must be set in the environment (or .env) to the same value
+# as `server.token` below.
+
+- insert:
+    # The bridge itself: proxy, local thread memory, rotation planner.
+    - id: freechat
+      name: '@deepseek-ai/dsh-freechat'
+      config:
+        server:
+          host: 127.0.0.1
+          port: 8788
+          token: !!js process.env.FREECHAT_TOKEN ?? ''
+          maxBodyBytes: 8388608
+        transport:
+          # 'cdp' drives a Chromium tab started with --remote-debugging-port;
+          # set cdp.port below. 'electron-guest' needs the shell to provide the
+          # `freeChatGuestPort` service. 'loopback' needs no web account.
+          kind: cdp
+          pollMs: 300
+          idlePolls: 3
+          readyTimeoutMs: 60000
+        cdp:
+          port: 9222
+          url: https://chat.deepseek.com/
+        context:
+          maxMessages: 40
+          maxTokens: 100000
+          replayTail: 12
+          maxCharsPerMessage: 12000
+        storage:
+          directory: .freechat
+        registry:
+          # Optional HTTPS document listing further free routes; empty keeps
+          # the built-in catalog only.
+          url: ''
+          ttlMs: 21600000
+        connectors:
+          file: mcp.servers.json
+
+    # The provider route the harness talks to. `apiKeyEnv` is the environment
+    # variable the OpenAI client sends as a bearer token; it must match the
+    # proxy token above.
+    - id: llm-pi-ai-free-web
+      name: '@deepseek-ai/dsh-llm-pi-ai'
+      config:
+        providers:
+          free-web:
+            api: openai-completions
+            baseURL: http://127.0.0.1:8788/v1
+            apiKeyEnv: FREECHAT_TOKEN
+            displayName: Free web chat
+            models:
+              - id: deepseek-web-chat
+                name: DeepSeek Web Chat
+                contextWindow: 128000
+                maxTokens: 8192
+              - id: deepseek-web-reasoner
+                name: DeepSeek Web Reasoner
+                contextWindow: 128000
+                maxTokens: 8192

@@ -1,5 +1,7 @@
 .page {
   --page-padding: clamp(40px, 8.333vw, 120px);
+  display: flex;
+  flex-direction: column;
   position: relative;
   width: 100%;
   height: 100%;
@@ -17,14 +19,16 @@
   to { opacity: 1; }
 }
 
-.loading { display: grid; place-items: center; height: 100%; color: var(--dsw-alias-label-tertiary); }
+.loading { display: grid; place-items: center; height: 100%; color: var(--dsw-alias-label-secondary); }
 
+/* One scrolling content area per page; the navigation below it stays in normal flow, so a
+   translation-grown step can never push the primary action under Back/Skip. */
 .content {
-  position: absolute;
-  top: 50%;
-  left: 50%;
+  flex: 1 1 auto;
+  box-sizing: border-box;
   width: min(calc(100% - 2 * var(--page-padding)), 1200px);
-  transform: translate(-50%, -50%);
+  min-height: 0;
+  margin: 0 auto;
 }
 
 .copy h1 {
@@ -61,10 +65,11 @@
   font-size: 16px;
   line-height: 28px;
   font-weight: 300;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .welcome {
+  position: relative;
   max-width: 2200px;
   width: 100%;
   height: 100%;
@@ -105,16 +110,17 @@
   display: grid;
   grid-template-columns: minmax(0, 594px) minmax(0, 400px);
   justify-content: center;
+  align-content: safe center;
   align-items: center;
   gap: clamp(32px, calc((100vw - 994px) / 3), 164px);
   max-width: 1196px;
-  transform: translate(-50%, calc(-50% - 5px));
+  overflow-y: auto;
 }
 
 .creditIllustration { width: 100%; height: auto; aspect-ratio: 594 / 509; object-fit: contain; }
 .credit .copy { max-width: 400px; }
 .creditActions { display: flex; gap: 24px; margin-top: 60px; }
-.creditActions > button { flex: 1; max-width: 160px; }
+.creditActions > button { flex: 1 1 0; }
 .creditActions .laterAction { background: var(--dsw-alias-onboarding-secondary-fill); }
 @media (hover: hover) {
   .creditActions .laterAction:hover:not(:disabled) {
@@ -127,9 +133,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: safe center;
   gap: 48px;
-  top: calc(50% - 188.5px);
-  transform: translateX(-50%);
+  overflow-y: auto;
 }
 
 .purpose { max-width: 843px; }
@@ -137,7 +143,7 @@
 .purpose .copy, .process .copy { text-align: center; }
 .purpose .copy h1, .process .copy h1 { font-size: 28px; line-height: 39px; }
 .purpose .brand { line-height: 0; }
-.subtitle { margin: 16px 0 0; font-size: 16px; line-height: 22px; font-weight: 300; color: var(--dsw-alias-label-tertiary); }
+.subtitle { margin: 16px 0 0; font-size: 16px; line-height: 22px; font-weight: 300; color: var(--dsw-alias-label-secondary); }
 .purposeCards, .processCards { display: grid; width: 100%; gap: 16px; align-items: stretch; }
 .purposeCards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; }
 .processCards { grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: 225px; padding-block: 1.5px; box-sizing: border-box; }
@@ -208,7 +214,8 @@
   to { --dsh-onboarding-border-angle: 450deg; }
 }
 .card:focus-visible, html:not([data-input-modality='pointer']) .card:has(:focus-visible) { outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 5px; }
-.card[aria-disabled='true'] { cursor: wait; }
+/* Busy choices and actions use native disabled state; this keeps the wait cue on the card. */
+.card:disabled, .card:has(.cardCheckbox input:disabled) { cursor: wait; opacity: 0.4; }
 .cardTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; height: 40px; margin-bottom: 12px; }
 .cardCheckbox { position: static; }
 .card .cardCheckbox input:focus-visible, .card .cardCheckbox input:focus-visible + span { outline: none; }
@@ -226,31 +233,28 @@
   to { opacity: 1; transform: scale(1); }
 }
 .cardTitle { font-size: 20px; line-height: 28px; font-weight: 400; }
-.cardDescription { margin-top: 8px; font-size: 15px; line-height: 21px; font-weight: 300; color: var(--dsw-alias-label-tertiary); }
+.cardDescription { margin-top: 8px; font-size: 15px; line-height: 21px; font-weight: 300; color: var(--dsw-alias-label-secondary); }
 .processIcon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 12px; }
-.primaryAction { position: absolute; top: 100%; width: 100%; min-height: 44px; display: flex; justify-content: center; margin-top: 100px; }
+.primaryAction { width: 100%; min-height: 44px; display: flex; justify-content: center; margin-top: 52px; }
 .primaryAction > button { width: min(240px, 100%); }
-.primaryAction > button[aria-disabled='true'] { cursor: wait; }
 
 .navigation {
-  pointer-events: none;
-  position: absolute;
-  bottom: clamp(24px, 7.61vh, 70px);
-  left: 50%;
+  flex: none;
   width: min(calc(100% - 2 * var(--page-padding)), 1200px);
-  transform: translateX(-50%);
+  margin: 0 auto;
+  padding-bottom: clamp(24px, 7.61vh, 70px);
   display: flex;
   justify-content: space-between;
 }
 
-.navigation button { pointer-events: auto; }
-.navigation button { display: flex; align-items: center; gap: 20px; padding: 0; border: 0; background: transparent; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 16px; font-weight: 300; line-height: 32px; cursor: pointer; }
+.navigation button { display: flex; align-items: center; gap: 20px; padding: 0; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 16px; font-weight: 300; line-height: 32px; cursor: pointer; }
 .navigation button:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 5px; }
 @media (hover: hover) {
   .navigation button:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
 }
 .backIcon { width: 17px; height: 14px; flex: none; background: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; }
-.status { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); font-size: 14px; line-height: 22px; }
+/* The save-error alert floats above the navigation band, which is no longer overlapped by it. */
+.status { position: absolute; left: 50%; bottom: calc(clamp(24px, 7.61vh, 70px) + 44px); transform: translateX(-50%); font-size: 14px; line-height: 22px; }
 .confirmation { padding: 22px 24px 0; color: var(--dsw-alias-label-primary); }
 .confirmationHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .confirmation h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; }
@@ -259,13 +263,12 @@
   .confirmationClose:hover { background: var(--dsw-alias-interactive-bg-hover); }
 }
 .confirmation p { margin: 0; font-size: 14px; line-height: 22px; }
-.confirmationActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-.dialogButton { border-radius: 12px; font-family: var(--dsw-font-family); font-weight: 500; }
+/* Confirmation labels wrap onto separate lines rather than shrinking below their text. */
+.confirmationActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.dialogButton { border-radius: 12px; font-family: var(--dsw-font-family); font-weight: 500; white-space: nowrap; }
 .dialogButton:first-child { font-weight: 400; }
 
 @media (max-height: 760px) {
-  .purpose, .process { top: calc(50% - 180px); }
-
   .purpose .copy h1, .process .copy h1 { font-size: 28px; line-height: 39px; }
 
   .subtitle { margin-top: 16px; line-height: 21px; }
@@ -274,7 +277,7 @@
 
   .processCards { min-height: 0; padding-block: 0; }
 
-  .primaryAction { margin-top: 40px; }
+  .primaryAction { margin-top: 0; }
 
   .creditActions { margin-top: 32px; }
 }
@@ -317,6 +320,7 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
+  white-space: nowrap;
 }
 
 .page .action:focus-visible {

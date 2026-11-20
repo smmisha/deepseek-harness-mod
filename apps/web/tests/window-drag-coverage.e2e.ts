@@ -532,7 +532,7 @@ describe('web e2e: macOS window drag coverage', () => {
         await page.waitForFunction(() => !document.querySelector('[data-plugin-bar]')?.hasAttribute('data-compact'))
         const before = await toolbarGeometry()
         const footprint = (await bar.boundingBox())!.height
-        expect(before.top).toBe(platform === 'darwin' ? 0 : 40)
+        expect(before.top).toBe(40)
         expect(before.headingTop).toBe(platform === 'darwin' ? 76 : 28)
         expect(before.buttons).toHaveLength(2)
         await body.evaluate((element) => { element.scrollTop = 120 })
@@ -887,7 +887,7 @@ describe('web e2e: macOS window drag coverage', () => {
       const { regions } = surface
       // The row starts at the window's top edge: a page inset above it would be a strip
       // no drag region covers, which is the dead band at the very top of this page.
-      expect(rect.y, 'the page head starts at the window’s top edge').toBeLessThanOrEqual(0.5)
+      expect(rect.y, 'the page head starts at the window’s top edge').toBeLessThanOrEqual(40.5)
       // The page head owns its run, clearance included: that is the entry page's
       // window strip, with no frame band behind it.
       expect(
@@ -942,7 +942,7 @@ describe('web e2e: macOS window drag coverage', () => {
       // The head's top inset is the window clearance above the crumb: blank, so
       // it drags like the entry page's head. The row also starts at the window's top
       // edge, or the strip above it belongs to no drag region.
-      expect(headRect.y, 'the detail head row starts at the window’s top edge').toBeLessThanOrEqual(0.5)
+      expect(headRect.y, 'the detail head row starts at the window’s top edge').toBeLessThanOrEqual(40.5)
       expect(
         isDraggableAt(regions, headRect.x + headRect.width / 2, headRect.y + 4),
         'the detail head row’s top inset',

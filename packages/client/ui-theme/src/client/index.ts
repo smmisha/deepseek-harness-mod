@@ -21,6 +21,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
+import { AccentRow, MotionRow, PaletteRow, type AppearanceOptionsInjected } from './AppearanceOptions.tsx'
+import { AppearanceRuntime } from './appearance-runtime.ts'
 import type { FontSettingsInjected } from './FontSettingsGroup.tsx'
 import { FontSettingsGroup } from './FontSettingsGroup.tsx'
 import { createAppearanceRowStore, createFontRowStore } from './settings-store.ts'
@@ -608,6 +610,31 @@ export function apply(ctx: ClientContext): void {
   const theme = new ThemeRuntime(ctx, host)
   ctx.provide('theme', theme)
   installIconSprite(ctx, theme.getTheme().active.icons)
+
+  // Palette and accent fold into one token layer over the active theme; motion is one root attribute.
+  const appearance = new AppearanceRuntime(host)
+  ctx.effect(() => () => { appearance.dispose() }, 'ui-theme: appearance preferences')
+  ctx.effect(() => appearance.layer(theme), 'ui-theme: appearance token layer')
+  if (typeof document !== 'undefined') {
+    ctx.effect(() => appearance.presentMotion(document.documentElement), 'ui-theme: motion attribute')
+  }
+  const appearanceOptions = (): AppearanceOptionsInjected => ({
+    palette: appearance.palette,
+    accent: appearance.accent,
+    motion: appearance.motion,
+    setPalette: (palette) => { appearance.setPalette(palette) },
+    setAccent: (accent) => { appearance.setAccent(accent) },
+    setMotion: (motion) => { appearance.setMotion(motion) },
+  })
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: 'palette', order: 10.2, locale: SETTINGS_NS, inject: appearanceOptions,
+  }, PaletteRow))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: 'accent', order: 10.4, locale: SETTINGS_NS, inject: appearanceOptions,
+  }, AccentRow))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: 'motion', order: 11.8, locale: SETTINGS_NS, inject: appearanceOptions,
+  }, MotionRow))
 
   const store = createAppearanceRowStore()
   let bound: BoundActions<typeof store> | undefined

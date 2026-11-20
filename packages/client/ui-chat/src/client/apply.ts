@@ -34,6 +34,7 @@ import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
 import { sessionFilePath } from './file-path.ts'
 import { ChatView } from './chat/ChatView.tsx'
 import { ChatFlow } from './chat/ChatFlow.tsx'
+import { EditMessageAction } from './chat/EditMessageAction.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { UserContent } from './chat/UserContent.tsx'
 import { ActivityPill, UsagePill } from './chat/StatsPills.tsx'
@@ -49,6 +50,8 @@ import { CHAT_SETTINGS_NAMESPACE, DEFAULT_LINK_OPENING, DEFAULT_TRANSCRIPT_VIEW_
 import { LinkOpeningRow, type LinkOpeningRowInjected } from './settings/LinkOpeningRow.tsx'
 import { PerformanceUsageRow, type PerformanceUsageRowInjected } from './settings/PerformanceUsageRow.tsx'
 import { PerformanceUsagePolicy } from './performance-usage.ts'
+import { MessageLayoutPolicy } from './message-layout.ts'
+import { BubbleWidthRow, MessageLayoutRow, type MessageLayoutRowsInjected } from './settings/MessageLayoutRows.tsx'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
 import { bindDisclosure } from './chat/use-disclosure.ts'
 import { useFlowHidden, useMotionHidden } from './chat/flow-motion.ts'
@@ -172,13 +175,21 @@ export function apply(ctx: Context): void {
   const transcriptView = new TranscriptViewPolicy(chatSettings, 'dshDesktop' in globalThis ? 'standard' : DEFAULT_TRANSCRIPT_VIEW_MODE)
   const presentation = derivePresentationPolicy(transcriptView.mode, transcriptView.collapseTiming, transcriptView.foldedReplies)
   const performancePolicy = new PerformanceUsagePolicy(chatSettings)
-  ctx.effect(() => () => { transcriptView.dispose(); performancePolicy.dispose() })
+  const messageLayout = new MessageLayoutPolicy(chatSettings)
+  ctx.effect(() => () => { transcriptView.dispose(); performancePolicy.dispose(); messageLayout.dispose() })
+  // The layout reaches every user-style surface through one body attribute and two variables.
+  if (typeof document !== 'undefined') ctx.effect(() => messageLayout.present(document.body), 'ui-chat: message layout')
   const performanceUsage = performancePolicy.mode
   registerChatNodeRenderers(ctx, performanceUsage, presentation)
   ctx.slots.registerFactory({
     name: 'conversation.chat.user.content', scope: 'session', locale: NS,
     children: { 'conversation.chat.user.images': { kind: 'single', scope: 'session' } },
   }, UserContent)
+  // The pencil seeds the composer with one sent request so the human can edit
+  // and resubmit it; the original message remains in the transcript.
+  ctx.effect(() => ctx.slots.registerFactory({
+    name: 'conversation.chat.user.actions', scope: 'session', locale: NS,
+  }, EditMessageAction))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -190,6 +201,19 @@ export function apply(ctx: Context): void {
       setPerformanceUsage: (mode) => { performancePolicy.setMode(mode) },
     }),
   }, PerformanceUsageRow))
+
+  const messageLayoutRows = (): MessageLayoutRowsInjected => ({
+    layout: messageLayout.layout,
+    width: messageLayout.width,
+    setLayout: (layout) => { messageLayout.setLayout(layout) },
+    setWidth: (width) => { messageLayout.setWidth(width) },
+  })
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: 'message-layout', order: 11.5, locale: NS, inject: messageLayoutRows,
+  }, MessageLayoutRow))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: 'bubble-width', order: 11.6, locale: NS, inject: messageLayoutRows,
+  }, BubbleWidthRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -257,6 +281,10 @@ export function apply(ctx: Context): void {
           fileDrag: ctx.fileDrag.actions,
           hooks: { presentation, interactionIds: ctx.uiConversation.interactions },
           dispatchInteraction: gesture => ctx.uiConversation.interactions.dispatch(sessionId, gesture),
+          pendingSteer: {
+            update: (itemId, action) => ctx.uiConversation.updatePendingSteer(sessionId, itemId, action),
+            notify: (text) => { ctx.uiConversation.notifyPendingSteer(sessionId, text) },
+          },
           // Files open in the right Sidebar, not in a desktop application: the
           // content stays in the product, beside the conversation that produced
           // it. A relative path resolves from the Session's working directory
@@ -312,6 +340,7 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
+          editMessage: (seq, text) => ctx.uiConversation.editMessage(sessionId, seq, text),
         }
       },
     }, ChatView)

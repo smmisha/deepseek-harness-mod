@@ -61,6 +61,15 @@ describe('theme bootstrap row', () => {
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(dark)
   })
 
+  it('paints the selected color palette canvas before scripts run', () => {
+    const [head] = bootThemeInjections('system', undefined, undefined, 'moonlight')
+    if (head?.kind !== 'style') throw new Error('theme head bootstrap row is not a style')
+    expect(head.text).toBe(
+      ':root{color-scheme:light}body{background-color:#f7f9fc;--dsh-boot-bg:#f7f9fc}'
+      + '@media(prefers-color-scheme:dark){:root{color-scheme:dark}body{background-color:#0b1020;--dsh-boot-bg:#0b1020}}',
+    )
+  })
+
   it('uses a media query for the system canvas palette', () => {
     const [head] = bootThemeInjections('system')
     if (head?.kind !== 'style') throw new Error('theme head bootstrap row is not a style')

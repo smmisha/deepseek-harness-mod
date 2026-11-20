@@ -6,7 +6,8 @@ import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { FileSystem, FsError, FsVersion, type FsDirEntry, type FsEditOutcome, type FsEditRequest, type FsInfo, type FsPathInfo, type FsTarget, type FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import * as SkillFileSystem from '../src/index.ts'
-import SkillSources, { type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
+import { assertFolderPathAcceptable } from '../src/folder-path.ts'
+import SkillSources, { type SkillCategory, type SkillSourcesService } from '@deepseek-ai/dsh-skill-sources'
 
 /** Every temp dir created by this file, removed after each test. */
 const tempDirs: string[] = []
@@ -20,6 +21,19 @@ async function tempDir(name: string): Promise<string> {
   return await realpath(dir)
 }
 
+/**
+ * Point the POSIX home folder at a fresh temp dir for one test, so temp roots stay
+ * outside it even where TMPDIR lives under the real home, as on GitHub's
+ * standard runners (`/home/runner/work/_temp`).
+ * @returns the temporary home folder.
+ */
+async function isolateHome(): Promise<string> {
+  const home = await tempDir('home')
+  vi.stubEnv('HOME', home)
+  onTestFinished(() => { vi.unstubAllEnvs() })
+  return home
+}
+
 async function writeSkill(root: string, name: string, description: string, body = 'Use the skill.'): Promise<void> {
   const dir = join(root, name)
   await mkdir(dir, { recursive: true })
@@ -29,6 +43,25 @@ async function writeSkill(root: string, name: string, description: string, body 
 async function writeFlatSkill(root: string, name: string, description: string, body = 'Flat body.'): Promise<void> {
   await mkdir(root, { recursive: true })
   await writeFile(join(root, `${name}.md`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`)
+}
+
+/**
+ * Write one skill bundle whose folder name differs from the declared skill name,
+ * with extra frontmatter lines. A namespace a skill name carries includes `:`,
+ * which a Windows folder name cannot.
+ * @param root - skill root the bundle is created under.
+ * @param folder - folder name for the bundle.
+ * @param name - skill name the frontmatter declares.
+ * @param frontmatter - additional frontmatter lines, one field per entry or mapping rows.
+ */
+async function writeNamedSkill(
+  root: string, folder: string, name: string, frontmatter: readonly string[] = [],
+): Promise<void> {
+  const dir = join(root, folder)
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'SKILL.md'), [
+    '---', `name: ${name}`, `description: ${name}`, ...frontmatter, '---', '', 'Body.', '',
+  ].join('\n'))
 }
 
 class TestFileSystem extends FileSystem {
@@ -159,8 +192,10 @@ class TestFileSystem extends FileSystem {
 
 type SwitchConfig = {
   applications?: { id: string; dir: string; title: string }[]
+  categories?: SkillCategory[]
   sources?: Record<string, { enabled: boolean }>
   skills?: Record<string, Record<string, boolean>>
+  folders?: { dir: string }[]
 }
 
 async function setupLocal(
@@ -221,8 +256,8 @@ describe('dsh-skill-filesystem plugin exports', () => {
 
 describe('folder path validation', () => {
   it('accepts local absolute folders', () => {
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(homedir())).not.toThrow()
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(join(homedir(), 'skills'))).not.toThrow()
+    expect(() => { assertFolderPathAcceptable(homedir()) }).not.toThrow()
+    expect(() => { assertFolderPathAcceptable(join(homedir(), 'skills')) }).not.toThrow()
   })
 
   it('refuses network shares, device namespaces, relative paths, and parent segments', () => {
@@ -236,11 +271,11 @@ describe('folder path validation', () => {
       String.raw`C:\skills\..\elsewhere`,
     ]
     for (const path of refused) {
-      expect(() => SkillFileSystem.assertFolderPathAcceptable(path), path).toThrow(TypeError)
+      expect(() => { assertFolderPathAcceptable(path) }, path).toThrow(TypeError)
     }
-    expect(() => SkillFileSystem.assertFolderPathAcceptable(String.raw`\\server\share`))
+    expect(() => { assertFolderPathAcceptable(String.raw`\\server\share`) })
       .toThrow('network or device location')
-    expect(() => SkillFileSystem.assertFolderPathAcceptable('relative/skills'))
+    expect(() => { assertFolderPathAcceptable('relative/skills') })
       .toThrow('not an absolute folder path')
   })
 })
@@ -403,6 +438,7 @@ describe('FileSystemSkillProvider', () => {
   })
 
   it.skipIf(process.platform === 'win32')('shortens roots outside the home folder and a folder equal to home', async () => {
+    await isolateHome()
     const outside = await mkdtemp(join(tmpdir(), 'dsh-fs-'))
     tempDirs.push(outside)
     await writeSkill(join(outside, '.dsh', 'skills'), 'out-skill', 'Outside the home folder')
@@ -430,8 +466,11 @@ describe('FileSystemSkillProvider', () => {
         skills: {},
       }),
       applications: () => applications,
+      categories: () => [],
       folders: () => [],
-      visibility: () => ({ applications, folders: [], sourceEnabled: () => true, skillEnabled: () => true }),
+      visibility: () => ({
+        applications, folders: [], categories: [], sourceEnabled: () => true, skillEnabled: () => true,
+      }),
       addFolder: async () => true,
       removeFolder: async () => undefined,
       setSource: async () => undefined,
@@ -460,6 +499,7 @@ describe('FileSystemSkillProvider', () => {
   })
 
   it('shortens home and project roots and keeps other absolute roots', async () => {
+    if (process.platform !== 'win32') await isolateHome()
     const homeChild = await mkdtemp(join(homedir(), 'dsh-home-'))
     tempDirs.push(homeChild)
     await writeSkill(homeChild, 'home-skill', 'Under home')
@@ -721,7 +761,8 @@ describe('FileSystemSkillProvider', () => {
     const home = await tempDir('skill-invalid-yaml')
     const root = join(home, '.dsh/skills')
     await writeSkill(root, 'good-skill', 'Good skill')
-    await writeFile(join(root, 'bad-yaml.md'), '---\nname: bad-yaml\ndescription: [unclosed\n---\n\nBad body.\n')
+    // An entry the lenient reader cannot rescue either: its name is not a skill name.
+    await writeFile(join(root, 'bad-yaml.md'), '---\nname: [unclosed\ndescription: [also\n---\n\nBad body.\n')
 
     const ctx = await setupLocal(home)
 
@@ -1320,7 +1361,7 @@ describe('FileSystemSkillProvider', () => {
 
       // Isolated providers see only their explicit roots: the environment
       // bundled root is a default root, so includeDefaultRoots: false must
-      // drop it — isolated providers never re-claim the app's builtins.
+      // drop it вЂ” isolated providers never re-claim the app's builtins.
       const isolated = new Context()
       await isolated.plugin(SkillRegistry)
       const customOnly = join(envHome, 'custom-only')
@@ -1365,4 +1406,397 @@ describe('FileSystemSkillProvider', () => {
       }
     }
   })
+})
+
+describe('Skills tab detail rows', () => {
+  it('reports files, script marks, a one-line description, language, and provenance', async () => {
+    const home = await tempDir('detail-rows')
+    const project = await tempDir('detail-rows-project')
+    const root = join(home, '.dsh', 'skills')
+    const bundle = join(root, 'audit-skill')
+    await mkdir(join(bundle, 'references'), { recursive: true })
+    await mkdir(join(bundle, 'scripts'), { recursive: true })
+    await writeFile(join(bundle, 'references', 'signs.md'), 'signs')
+    await writeFile(join(bundle, 'scripts', 'audit.sh'), '#!/bin/sh\necho hi\n')
+    await writeFile(join(bundle, 'LICENSE'), 'MIT')
+    await writeFile(join(bundle, 'SKILL.md'), [
+      '---',
+      'name: audit-skill',
+      'description: |',
+      '  First line of the description',
+      '  second line continues.',
+      'metadata:',
+      '  language: en-GB',
+      '  repository: https://github.com/anthropics/skills',
+      '  commit: 2c5958e',
+      '  installedAt: 2026-11-12T09:30:00Z',
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'))
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const skill = (await describeSources(ctx, project))
+      .find(row => row.id === 'user-dsh')?.skills.find(entry => entry.name === 'audit-skill')
+
+    // A YAML block scalar reaches the tab as one paragraph; the model-facing description keeps its lines.
+    expect(skill?.description).toBe('First line of the description second line continues.')
+    expect(skill?.language).toBe('en-GB')
+    expect(skill?.provenance).toEqual({
+      url: 'https://github.com/anthropics/skills',
+      commit: '2c5958e',
+      installedAt: '2026-11-12T09:30:00Z',
+    })
+    const files = [...skill?.files ?? []].sort((left, right) => left.path < right.path ? -1 : 1)
+    expect(files.map(file => [file.path, file.isScript])).toEqual([
+      ['LICENSE', false],
+      ['SKILL.md', false],
+      ['references/signs.md', false],
+      ['scripts/audit.sh', true],
+    ])
+    expect(files.every(file => file.size > 0)).toBe(true)
+  })
+
+  it('lists only the file of a flat skill', async () => {
+    const home = await tempDir('detail-flat')
+    await writeFlatSkill(join(home, '.dsh', 'skills'), 'flat-one', 'Flat skill description')
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const skill = (await describeSources(ctx))
+      .find(row => row.id === 'user-dsh')?.skills.find(entry => entry.name === 'flat-one')
+    expect(skill?.files).toHaveLength(1)
+    expect(skill?.files?.[0]?.path).toBe('flat-one.md')
+    expect(skill?.files?.[0]?.size).toBeGreaterThan(0)
+    expect(skill?.files?.[0]?.isScript).toBe(false)
+  })
+
+  it('leaves language and provenance absent for metadata that declares neither', async () => {
+    const home = await tempDir('detail-metadata')
+    const root = join(home, '.dsh', 'skills')
+    const write = async (name: string, frontmatter: string): Promise<void> => {
+      const dir = join(root, name)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${name}\n${frontmatter}---\n\nBody\n`)
+    }
+    await write('plain-skill', '')
+    await write('odd-metadata', 'metadata:\n  language: 42\n  repository: "   "\n  commit: 7\n')
+    await write('url-only', 'metadata:\n  repository: owner/repo\n  installedAt: yesterday\n')
+    await write('text-metadata', 'metadata: plain text\n')
+    const ctx = await setupLocal(home)
+    const skills = (await describeSources(ctx)).find(row => row.id === 'user-dsh')?.skills ?? []
+    const byName = (name: string) => skills.find(entry => entry.name === name)
+
+    expect(byName('plain-skill')?.language).toBeUndefined()
+    expect(byName('plain-skill')?.provenance).toBeUndefined()
+    // A language must be a tag, a repository a non-empty string, and a date an ISO-8601 value.
+    expect(byName('odd-metadata')?.language).toBeUndefined()
+    expect(byName('odd-metadata')?.provenance).toBeUndefined()
+    expect(byName('url-only')?.provenance).toEqual({ url: 'owner/repo' })
+    expect(byName('text-metadata')?.language).toBeUndefined()
+  })
+
+  it('reports no file list for a skill folder the filesystem service cannot list', async () => {
+    const home = await tempDir('detail-unreadable')
+    const root = join(home, '.dsh', 'skills')
+    await writeSkill(root, 'readable-bundle', 'Readable bundle')
+    await writeSkill(root, 'special-entry', 'Bundle with a special file')
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const fs = await ctx.plugin(class extends TestFileSystem {
+      // One backend reports a special file beside the bundle's own files.
+      override async listDir(target: FsTarget): Promise<FsDirEntry[]> {
+        const entries = await super.listDir(target)
+        if (target.displayPath !== join(root, 'special-entry')) return entries
+        const path = join(target.displayPath, 'fifo')
+        return [...entries, { name: 'fifo', type: 'other', target: { targetKey: path as never, displayPath: path } }]
+      }
+    })
+    const fake = ctx.fs as TestFileSystem
+    fake.failListDirPaths.add(join(root, 'readable-bundle'))
+    const warnings = vi.spyOn(ctx.logger, 'warn')
+    const skills = (await describeSources(ctx)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    expect(skills.find(entry => entry.name === 'readable-bundle')?.files).toBeUndefined()
+    expect(warnings).toHaveBeenCalledWith(expect.stringContaining(join(root, 'readable-bundle', 'SKILL.md')))
+    expect(skills.find(entry => entry.name === 'special-entry')?.files?.map(file => file.path)).toEqual(['SKILL.md'])
+    await fs.dispose()
+  })
+
+  it('lists files through the mounted filesystem service without a size on the entry', async () => {
+    const home = await tempDir('detail-fs-files')
+    const root = join(home, '.dsh', 'skills')
+    await writeSkill(root, 'fs-skill', 'Listed through the filesystem service')
+    await mkdir(join(root, 'fs-skill', 'scripts'), { recursive: true })
+    await writeFile(join(root, 'fs-skill', 'scripts', 'run.py'), 'print(1)\n')
+    await writeFlatSkill(root, 'fs-flat', 'Flat through the service')
+    await writeSkill(root, 'fs-big', 'Large bundle through the service')
+    await mkdir(join(root, 'fs-big', 'bulk'), { recursive: true })
+    await mkdir(join(root, 'fs-big', 'a1', 'a2', 'a3', 'a4'), { recursive: true })
+    await writeFile(join(root, 'fs-big', 'a1', 'a2', 'a3', 'a4', 'deep.md'), 'deep')
+    for (let index = 0; index < 130; index += 1) {
+      await writeFile(join(root, 'fs-big', 'bulk', `file-${String(index).padStart(3, '0')}.md`), 'x')
+    }
+    const ctx = new Context()
+    ctx.provide('settings', { update: async () => undefined })
+    // The backend reports no size per entry, so the tab's list falls back to stat.
+    // It also loses the size of the flat skill's own file after that file was read.
+    const flatPath = join(root, 'fs-flat.md')
+    let flatStats = 0
+    await ctx.plugin(class extends TestFileSystem {
+      override async listDir(target: FsTarget): Promise<FsDirEntry[]> {
+        return (await super.listDir(target)).map(entry => ({ name: entry.name, type: entry.type, target: entry.target }))
+      }
+
+      override async stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined> {
+        if (target.displayPath === flatPath) {
+          flatStats += 1
+          // The catalog lookup and discovery each read the file; only the listing probe loses its size.
+          if (flatStats > 2) return undefined
+        }
+        return await super.stat(target, signal)
+      }
+    })
+    ;(ctx.fs as TestFileSystem).statOverrides.set(join(root, 'fs-skill', 'scripts', 'run.py'), undefined)
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, { applications: [] })
+    await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    const skills = (await describeSources(ctx)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    const bundleFiles = [...skills.find(entry => entry.name === 'fs-skill')?.files ?? []]
+      .sort((left, right) => left.path < right.path ? -1 : 1)
+    expect(bundleFiles.map(file => [file.path, file.isScript])).toEqual([
+      ['SKILL.md', false],
+      ['scripts/run.py', true],
+    ])
+    // A backend that cannot size a file reports zero rather than dropping it.
+    expect(bundleFiles.map(file => file.size > 0)).toEqual([true, false])
+    const flatFiles = skills.find(entry => entry.name === 'fs-flat')?.files ?? []
+    expect(flatFiles.map(file => [file.path, file.size])).toEqual([['fs-flat.md', 0]])
+    // The service-backed walk shares the tab's limits.
+    const bigFiles = skills.find(entry => entry.name === 'fs-big')?.files ?? []
+    expect(bigFiles).toHaveLength(100)
+    expect(bigFiles.some(file => file.path === 'a1/a2/a3/a4/deep.md')).toBe(false)
+  })
+
+  it('stops listing a bundle at the file limit and the depth limit', async () => {
+    const home = await tempDir('detail-limits')
+    const root = join(home, '.dsh', 'skills')
+    const bundle = join(root, 'big-skill')
+    await writeSkill(root, 'big-skill', 'Bundle with many files')
+    await mkdir(join(bundle, 'd1', 'd2', 'd3', 'd4'), { recursive: true })
+    await writeFile(join(bundle, 'd1', 'd2', 'd3', 'd4', 'deep.md'), 'deep')
+    for (let index = 0; index < 130; index += 1) {
+      await writeFile(join(bundle, `file-${String(index).padStart(3, '0')}.md`), 'x')
+    }
+    const ctx = await setupLocal(home, {}, { applications: [] })
+    const files = (await describeSources(ctx))
+      .find(row => row.id === 'user-dsh')?.skills.find(entry => entry.name === 'big-skill')?.files ?? []
+
+    expect(files).toHaveLength(100)
+    expect(files.some(file => file.path === 'd1/d2/d3/d4/deep.md')).toBe(false)
+  })
+
+  it('marks an application source with its application id and leaves other kinds without one', async () => {
+    const home = await tempDir('detail-application')
+    const project = await tempDir('detail-application-project')
+    const appRoot = join(home, '.claude', 'skills')
+    const team = await tempDir('detail-application-team')
+    await writeSkill(appRoot, 'claude-skill', 'From Claude')
+    await writeSkill(team, 'team-skill', 'From an added folder')
+    const ctx = await setupLocal(home, {}, {
+      applications: [{ id: 'claude-code', dir: appRoot, title: 'Claude Code' }],
+      sources: { 'claude-code': { enabled: true } },
+      folders: [{ dir: team }],
+    })
+    const views = await describeSources(ctx, project)
+
+    expect(views.find(view => view.id === 'claude-code')?.applicationId).toBe('claude-code')
+    expect(views.find(view => view.id === `folder:${team}`)?.applicationId).toBeUndefined()
+    expect(views.find(view => view.id === 'user-dsh')?.applicationId).toBeUndefined()
+  })
+})
+
+describe('Skill categories', () => {
+  /** The shipped rules, plus the namespace rule a deployment declares for its plugin skills. */
+  const CATEGORIES: readonly SkillCategory[] = [
+    ...SkillSources.Config({}).categories,
+    { id: 'plugin-ckm', title: 'ckm', namespaces: ['ckm'] },
+  ]
+
+  /** The `[id, title]` category of one described skill, or undefined when it has none. */
+  function categoryOf(
+    skills: readonly SkillFileSystem.LocalSkillView[], name: string,
+  ): readonly [string, string | undefined] | undefined {
+    const skill = skills.find(entry => entry.name === name)
+    if (skill === undefined) throw new Error(`expected the described skill ${name}`)
+    return skill.category === undefined ? undefined : [skill.category, skill.categoryTitle]
+  }
+
+  it('reads the declared word, then the plugin namespace, then the name prefix', async () => {
+    const home = await tempDir('category-precedence')
+    const project = await tempDir('category-precedence-project')
+    const root = join(home, '.dsh', 'skills')
+    // A declared word wins over the name: the name here would have matched google-cloud.
+    await writeNamedSkill(root, 'declared-category', 'gcp-agent-builder', ['category: video'])
+    await writeNamedSkill(root, 'declared-metadata', 'firebase-tools', ['metadata.category: design'])
+    await writeNamedSkill(root, 'declared-mapping', 'plain-skill', ['metadata:', '  category: office'])
+    await writeNamedSkill(root, 'empty-declared', 'figma-empty', ['category: ""'])
+    // A configured rule claims the namespace; an unclaimed one leaves the local name to the prefix.
+    await writeNamedSkill(root, 'namespaced', 'ckm:banner-design')
+    await writeNamedSkill(root, 'namespaced-other', 'zeta:ui-styling')
+    await writeNamedSkill(root, 'prefixed', 'hyperframes-cli')
+    await writeNamedSkill(root, 'single-word', 'figma')
+    await writeNamedSkill(root, 'unmatched', 'own-skill')
+    const ctx = await setupLocal(home, {}, { applications: [], categories: [...CATEGORIES] })
+    const skills = (await describeSources(ctx, project)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    expect(categoryOf(skills, 'gcp-agent-builder')).toEqual(['video', 'Video and animation'])
+    expect(categoryOf(skills, 'firebase-tools')).toEqual(['design', 'Design and Figma'])
+    expect(categoryOf(skills, 'plain-skill')).toEqual(['office', 'Documents and Office'])
+    expect(categoryOf(skills, 'ckm:banner-design')).toEqual(['plugin-ckm', 'ckm'])
+    expect(categoryOf(skills, 'zeta:ui-styling')).toEqual(['design', 'Design and Figma'])
+    expect(categoryOf(skills, 'hyperframes-cli')).toEqual(['video', 'Video and animation'])
+    expect(categoryOf(skills, 'figma')).toEqual(['design', 'Design and Figma'])
+    // An empty declaration is no declaration, so the name prefix still applies.
+    expect(categoryOf(skills, 'figma-empty')).toEqual(['design', 'Design and Figma'])
+    // A name no rule claims carries no category field at all.
+    expect(skills.find(entry => entry.name === 'own-skill')).not.toHaveProperty('category')
+  })
+
+  it('keeps a declared word no rule claims as its own stable category', async () => {
+    const home = await tempDir('category-declared')
+    const project = await tempDir('category-declared-project')
+    const root = join(home, '.dsh', 'skills')
+    // Two author words that differ only in case stay two identities, not one.
+    await writeNamedSkill(root, 'ops-upper', 'ops-toolkit', ['category: Ops Toolkit'])
+    await writeNamedSkill(root, 'ops-lower', 'ops-toolkit-lower', ['category: ops toolkit'])
+    await writeNamedSkill(root, 'spaced', 'spaced-word', ['category: "Video   Studio"'])
+    // A declared word a rule claims resolves to that rule, matched without letter case.
+    await writeNamedSkill(root, 'declared-prefix', 'declared-prefix', ['category: GCP'])
+    await writeNamedSkill(root, 'non-string', 'non-string-category', ['category: 42'])
+    const ctx = await setupLocal(home, {}, { applications: [], categories: [...CATEGORIES] })
+    const skills = (await describeSources(ctx, project)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    expect(categoryOf(skills, 'ops-toolkit')).toEqual(['declared:Ops Toolkit', 'Ops Toolkit'])
+    expect(categoryOf(skills, 'ops-toolkit-lower')).toEqual(['declared:ops toolkit', 'ops toolkit'])
+    expect(categoryOf(skills, 'spaced-word')).toEqual(['declared:Video Studio', 'Video Studio'])
+    expect(categoryOf(skills, 'declared-prefix')).toEqual(['google-cloud', 'Google Cloud'])
+    expect(categoryOf(skills, 'non-string-category')).toBeUndefined()
+  })
+
+  it('treats a rule that lists no name tokens as claiming only its own id', async () => {
+    const home = await tempDir('category-sparse')
+    const project = await tempDir('category-sparse-project')
+    const root = join(home, '.dsh', 'skills')
+    // Each lookup evaluates a rule whose optional token lists are absent.
+    await writeNamedSkill(root, 'declared', 'declared-name', ['category: Mystery'])
+    await writeNamedSkill(root, 'namespaced', 'zeta:namespaced-name')
+    await writeNamedSkill(root, 'bare', 'bare-name')
+    const rules: SkillCategory[] = [{ id: 'sparse', title: 'Sparse' }]
+    const fakeSources: SkillSourcesService = {
+      read: () => ({ sources: {}, skills: {} }),
+      applications: () => [],
+      categories: () => rules,
+      folders: () => [],
+      visibility: () => ({
+        applications: [], folders: [], categories: rules, sourceEnabled: () => true, skillEnabled: () => true,
+      }),
+      addFolder: async () => true,
+      removeFolder: async () => undefined,
+      setSource: async () => undefined,
+      setSkill: async () => undefined,
+      register: () => () => {},
+    }
+    const ctx = new Context()
+    ctx.provide('skillSources', fakeSources)
+    const provider = new SkillFileSystem.FileSystemSkillProvider(ctx, {
+      invalidate: () => {},
+      signal: new AbortController().signal,
+    }, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
+    const skills = (await provider.describeSources({ cwd: project, winners: new Map() }))
+      .find(row => row.id === 'user-dsh')?.skills ?? []
+
+    // The author's word still becomes its own category; the name carries none.
+    expect(categoryOf(skills, 'declared-name')).toEqual(['declared:Mystery', 'Mystery'])
+    expect(categoryOf(skills, 'zeta:namespaced-name')).toBeUndefined()
+    expect(categoryOf(skills, 'bare-name')).toBeUndefined()
+  })
+
+  it('leaves every skill without a category when no rules are configured', async () => {
+    const home = await tempDir('category-none')
+    const project = await tempDir('category-none-project')
+    const root = join(home, '.dsh', 'skills')
+    await writeSkill(root, 'video-skill', 'A skill whose name looks like a category')
+    await writeNamedSkill(root, 'declared', 'other-skill', ['category: video'])
+    await writeNamedSkill(root, 'array-metadata', 'array-metadata', ['metadata: [one]'])
+    const broken = join(root, 'broken')
+    await mkdir(broken, { recursive: true })
+    await writeFile(join(broken, 'SKILL.md'), 'no frontmatter at all')
+    const ctx = await setupLocal(home, {}, { applications: [], categories: [] })
+    const skills = (await describeSources(ctx, project)).find(row => row.id === 'user-dsh')?.skills ?? []
+
+    // Without rules, only the author's own word names a category; a name carries none.
+    expect(skills.find(skill => skill.name === 'video-skill')).not.toHaveProperty('category')
+    expect(skills.find(skill => skill.name === 'other-skill'))
+      .toMatchObject({ category: 'declared:video', categoryTitle: 'video' })
+    // A row whose frontmatter could not be read has no name to derive one from.
+    expect(skills.find(skill => skill.status === 'invalid')).not.toHaveProperty('category')
+  })
+})
+
+describe('shared skill-sources controller', () => {
+  it('serves every mounted provider instance from one root controller', async () => {
+    const home = await tempDir('shared-controller')
+    const firstRoot = join(home, 'first')
+    const secondRoot = join(home, 'second')
+    await writeSkill(firstRoot, 'first-shared', 'First shared')
+    await writeSkill(secondRoot, 'second-shared', 'Second shared')
+    const ctx = new Context()
+    ctx.provide('settings', { update: async () => undefined })
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(SkillSources, {})
+    const base = { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false }
+    const first = await ctx.plugin(SkillFileSystem, { ...base, customSkillDirs: [firstRoot] })
+    // A second preset registers another provider instance under its own registry name.
+    const second = await ctx.plugin(SkillFileSystem, { ...base, providerName: 'filesystem-second', customSkillDirs: [secondRoot] })
+    const controller = ctx.root.get('skillSourcesController') as {
+      describe(cwd: string | undefined): Promise<SkillFileSystem.LocalSourceView[]>
+    } | undefined
+    if (controller === undefined) throw new Error('skillSourcesController is not mounted')
+    // A later instance joins the shared controller through its mount microtask.
+    await new Promise(resolve => setTimeout(resolve, 25))
+    const paths = (await controller.describe(home)).map(row => row.path)
+    expect(paths).toContain(firstRoot)
+    expect(paths).toContain(secondRoot)
+    await second.dispose()
+    const remaining = (await controller.describe(home)).map(row => row.path)
+    expect(remaining).toContain(firstRoot)
+    expect(remaining).not.toContain(secondRoot)
+    await first.dispose()
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(ctx.root.get('skillSourcesController')).toBeUndefined()
+  })
+  it('reads a description whose unquoted colon makes the YAML invalid', async () => {
+    const home = await tempDir('skill-lenient')
+    await writeSkill(join(home, '.dsh/skills'), 'colon-skill', 'Rejects: everything about: colons')
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(entry => entry.name)).toContain('colon-skill')
+  })
+
+  it('keeps the first value of a field that a broken file declares twice', async () => {
+    const home = await tempDir('skill-lenient-duplicate')
+    const dir = join(home, '.dsh/skills', 'twice')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'SKILL.md'), '---\nname: first-name\nname: second-name\ndescription: Text: with colon\n---\n\nBody.\n')
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(entry => entry.name)).toContain('first-name')
+  })
+
+  it('still refuses frontmatter it cannot even read leniently', async () => {
+    const home = await tempDir('skill-lenient-bad')
+    const dir = join(home, '.dsh/skills', 'no-name')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'SKILL.md'), '---\ndescription: has: colon but no name\n---\n\nBody.\n')
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(entry => entry.name)).not.toContain('no-name')
+  })
+
 })

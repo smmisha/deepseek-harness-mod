@@ -5,6 +5,7 @@ import { Button, IconRightUpOutlineRegular } from '@deepseek-ai/dsh-client-ui-pr
 import type { AccountDetails, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { PropsRuntime, PropsLocale, InjectFace, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import type { PlatformPage, PlatformPages } from './platform-pages.ts'
 import { formatBalance } from './formatBalance.ts'
 import { AccountAvatar } from './AccountAvatar.tsx'
@@ -56,6 +57,8 @@ export interface AccountSectionInjected {
     account: HostObservable<AccountSnapshot>
     /** Palette the Platform login pages follow. */
     theme: HostObservable<ThemeSnapshot>
+    /** Active UI language: balance digit grouping and currency display follow it. */
+    locale: HostObservable<LocaleSnapshot>
   }
   /**
    * Retry a failed avatar, read the profile and balances, and notify account refresh extensions. The Settings launcher
@@ -82,9 +85,10 @@ export interface AccountSectionInjected {
 export type AccountSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.account'> & InjectFace<AccountSectionInjected>
 /** @param props - localized actions, account subscription, and the shared Platform page channel. @returns account settings UI. */
-export function AccountSection({ t, useAccount, useTheme, start, cancel, openPlatformPage, avatarFailed }: AccountSectionProps) {
+export function AccountSection({ t, useAccount, useTheme, useLocale, start, cancel, openPlatformPage, avatarFailed }: AccountSectionProps) {
   const { view: state, details, avatar, failed: streamFailed } = useAccount(value => value)
   const colorScheme = useTheme(snapshot => snapshot.active.colorScheme)
+  const language = useLocale(snapshot => snapshot.active)
   // The shared host owns the native view; this page holds only its own request,
   // and only while it is the latest owner.
   const releasePage = useRef<(() => void) | undefined>(undefined)
@@ -121,24 +125,13 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
   const openUsage = (event: MouseEvent<HTMLAnchorElement>): void => {
     if (openPlatformPage !== undefined && signedIn) { event.preventDefault(); showPage(openPlatformPage, 'usage') }
   }
-  /**
-   * The Platform entry the balance rows share with the Usage action: an embedded page on
-   * Desktop, a new tab elsewhere. A wallet read that failed still reaches the same
-   * destination, so the user can inspect the balance the Harness could not load; the
-   * destination comes from the account links, not from the wallet response.
-   * @param label - localized link copy.
-   * @param className - link treatment for the row that renders it, absent when the sheet has no such rule.
-   * @returns the Platform anchor.
-   */
-  const platformLink = (label: string, className: string | undefined) => (
-    <a className={className} href={state?.links.usageUrl} aria-disabled={state === undefined}
-      target="_blank" rel="noreferrer" onClick={openUsage}>{label}</a>
-  )
   const status = failed || streamFailed || attempt?.phase === 'failed' ? t('failed')
     : attempt?.phase === 'expired' ? t('expired')
       : active ? t(attempt.phase === 'initializing' ? 'initializing' : attempt.phase === 'waiting-browser' ? 'waiting' : 'completing')
         : signedIn ? profile?.contact ?? t(details?.profile === undefined ? 'loading' : 'profileUnavailable') : t('signInDescription')
-  if (!signedIn && !active) return (
+  // The signed-out prompt owns the state before the stream answers and after sign-out; every
+  // other row needs a live view, so its Platform destinations always exist.
+  if (state === undefined || (!signedIn && !active)) return (
     <section className={css.signedOut} aria-label={t('nav')}>
       <div className={css.signedOutContent}>
         <div className={css.signedOutCopy}>
@@ -151,6 +144,18 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
           onClick={() => { void run(start) }}>{t('signIn')}</Button>
       </div>
     </section>
+  )
+  /**
+   * The Platform entry the balance rows share with the Usage action: an embedded page on
+   * Desktop, a new tab elsewhere. A wallet read that failed still reaches the same
+   * destination, so the user can inspect the balance the Harness could not load; the
+   * destination comes from the account links, not from the wallet response.
+   * @param label - localized link copy.
+   * @param className - link treatment for the row that renders it, absent when the sheet has no such rule.
+   * @returns the Platform anchor.
+   */
+  const platformLink = (label: string, className: string | undefined) => (
+    <a className={className} href={state.links.usageUrl} target="_blank" rel="noreferrer" onClick={openUsage}>{label}</a>
   )
   return (
     <section className={css.section} aria-label={t('nav')}>
@@ -181,7 +186,7 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
           <span>{t('balance')}</span>
           {signedIn && wallets !== undefined && wallets.length > 0
             ? <span className={css.amount}>{wallets.map(wallet => <span key={wallet.currency}>
-              {formatBalance(wallet.balance, wallet.currency === 'CNY' ? '¥' : '$')}
+              {formatBalance(wallet.balance, wallet.currency, language)}
             </span>)}</span>
             : !signedIn || details?.balance === undefined
               ? <span className={css.unavailable}>{t(!signedIn ? 'balanceSignedOut' : 'loading')}</span>
@@ -194,7 +199,7 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
             <span className={css.bonusValue}>
               {bonusWallets.length > 0
                 ? <span className={css.amount}>{bonusWallets.map(wallet => <span key={wallet.currency}>
-                  {formatBalance(wallet.balance, wallet.currency === 'CNY' ? '¥' : '$')}
+                  {formatBalance(wallet.balance, wallet.currency, language)}
                 </span>)}</span>
                 : details?.balance === undefined
                   ? <span className={css.unavailable}>{t('loading')}</span>
@@ -207,7 +212,7 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
           <span className={css.secondary}>{t('more')}</span>
           <div className={css.links}>
             {platformLink(t('usage'), css.linkButton)}
-            <a className={`${css.linkButton} ${css.primary}`} href={state?.links.topUpUrl} aria-disabled={state === undefined}
+            <a className={`${css.linkButton} ${css.primary}`} href={state.links.topUpUrl}
               target="_blank" rel="noreferrer"
               onClick={(event) => { if (openPlatformPage !== undefined && signedIn) { event.preventDefault(); showPage(openPlatformPage, 'top-up') } }}>{t('topUp')}</a>
           </div>

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Instalador de habilidades",
+    "description": "Descarga habilidades de un repositorio de GitHub o de un archivo importado, las previsualiza, las instala desactivadas y elimina las que instaló."
+  }
+}

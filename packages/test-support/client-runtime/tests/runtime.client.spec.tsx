@@ -745,6 +745,7 @@ describe('fixture session face', () => {
       attachmentId: AttachmentId('att-1'), mediaType: 'image/png', bytes: 1, width: 1, height: 1,
     })).toThrow(/readAttachment is not stubbed/)
     expect(() => bare.updateQueue()).toThrow(/updateQueue is not stubbed/)
+    expect(() => bare.editMessage()).toThrow(/editMessage is not stubbed/)
     expect(() => bare.cancel()).toThrow(/cancel is not stubbed/)
     expect(() => bare.command()).toThrow(/command is not stubbed/)
     expect(() => bare.loadOlder()).toThrow(/loadOlder is not stubbed/)

@@ -1,5 +1,5 @@
 /** Chat-owned Slot declarations and composed component props. */
-import type { RefObject } from 'react'
+import type { Ref, RefObject } from 'react'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -66,6 +66,24 @@ export interface TurnTailOwnerProps {
 /** Owner currency of finalized-assistant actions. */
 export interface AssistantActionOwnerProps {
   messageId: MessageId
+}
+
+/** Factory props of the user-message action row. */
+export interface UserActionProps {
+  /** Open the in-place editor on this message row; the row owns the edited text until save. */
+  readonly beginEdit: () => void
+  /**
+   * The running agent is reading this message, so an edit must wait until it
+   * finishes. A queued message or one from an earlier Turn stays editable.
+   */
+  readonly editUnavailable: boolean
+  /**
+   * Attach this to the control that opens the editor. The row focuses that
+   * control again when the editor closes, so cancelling returns the keyboard to
+   * where the edit began; an entry that omits it leaves the row itself as the
+   * return target.
+   */
+  readonly editTriggerRef?: Ref<HTMLButtonElement> | undefined
 }
 
 /** Stable quota failure codes retained in the Session log; both raise the frame-wide notice. */
@@ -242,6 +260,13 @@ export interface ChatNodeOwnerProps {
   openFile: (path: string, options?: OpenFileOptions) => void
   inspectCall: ((callId: ToolCallId) => void) | undefined
   forkAt: (seq: number) => void
+  /**
+   * Rewind the Session to one sent user message and send its edited text as a new Turn.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns resolves when the Host accepts; rejects with the Host's refusal.
+   */
+  editMessage: (seq: number, text: string) => Promise<void>
   /** Session-authorized image loader supplied by the Chat view. */
   loadImage: MessageImageLoader
   /** Turn-process state when this Node belongs to a projected Turn. */
@@ -320,10 +345,25 @@ export interface PerformanceUsageInjected {
   }
 }
 
+/** Host actions on a steering message the running Turn has not admitted yet. */
+export interface PendingSteerActions {
+  /**
+   * Replace the text of, or remove, one pending steering message.
+   * @param itemId - identity of the message in the Session's Inbox projection.
+   * @param action - replacement text for an edit, or removal.
+   * @returns resolves when the Host accepts; rejects when the Host refuses, for example after admission.
+   */
+  readonly update: (itemId: MessageId, action: { readonly kind: 'edit'; readonly text: string } | { readonly kind: 'remove' }) => Promise<void>
+  /** Show a notice in the composer of the same Session. */
+  readonly notify: (text: string) => void
+}
+
 /** Business callbacks injected into the Chat view. */
 export interface ChatViewInjected {
   /** File preparation and failure callbacks owned by the file-drag plugin. */
   readonly fileDrag: FileDragActions
+  /** Edit and remove actions for steering messages still waiting for the running step. */
+  readonly pendingSteer: PendingSteerActions
   /** Resolve the reference against this Session and its current path base when the gesture begins. */
   resolveFilePath: (path: string) => string
   /** Dispatch one gesture to the Conversation plugin registry. */
@@ -359,6 +399,13 @@ export interface ChatViewInjected {
     read: () => ChatScrollPosition | null
   }
   forkAt: (seq: number) => void
+  /**
+   * Rewind the Session to one sent user message and send its edited text as a new Turn.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns resolves when the Host accepts; rejects with the Host's refusal.
+   */
+  editMessage: (seq: number, text: string) => Promise<void>
 }
 
 /** Session-owned node sources shared with the view, plus the flow's connection state. */
@@ -371,11 +418,13 @@ export type ChatFlowDataInjected = Pick<ChatViewInjected, 'keyedHooks'> & {
 
 /** Ordered rows and reconciled local echoes rendered inside one Chat viewport. */
 export interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,
-  'cwd' | 'openFile' | 'inspectCall' | 'forkAt' | 'loadImage'> {
+  'cwd' | 'openFile' | 'inspectCall' | 'forkAt' | 'editMessage' | 'loadImage'> {
   readonly entries: readonly RenderEntry[]
   readonly pendingInputs: readonly (PendingSubmission | InboxState['next-step'][number])[]
   readonly lastInputTurn: number | undefined
   readonly deferCollapse: boolean
+  /** Edit and remove actions for the pending steering rows in `pendingInputs`. */
+  readonly pendingSteer: PendingSteerActions
 }
 
 /** Full props of the Chat-owned flow renderer. */
@@ -417,6 +466,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       props: UserContentInput
       locale: 'chat'
       children: { 'conversation.chat.user.images': { kind: 'single'; scope: 'session' } }
+    }
+    /** Action row beside one finalized user message; the official entry opens its in-place editor. */
+    'conversation.chat.user.actions': {
+      scope: 'session'
+      props: UserActionProps
+      locale: 'chat'
     }
     /** Session-independent reasoning Markdown with Chat labels and compact typography. */
     'conversation.chat.reasoning.content': {

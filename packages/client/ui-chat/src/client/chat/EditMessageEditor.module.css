@@ -1,0 +1,143 @@
+/* In-place message editor: a right-aligned field as wide as the message bubble,
+   with the save/cancel pair beneath it. The row's edit block owns the width
+   family (the bubble stack's cap), so the editor fills it. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  /* The pair hugs the field at the house rhythm; the field's border plus the
+     button's own inset carry the rest of the separation. */
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* The field's width comes from the text: the hidden sizer carries the draft
+   under the field's own text metrics and the textarea is laid over it. */
+.field {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The field's text metrics are the bubble's, not InlineEditor's compact draft
+   size, so editing does not reflow the message. The sizer repeats the box so
+   the two wrap identically. */
+.sizer,
+.editor .input {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  padding: 3px 8px;
+  font-family: inherit;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Only the sizer takes a border: the field's own border is InlineEditor's, and
+   the transparent twin keeps both boxes the same size. */
+.sizer {
+  border: 0.5px solid transparent;
+  /* The field scrolls at ten lines; the sizer stops there too and never
+     decides the row's height, the field does. */
+  max-height: 240px;
+  overflow: hidden;
+  visibility: hidden;
+  /* An empty draft still opens a typeable field: 14 characters plus the
+     field's own insets (8px each side) and its 0.5px borders. */
+  min-width: calc(14ch + 17px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.editor .input {
+  /* The grid sizes the field from the sizer; the field fills it. */
+  width: 100%;
+  contain: inline-size;
+  min-height: calc(28px + var(--dsh-content-font-delta, 0px));
+  max-height: 240px;
+}
+
+/* The consequence of saving, or the refusal of the last save, sits on the
+   action pair's line so the editor keeps its height. */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.note,
+.error {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: end;
+}
+
+.note {
+  color: var(--dsw-alias-label-caption);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 24px target leaves only 4px of inset around the 15px glyph, so the pair
+     reads as sitting on the field rather than in a band below it. */
+  width: calc(24px + var(--dsh-content-font-delta, 0px));
+  height: calc(24px + var(--dsh-content-font-delta, 0px));
+  padding: 4px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The pair states its meaning in colour: discarding takes the error ink and
+   applying takes the success ink, both from the theme's state aliases. */
+.cancel {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.save {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.action svg {
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.action:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .action:disabled:hover {
+    background: transparent;
+    color: var(--dsw-alias-label-caption);
+  }
+}

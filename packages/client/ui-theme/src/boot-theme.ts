@@ -11,14 +11,17 @@ import {
   DEFAULT_FONT_SIZES, DEFAULT_PREFERENCE, FONT_ROLES, FONT_SIZE_SPECS, fontFamilyVariable, normalizeFontFamily,
   type FontFamilies, type FontSizes, type ThemePreference,
 } from './theme-settings.ts'
+import { DEFAULT_PALETTE, paletteCanvas, type PaletteId } from './appearance.ts'
 
 const LIGHT_BACKGROUND = '#fff'
 const DARK_BACKGROUND = '#151517'
 
-/** CSS that colors the document canvas before any script executes. */
-function bootThemeStyle(preference: ThemePreference): string {
-  const light = `:root{color-scheme:light}body{background-color:${LIGHT_BACKGROUND};--dsh-boot-bg:${LIGHT_BACKGROUND}}`
-  const dark = `:root{color-scheme:dark}body{background-color:${DARK_BACKGROUND};--dsh-boot-bg:${DARK_BACKGROUND}}`
+/** CSS that colors the document canvas, in the selected palette, before any script executes. */
+function bootThemeStyle(preference: ThemePreference, palette: PaletteId): string {
+  const lightCanvas = paletteCanvas(palette, 'light') ?? LIGHT_BACKGROUND
+  const darkCanvas = paletteCanvas(palette, 'dark') ?? DARK_BACKGROUND
+  const light = `:root{color-scheme:light}body{background-color:${lightCanvas};--dsh-boot-bg:${lightCanvas}}`
+  const dark = `:root{color-scheme:dark}body{background-color:${darkCanvas};--dsh-boot-bg:${darkCanvas}}`
   if (preference === 'light') return light
   if (preference === 'dark') return dark
   return `${light}@media(prefers-color-scheme:dark){${dark}}`
@@ -50,15 +53,17 @@ function bootThemeBodyScript(preference: ThemePreference, fontSizes: FontSizes, 
  * @param preference - Current Host-backed built-in preference.
  * @param fontSizes - Current Host-backed font sizes in px by role.
  * @param fontFamilies - Current Host-backed font lists; each is normalized before embedding.
+ * @param palette - Current Host-backed color palette; its canvas paints before scripts run.
  * @returns head and body script rows in execution order.
  */
 export function bootThemeInjections(
   preference: ThemePreference = DEFAULT_PREFERENCE,
   fontSizes: FontSizes = DEFAULT_FONT_SIZES,
   fontFamilies: FontFamilies = { text: '', code: '', terminal: '' },
+  palette: PaletteId = DEFAULT_PALETTE,
 ): IndexInjection[] {
   return [
-    { kind: 'style', text: bootThemeStyle(preference) },
+    { kind: 'style', text: bootThemeStyle(preference, palette) },
     { kind: 'script', placement: 'body', text: bootThemeBodyScript(preference, fontSizes, fontFamilies) },
   ]
 }

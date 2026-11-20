@@ -40,6 +40,7 @@ import { DesktopChannelRow, DesktopChannelToast } from './DesktopChannelRow.tsx'
 import { DesktopUpdateSource } from './desktop-update-source.ts'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
+import type { GeneralGroup, GeneralSectionInjected } from './GeneralSection.tsx'
 import { CurrentVersionRow } from './CurrentVersionRow.tsx'
 import { DeveloperToolsRow, type DeveloperToolsRowInjected } from './DeveloperToolsRow.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
@@ -52,7 +53,7 @@ export type {
   CloseLabelProps, HeaderContentProps, TriggerContentProps,
 } from './chrome.tsx'
 export type {
-  GeneralSectionComponentProps,
+  GeneralGroup, GeneralSectionComponentProps, GeneralSectionInjected,
 } from './GeneralSection.tsx'
 export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from './SettingsDocumentAction.tsx'
 export type { SettingsDocumentState } from './settings-document-store.ts'
@@ -263,6 +264,50 @@ export function apply(ctx: ClientContext): void {
   }
   ctx.slots.inject('settings.close', () =>
     ctx.slots.register({ name: 'settings.close', locale: NS }, CloseLabel))
+  // The General column reads in two groups: the rows that change how the
+  // product reads, then the rows that change what the agent and the transcript
+  // do. Which rows are interface rows is this section's reading decision — the
+  // section owns the column's order — and every other row, including one a
+  // plugin registers with an id this package has never seen, reads as a
+  // working preference.
+  const INTERFACE_ITEM_IDS: ReadonlySet<string> = new Set([
+    'language', 'appearance', 'palette', 'accent', 'font-size', 'message-layout', 'bubble-width', 'motion',
+  ])
+  let generalGroupsVersion = -1
+  let generalGroups: readonly GeneralGroup[] = []
+  const generalGroupsInjected = (): GeneralSectionInjected => ({
+    hooks: {
+      groups: {
+        getSnapshot: () => {
+          const version = ctx.slots.getVersion('settings.general.item')
+          if (version !== generalGroupsVersion) {
+            generalGroupsVersion = version
+            const rows = ctx.slots.entries('settings.general.item')
+              .map((entry) => {
+                /* v8 ignore next -- list-slot registration requires id (SlotCore rejects an entry without one) */
+                const id = entry.options.id ?? ''
+                return { id, order: entry.options.order ?? 0 }
+              })
+              .sort((left, right) => left.order - right.order)
+            generalGroups = [
+              {
+                id: 'interface',
+                labelKey: 'general.group.interface',
+                items: rows.filter(row => INTERFACE_ITEM_IDS.has(row.id)).map(row => row.id),
+              },
+              {
+                id: 'work',
+                labelKey: 'general.group.work',
+                items: rows.filter(row => !INTERFACE_ITEM_IDS.has(row.id)).map(row => row.id),
+              },
+            ]
+          }
+          return generalGroups
+        },
+        subscribe: listener => ctx.slots.subscribe('settings.general.item', listener),
+      },
+    },
+  })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'general',
@@ -270,6 +315,7 @@ export function apply(ctx: ClientContext): void {
     label: () => t('general.nav'),
     locale: NS,
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
+    inject: generalGroupsInjected,
   }, GeneralSection))
   // The page's module system applies no plugin update from another Host release; this dialog offers the reload.
   const releasePromptInjected = (): HostReleasePromptInjected => ({

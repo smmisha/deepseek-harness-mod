@@ -17,6 +17,7 @@ import type {
   SessionAssistantStreamBaseline,
   SessionProjectionBaseline,
   SessionRequestId,
+  SessionStopMode,
 } from '../../types.ts'
 import type {
   BeginSubmissionInput, PendingSubmissionRetirement, SessionFace, SubmissionHandle,
@@ -123,6 +124,8 @@ export class Session implements SessionFace {
   private readonly stopObservingInbox: () => void
   private readonly assistantStream = new ClientAssistantStream()
   private running = false
+  /** Host-accepted stop mode still awaiting its ending, published for the composer's armed state. */
+  private stopRequested: SessionStopMode | undefined
   private address: SubagentAddress | undefined
   /**
    * Sticky send marker, private input of the composerPhase derivation: set
@@ -367,20 +370,36 @@ export class Session implements SessionFace {
     return this.remote.session.updateQueue({ sessionId: this.sessionId, itemId, action })
   }
 
+  /** Rewind to one sent user message and send its edited text as a new Turn. */
+  async editMessage(seq: number, text: string): Promise<RemoteResult<{ accepted: true }>> {
+    return this.remote.session.editMessage({
+      sessionId: this.sessionId, requestId: randomUUID() as SessionRequestId, seq, text,
+    })
+  }
+
   /**
    * Stop the active turn while the Host preserves pending inbox work; failures
    * land in promptError (same error-strip display slot). A subagent address
-   * routes through `subagents.interruptByUser`, authorized on the target Session
-   * without requiring a live parent Agent.
+   * routes through `subagents.interruptByUser`, which only aborts, so a
+   * `graceful` request against it takes effect as `immediate`. A Host-accepted
+   * running stop arms {@link SessionSnapshot.stopRequested} until the running
+   * bit drops.
+   * @param mode - requested stop mode; omitted uses `graceful`.
    * @returns the cancel result.
    */
-  async cancel(): Promise<RemoteResult<{ accepted: true }>> {
+  async cancel(mode: SessionStopMode = 'graceful'): Promise<RemoteResult<{ accepted: true }>> {
     const address = this.address
+    const effective: SessionStopMode = address === undefined ? mode : 'immediate'
     const result = address !== undefined
       ? await this.remote.subagents.interruptByUser(address.childSessionId)
-      : await this.remote.session.cancel({ sessionId: this.sessionId })
+      : await this.remote.session.cancel({ sessionId: this.sessionId, mode: effective })
     if (!result.ok) {
       this.promptError = { op: 'stop', error: result.error }
+      this.notifier.markDirty()
+      return result
+    }
+    if (this.running && this.stopRequested !== effective) {
+      this.stopRequested = effective
       this.notifier.markDirty()
     }
     return result
@@ -621,6 +640,8 @@ export class Session implements SessionFace {
 
   /**
    * Running-bit relay from the host stream (list entry and snapshot stay consistent).
+   * Any running-state change also retires a pending stop request: it was
+   * honoured by the run ending, or a fresh run superseded it.
    * @param running - the new running state.
    */
   handleRunning(running: boolean): void {
@@ -632,6 +653,7 @@ export class Session implements SessionFace {
     if (running) this.firstPromptPendingTurn = false
     if (this.running === running) return
     this.running = running
+    if (this.stopRequested !== undefined) this.stopRequested = undefined
     this.notifier.markDirty()
   }
 
@@ -1003,6 +1025,7 @@ export class Session implements SessionFace {
       sessionId: this.sessionId,
       pendingSubmissions: this.acceptedSubmissions,
       running: this.running,
+      ...this.stopRequested === undefined ? {} : { stopRequested: this.stopRequested },
       subagent: this.address === undefined
         ? null
         : {

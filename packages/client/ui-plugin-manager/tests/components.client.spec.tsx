@@ -53,6 +53,11 @@ function row(overrides: Partial<PackageRow> = {}): PackageRow {
   return { entryId: 'include:sidebar' as PluginEntryId, rowId: 'sidebar', moduleName: 'dsh-better-sidebar', enabled: true, phase: 'active', ...overrides }
 }
 
+/** The Installed groups' counts in DOM order. */
+function groupCounts(): (string | null)[] {
+  return [...document.querySelectorAll('[data-plugin-count]')].map(count => count.textContent)
+}
+
 const INCOMPATIBLE = { name: 'dsh-late', version: '2.0.0', runtimeVersion: '0.1.0', requirements: { '@deepseek-ai/dsh': '^0.2.0', '@deepseek-ai/dsh-core': '^0.2.0' } }
 /** The English sentence an incompatibility of {@link INCOMPATIBLE}, optionally renamed, reads as. */
 const incompatibleText = (name = INCOMPATIBLE.name): string => en.reasonIncompatibleVersion
@@ -748,11 +753,12 @@ describe('PluginManagerPage', () => {
       '@deepseek-ai/dsh-experimental-voice-input-bundle', 'dsh-better-sidebar', 'dsh-broken', 'dsh-protected', '@acme/dsh-tool', 'dsh-selected',
     ])
     expect(cards.map(card => card.getAttribute('data-plugin-status'))).toEqual(['disabled', 'running', 'problem', 'running', 'disabled', 'not-running'])
-    // Group titles have no counts; the official bundle retains its experimental marker.
+    // Group headers carry their row counts; the official bundle retains its experimental marker as a caption.
     expect(screen.getByRole('heading', { name: en.bundlesTitle })).toBeTruthy()
     expect(screen.getByRole('heading', { name: en.extensionsTitle })).toBeTruthy()
-    expect(document.querySelector('[data-plugin-count]')).toBeNull()
+    expect(groupCounts()).toEqual(['1', '5'])
     expect(screen.getAllByText(en.statusBeta)).toHaveLength(1)
+    expect(screen.getByText(en.statusBeta).className).toContain('cardCaption')
     expect(screen.getByRole('switch', { name: en.enableToggle.replace('{name}', '@acme/dsh-tool') })).toHaveProperty('disabled', false)
     expect(screen.getByText('A sidebar.')).toBeTruthy()
     expect(screen.getAllByText(en.statusProblem)).toHaveLength(1)
@@ -764,6 +770,34 @@ describe('PluginManagerPage', () => {
     const locked = screen.getByRole('switch', { name: en.enableToggle.replace('{name}', 'dsh-protected') })
     expect(locked).toHaveProperty('disabled', true)
     expect(locked.getAttribute('title')).toBe(en.reasonManagementRequired)
+  })
+
+  it('shows beta, problem, unavailable, and update markers as quiet captions, and closes a group with its More control', () => {
+    const voice = '@deepseek-ai/dsh-experimental-voice-input-bundle'
+    renderTab({
+      packages: [
+        pkg({ name: voice, meta: { title: 'Voice input' }, installed: false, optional: true, removable: false, enabled: false }),
+        pkg({ name: 'dsh-broken', enabled: false, error: { code: 'not-bundle' } }),
+        pkg({ name: 'dsh-missing', availability: 'missing', error: { code: 'operation-error' } }),
+        pkg({ name: 'dsh-outdated', version: '1.0.0', removable: true, installTarget: { spec: 'dsh-outdated@2.0.0', version: '2.0.0' } }),
+      ],
+    })
+    const card = (name: string): HTMLElement => document.querySelector(`[data-plugin-package="${name}"]`) as HTMLElement
+    for (const [name, text] of [
+      [voice, en.statusBeta], ['dsh-broken', en.statusProblem], ['dsh-missing', en.statusMissingFiles], ['dsh-outdated', en.statusUpdateAvailable],
+    ] as const) {
+      const captions = [...card(name).querySelectorAll('[class*="cardCaption"]')]
+      expect(captions.map(caption => caption.textContent)).toContain(text)
+      // Every caption shares the title's row instead of carrying a badge's own height.
+      for (const caption of captions) expect(caption.closest('[class*="titleRow"]')).not.toBeNull()
+    }
+    // The card's badges are gone: a caption is a word, not a filled Tag.
+    expect(card('dsh-broken').querySelector('[data-tone="danger"]')?.tagName).toBe('SPAN')
+    const extensions = document.querySelector('[data-plugin-group="extensions"]') as HTMLElement
+    const more = within(extensions).getByRole('button', { name: en.moreAction })
+    // More closes its group after the rows, so the header keeps the count alone.
+    expect(more.closest('[class*="groupFoot"]')).not.toBeNull()
+    expect(within(extensions).getByRole('heading', { name: en.extensionsTitle }).nextElementSibling?.textContent).toBe('1')
   })
 
   it('omits profile and persistent-terminal bundles while retaining other optional and third-party bundles', () => {
@@ -786,7 +820,7 @@ describe('PluginManagerPage', () => {
     expect(screen.getAllByRole('listitem').map(card => card.getAttribute('data-plugin-package'))).toEqual([
       '@deepseek-ai/dsh-experimental-voice-input-bundle', '@acme/dsh-base', 'dsh-better-sidebar',
     ])
-    expect(document.querySelector('[data-plugin-count]')).toBeNull()
+    expect(groupCounts()).toEqual(['1', '2'])
   })
 
   it.each([false, true])('hides persistent terminals from both lists and direct navigation without changing enabled=%s', (enabled) => {
@@ -1273,7 +1307,7 @@ describe('PluginManagerPage', () => {
       expect(within(extensions).getByRole('button', { name: en.moreAction }).textContent).toBe(en.moreAction)
       expect(within(extensions).getAllByRole('listitem').map(card => card.getAttribute('data-plugin-package')))
         .toEqual(['@deepseek-ai/dsh-experimental-voice-input-bundle', '@acme/new-official'])
-      expect(document.querySelector('[data-plugin-count]')).toBeNull()
+      expect(groupCounts()).toEqual(['1', '2', '1'])
       expect(within(basic).getByText('Limits every command.')).toBeTruthy()
       expect(within(basic).queryByRole('switch', { name: en.enableToggle.replace('{name}', 'Shell') })).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: en.openDetail.replace('{name}', team) }))

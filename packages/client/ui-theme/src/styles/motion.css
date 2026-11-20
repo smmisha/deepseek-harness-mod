@@ -1,0 +1,32 @@
+/* Interface motion setting. `full` follows the system preference, which each
+   component's own `prefers-reduced-motion` rules already honor; this sheet
+   only acts on the root attribute the Motion row sets.
+
+   `reduced` stops movement transitions (slides, collapses, fades) while
+   animations that report progress, such as spinners, keep running.
+   `none` stops animations as well.
+
+   Durations clamp to 0.01ms rather than 0: a zero duration fires no
+   `transitionend` or `animationend`, and components that wait for those
+   events would never settle. Component-specific reduced-motion variants still
+   apply only when the system asks for reduced motion; scripted motion reads
+   the root attribute through the shared reduced-motion check. */
+
+:root[data-dsh-motion='reduced'] *,
+:root[data-dsh-motion='reduced'] *::before,
+:root[data-dsh-motion='reduced'] *::after {
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-dsh-motion='none'] *,
+:root[data-dsh-motion='none'] *::before,
+:root[data-dsh-motion='none'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}

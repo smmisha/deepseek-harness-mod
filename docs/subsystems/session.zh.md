@@ -745,6 +745,13 @@ interface TurnEndReasonMap {
   /** At least one step reached its output-token ceiling, even if a plugin continued the turn. */
   'max-tokens': { kind: 'max-tokens' }
   /**
+   * A graceful stop request closed the turn at its current step boundary. The
+   * in-flight model response and the tool batch it requested settled and were
+   * recorded, so the step's assistant message is complete and never marked
+   * `interrupted`; no later step started. Only a live loop emits this ending.
+   */
+  stopped: { kind: 'stopped' }
+  /**
    * A crash-orphaned turn was closed after the fact: agent-loop resume appends
    * this closer for a stored log whose last turn never ended, and session-query
    * synthesizes it on cold reads. The loop never emits this marker live, and
@@ -761,7 +768,7 @@ interface TurnEndReasonMap {
 }
 ```
 
-`max-tokens` 与模型调用中同名的 `FinishReason` 对应：只要轮次内有任何步骤以 `max-tokens` 结束，整个轮次就以 `max-tokens` 而不是 `completed` 结束（即使之后继续执行，截断事实仍优先），让消费方能够区分正常停止和截断停止。取消和错误仍是不同的结果。loop 不会实时发出 `interrupted` 或 `forked`：崩溃恢复合成 `interrupted`（见 [persistence.md](persistence.zh.md)），而 fork 种子构造合成 `forked`。该 map 可通过合并扩展。
+`max-tokens` 与模型调用中同名的 `FinishReason` 对应：只要轮次内有任何步骤以 `max-tokens` 结束，整个轮次就以 `max-tokens` 而不是 `completed` 结束（即使之后继续执行，截断事实仍优先），让消费方能够区分正常停止和截断停止。取消、优雅的步骤边界停止与错误仍是不同的结果。loop 不会实时发出 `interrupted` 或 `forked`：崩溃恢复合成 `interrupted`（见 [persistence.md](persistence.zh.md)），而 fork 种子构造合成 `forked`。该 map 可通过合并扩展。
 
 ## 执行封闭与独立事件
 
@@ -1000,6 +1007,13 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
  * @returns acknowledgement that the queue mutation was applied.
  */
 @Remote('updateQueue') updateQueue(request: SessionUpdateQueueRequest): Promise<SessionUpdateQueueValue>
+
+/**
+ * Rewind an idle Session to one sent user message and queue its edited text as a new Turn.
+ * @param request - Session, edited message seq, replacement text, and request identity.
+ * @returns acknowledgement once the retraction is committed and the edited message is queued.
+ */
+@Remote('editMessage') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>
 
 /**
  * Cancel one active Agent turn without dropping its pending inbox.

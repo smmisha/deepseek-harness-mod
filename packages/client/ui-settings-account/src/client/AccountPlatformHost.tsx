@@ -27,7 +27,7 @@ export type AccountPlatformHostProps =
 export function AccountPlatformHost({ platform, usePage, closePage, t }: AccountPlatformHostProps) {
   const claim = usePage(current => current)
   if (claim === null) return null
-  return <PlatformOverlay bridge={platform} page={claim.page} backLabel={t('backToHarness')}
-    loadingLabel={t('loading')} failureLabel={t('platformFailed')} retryLabel={t('platformRetry')}
+  return <PlatformOverlay bridge={platform} page={claim.page} pageLabel={t(claim.page === 'top-up' ? 'topUp' : 'usage')}
+    backLabel={t('backToHarness')} loadingLabel={t('loading')} failureLabel={t('platformFailed')} retryLabel={t('platformRetry')}
     onClose={closePage} />
 }

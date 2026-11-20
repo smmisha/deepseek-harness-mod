@@ -8,6 +8,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GroupKey, NodeReference } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ProcessActivity, RunningProcessActivity } from '../contract/process-groups.ts'
+import { stoppedTurnReason } from '../contract/turn-process.ts'
 import type { ChatStoreState } from '../contract/store.ts'
 import type { ChatFlowSlotProps } from '../contract/slots.ts'
 import { turnProcessOpen } from '../stores.ts'
@@ -149,7 +150,7 @@ export const ChatGroupSeat = memo(function ChatGroupSeat({ groupKey, useChatGrou
     || (policy.stepGrouping === 'history' && turnLocation?.status !== 'open' && !deferCollapse))
   const reason = turnLocation?.end?.data.reason.kind
   const alwaysOpen = presentation?.turnClosed === false || presentation?.hasInterleavedInput === true
-    || reason === 'aborted' || reason === 'interrupted' || reason === 'error'
+    || stoppedTurnReason(reason) || reason === 'error'
   const spec = presentation?.spec
   const selectOpen = useCallback((state: Readonly<ChatStoreState>) => spec !== undefined
     && turnProcessOpen(state, spec, deferCollapse), [spec, deferCollapse])

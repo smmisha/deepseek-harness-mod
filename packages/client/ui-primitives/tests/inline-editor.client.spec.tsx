@@ -25,6 +25,19 @@ describe('InlineEditor', () => {
     expect(onChange).toHaveBeenCalledWith('one\ntwo\nthree')
   })
 
+  it('rests the caret after the draft so editing continues the saved text', () => {
+    const { box } = renderEditor('one\ntwo')
+    expect(box.selectionStart).toBe('one\ntwo'.length)
+    expect(box.selectionEnd).toBe('one\ntwo'.length)
+  })
+
+  it('takes the field base direction from the draft so the caret and alignment follow it', () => {    const { box } = renderEditor('مرحبا بالعالم')
+    expect(box.getAttribute('dir')).toBe('auto')
+    fireEvent.change(box, { target: { value: 'plain text' } })
+    // The attribute stays automatic: the browser re-resolves it per value.
+    expect(box.getAttribute('dir')).toBe('auto')
+  })
+
   it('saves on plain Enter only, and cancels on Escape', () => {
     const { box, onSave, onCancel } = renderEditor()
     expect(fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })).toBe(true)

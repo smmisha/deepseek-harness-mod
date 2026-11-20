@@ -3,35 +3,38 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/skill/skill-sources/README.md
 /:
-  en: ae5ccbe3736a49a6
-  zh: ae8c2059c9de9358
+  en: 04a1264658dc9436
+  zh: 975333d5a563a889
 /deepseek-ai-dsh-skill-sources:
   en: 6e4bf0aec0fa3afa
   zh: c786fc1086bf71c3
 /deepseek-ai-dsh-skill-sources/summary:
-  en: 9c509d75a8cbb742
-  zh: 46673b2c546afd16
+  en: 8f198a1142ca123d
+  zh: 105dca881fc67106
 /deepseek-ai-dsh-skill-sources/table-of-contents:
-  en: 4d5ec89f7a524c33
-  zh: b9b0ca814c42dc68
+  en: 16eafb2ea097c92a
+  zh: 8ae8a5fc5c868e03
 /deepseek-ai-dsh-skill-sources/use-this-package:
-  en: 72149248346bd289
-  zh: fbaf6b4967d89125
+  en: bbc929bb143e9f9b
+  zh: ba16c6bd4563d5ae
+/deepseek-ai-dsh-skill-sources/categories:
+  en: d48b53768f10c907
+  zh: e3966a6f99247f9a
 /deepseek-ai-dsh-skill-sources/understand-the-implementation:
-  en: b3591b9a4302cb70
-  zh: 9635339c1a1ef983
+  en: ed14964ac5e01a0d
+  zh: bd791cb422d66365
 /deepseek-ai-dsh-skill-sources/further-exploration:
-  en: a0148e7441ee6025
-  zh: 31318f45e905a76d
+  en: e82f348f36d30d4b
+  zh: f95bf940b2270585
 /deepseek-ai-dsh-skill-sources/model-experience:
   en: e84740ee40239dc2
   zh: 6d22f98bc5fc4119
 /deepseek-ai-dsh-skill-sources/model-experience/kv-cache-effect:
-  en: 605d2735175bad10
-  zh: af1de1ea337405eb
+  en: 8c69a8837e872a4a
+  zh: b9ffa03bd5a13de7
 /deepseek-ai-dsh-skill-sources/known-limitations-and-deferred-work:
-  en: 769a3bf45630eec0
-  zh: a1885b9cc216a34a
+  en: 1a8a0da14a22ac57
+  zh: 309ccefbe63801d2
 /deepseek-ai-dsh-skill-sources/known-limitations-and-deferred-work/dev-note:
   en: 1167d628e8c2633c
   zh: 86d04c734d15d359

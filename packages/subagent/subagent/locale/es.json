@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "subagente",
+    "title": "Subagente",
     "description": "Administre el backend del subagente y proporcione una interfaz unificada para la delegación de tareas."
   }
 }

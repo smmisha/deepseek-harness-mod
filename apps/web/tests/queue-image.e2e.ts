@@ -153,9 +153,9 @@ describe('web e2e: queued image submission', () => {
 
     // Stop parks the accepted queue; the next waking send delivers the image
     // message first (FIFO), then its own text as the following turn.
-    await page.getByRole('button', { name: 'Stop generating' }).click()
+    await page.getByRole('button', { name: 'Finish step, then stop' }).click()
     await firstSettled
-    await expect.poll(() => page.getByRole('button', { name: 'Stop generating' }).count()).toBe(0)
+    await expect.poll(() => page.getByRole('button', { name: 'Finish step, then stop' }).count()).toBe(0)
     await dockThumb.waitFor({ timeout: 10_000 })
 
     const settled = scaffold.whenTurnSettled()

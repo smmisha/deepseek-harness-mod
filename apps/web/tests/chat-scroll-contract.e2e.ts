@@ -1224,7 +1224,7 @@ describe('web e2e: long Chat scroll contract', () => {
         await page.screenshot({ path: join(evidence, 'running-held.png') })
         expect(chunksAfterReturn).toBe(heldChunks)
         expect(world.events.some(event => event.type === 'turn/end')).toBe(false)
-        await page.getByRole('button', { name: 'Stop generating', exact: true }).waitFor()
+        await page.getByRole('button', { name: 'Finish step, then stop', exact: true }).waitFor()
 
         const beforeGrowth = await scrollGeometry(page)
         gates[0]!.resolve(undefined)
@@ -1234,7 +1234,7 @@ describe('web e2e: long Chat scroll contract', () => {
         const afterGrowth = await scrollGeometry(page)
         expect(afterGrowth.scrollTop - beforeGrowth.scrollTop).toBeGreaterThan(200)
         expect(await page.locator('[data-chat-following-tail]').count()).toBe(1)
-        await page.getByRole('button', { name: 'Stop generating', exact: true }).waitFor()
+        await page.getByRole('button', { name: 'Finish step, then stop', exact: true }).waitFor()
         await expectMarkerAboveComposer(page, grownMarker)
         settled = world.scaffold.whenTurnSettled()
         gates[1]!.resolve(undefined)

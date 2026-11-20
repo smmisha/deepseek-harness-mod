@@ -280,6 +280,12 @@ export interface LlmConfigurableProvider {
   baseURLEnv?: readonly string[]
   /** Authentication the adapter performs when the profile names no credential reference; absent when it reports none. */
   nativeAuth?: LlmNativeAuth
+  /**
+   * The adapter caches a followed `/models` listing for this route and offers
+   * to reload it on demand; absent when the route's models are configuration
+   * alone and no cached listing exists.
+   */
+  listingRefresh?: true
   /** Configuration diagnostic for repair; unaffected models may remain serviceable. */
   error?: string
 }
@@ -329,6 +335,11 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'llm/model-discovery-rejected': {
       readonly settingsNs: string
       readonly baseURL?: string
+    }
+    /** An on-demand model listing reload refused or failed. */
+    'llm/model-listing-refresh-rejected': {
+      readonly settingsNs: string
+      readonly provider: string
     }
   }
 }

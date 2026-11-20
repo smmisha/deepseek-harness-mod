@@ -12,6 +12,7 @@
   - button "Jump to turn 2"
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Failed
 - button "Failed" [disabled] [expanded]
 - button "Injected context"

@@ -24,7 +24,7 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   ComposerAttachment, ComposerFileAttachment, ComposerImageAttachment, DraftFileUpload,
 } from './contract/slots.ts'
-import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { QueueAction, SessionStopMode } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { ComposerBlocks } from './contract/composer-blocks.ts'
 import type {
@@ -59,10 +59,19 @@ export interface IConversation {
    */
   updateQueue(itemId: MessageId, action: QueueAction): Promise<void>
   /**
-   * Cancel the scoped session's in-flight turn while preserving its pending Queue.
+   * Rewind the scoped Session to one sent user message and send its edited text as a new Turn.
+   * @param seq - exact seq of the user message that opened the edited Turn.
+   * @param text - replacement text; the message's attachments are kept.
+   * @returns completion once the Host accepts; rejects with the Host's refusal code.
+   */
+  editMessage(seq: number, text: string): Promise<void>
+  /**
+   * Stop the scoped session's in-flight turn while preserving its pending Queue.
+   * @param mode - `graceful` finishes the current step and then closes the turn;
+   *   `immediate` aborts it now. Omitted uses `graceful`.
    * @returns completion; failures reject as in send.
    */
-  cancel(): Promise<void>
+  cancel(mode?: SessionStopMode): Promise<void>
   /**
    * Pull one older history page for the scoped session.
    * @returns completion of the page pull.
@@ -545,10 +554,21 @@ export class ConversationController extends Service implements IConversation {
     }
   }
 
-  /** Cancel the scoped session's in-flight turn while preserving Queue (failures land in promptError and reject, as in send). */
-  async cancel(): Promise<void> {
+  /** Rewind to one sent user message and send its edited text as a new Turn. */
+  async editMessage(seq: number, text: string): Promise<void> {
+    const session = this.scopedSession('editMessage')
+    const result = await session.editMessage(seq, text)
+    if (!result.ok) throw new Error(`conversation.editMessage failed: ${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
+   * Stop the scoped session's in-flight turn while preserving Queue (failures
+   * land in promptError and reject, as in send).
+   * @param mode - stop mode; omitted uses `graceful`.
+   */
+  async cancel(mode?: SessionStopMode): Promise<void> {
     const session = this.scopedSession('cancel')
-    const result = await session.cancel()
+    const result = await session.cancel(mode)
     if (!result.ok) throw new Error(`conversation.cancel failed: ${result.error.code}: ${result.error.message}`)
   }
 

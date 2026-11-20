@@ -65,6 +65,8 @@ import type {
   SessionProjectionFrame,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
 } from '../src/types.ts'
 
 /** Direct test face for the generated `ctx.remote.session` unary methods these tests exercise. */
@@ -83,6 +85,7 @@ export interface TestSessionRemote {
   prompt(request: SessionPromptRequest, signal?: AbortSignal): Promise<RemoteResult<SessionPromptValue>>
   attachment(request: SessionAttachmentRequest): Promise<RemoteResult<SessionAttachmentValue>>
   updateQueue(request: SessionUpdateQueueRequest): Promise<RemoteResult<SessionUpdateQueueValue>>
+  editMessage(request: SessionEditMessageRequest): Promise<RemoteResult<SessionEditMessageValue>>
   cancel(request: SessionCancelRequest): Promise<RemoteResult<SessionCancelValue>>
   openWorkspacePath(
     request: SessionOpenWorkspacePathRequest,
@@ -384,6 +387,7 @@ export async function createSessionTestRemote(
     ),
     attachment: request => remoteResult(() => direct.attachment(request)),
     updateQueue: request => remoteResult(() => direct.updateQueue(request)),
+    editMessage: request => remoteResult(() => direct.editMessage(request)),
     cancel: request => remoteResult(() => direct.cancel(request)),
     openWorkspacePath: (request, signal = new AbortController().signal) => remoteResult(
       () => direct.openWorkspacePath(request, signal),

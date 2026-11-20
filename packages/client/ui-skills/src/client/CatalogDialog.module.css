@@ -1,0 +1,184 @@
+/* The install dialog: the catalog list, a resolved repository's skill folders,
+   and the footer that asks for replacement when a name is taken. */
+
+.dialog {
+  width: min(680px, calc(100vw - 48px));
+}
+
+.catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.description {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.catalogs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalogRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.catalogRow:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.catalogName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.catalogNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.repositoryForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.repoLabel {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+.repoRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.repoRow > *:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.skills {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skillRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.skillRow:first-child {
+  border-top: none;
+}
+
+.skillIdent {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.skillName {
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.skillFolder {
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.skillMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scripts {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.status {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.conflictActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.nameField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}

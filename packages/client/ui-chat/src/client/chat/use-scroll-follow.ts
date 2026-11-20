@@ -1,5 +1,6 @@
 /** Independent bottom-follow intent and native scrolling, without paging or DOM observers. */
 import { useState } from 'react'
+import { prefersReducedMotion } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** Scroll position, caller-supplied floor, and viewport height; raw measurements use the physical floor. */
 export interface ViewportMetrics {
@@ -147,7 +148,7 @@ export class ScrollFollow {
       return metrics
     }
     if (behavior === 'instant' || (!this.animating && this.nearBottom(metrics))) return this.jump(element, metrics, metrics.floor)
-    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (prefersReducedMotion()) {
       return this.jump(element, metrics, metrics.floor)
     }
     if (this.target === null) {

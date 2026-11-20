@@ -181,7 +181,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     // Closing the turn from the park is the state change under test: an
     // aborted turn is durably closed, so its transcript tail (the frozen
     // partial) takes the seat while the mid-turn narration keeps none.
-    await page.getByRole('button', { name: 'Stop generating' }).click()
+    await page.getByRole('button', { name: 'Finish step, then stop' }).click()
     await settled
     expect(sessionEvents.filter(e => e.type === 'turn/end').map(e => e.data.reason.kind)).toEqual(['aborted'])
     await page.locator('[data-turn-process]').waitFor({ timeout: 10_000 })

@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/skill/skill-install/README.md
+/:
+  en: c6024844b0ae45f8
+  zh: 1529a4cbbd25432a
+/deepseek-ai-dsh-skill-install:
+  en: c0ec4f2c77877ab7
+  zh: e6c2c84fdce7cdc6
+/deepseek-ai-dsh-skill-install/summary:
+  en: e44bddd65c09448f
+  zh: a4a06bc149fb9b81
+/deepseek-ai-dsh-skill-install/table-of-contents:
+  en: 2820c9a805d92a8e
+  zh: 272fd8bcf162809f
+/deepseek-ai-dsh-skill-install/use-this-package:
+  en: 4b9f85ebeaaebcf6
+  zh: da39fa88aa2b426d
+/deepseek-ai-dsh-skill-install/use-this-package/licences-and-provenance:
+  en: 6faa4253abcbcaf7
+  zh: 8479895ddb9531a5
+/deepseek-ai-dsh-skill-install/understand-the-implementation:
+  en: 42562074e0376f0a
+  zh: 83dd193cabe6ddd1
+/deepseek-ai-dsh-skill-install/further-exploration:
+  en: 78da7d688150a2cb
+  zh: 7bed8916a2124c9d
+/deepseek-ai-dsh-skill-install/model-experience:
+  en: 215e7ba838619b7b
+  zh: e61c78b7d37628ed
+/deepseek-ai-dsh-skill-install/model-experience/installed-skills:
+  en: b004558a9d764a74
+  zh: 554ae814b051e8f6
+/deepseek-ai-dsh-skill-install/model-experience/installed-skills/what-the-model-sees:
+  en: aff2f02d56da2028
+  zh: 96050910659e833c
+/deepseek-ai-dsh-skill-install/model-experience/installed-skills/token-effect:
+  en: 7231cdb3e98ce27c
+  zh: 234087ab770373d1
+/deepseek-ai-dsh-skill-install/model-experience/installed-skills/kv-cache-effect:
+  en: d7e98beb9fcc6bce
+  zh: e574053f167f2d32
+/deepseek-ai-dsh-skill-install/known-limitations-and-deferred-work:
+  en: d8b6b3bad7d06e98
+  zh: b2641be25d1bf4f9

@@ -1,68 +1,92 @@
-/* Appearance row (figma 'Frame 2117131228': title + cube row, column gap 8,
- * pad 16/0, hairline separator; the section column strips it when last). */
-
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-}
+/* Appearance row (figma 'Frame 2117131228': title + tile row, column gap 8).
+ * The General section owns the row's padding and separator (this block only
+ * opts out of the field anatomy); this file owns the label and the three
+ * choices.
+ *
+ * The three tiles are one shared size: equal flexible columns, one 56px height
+ * (16px icon + 4px gap + a 20px label line + its 8px insets), and the R16 tier
+ * the radius standard assigns to deliberately multiline controls — one tier up
+ * from the H36/R12 selector beside them, not the R20 content-card tier.
+ * Selection is the theme's raised material (the same fill, stroke color and
+ * soft elevation SegmentedTabs uses for its indicator), so the selected tile
+ * reads as raised in both palettes instead of carrying an ad-hoc outline. */
 
 .title {
   font-size: 14px;
-  font-weight: 400;
   line-height: 22px;
+  font-weight: 500;
   color: var(--dsw-alias-label-primary);
 }
 
-.cubeRow {
+.tiles {
   display: flex;
-  align-items: stretch;
   gap: 8px;
-  flex-wrap: wrap;
+  margin-top: 8px;
 }
 
-/* Appearance cube (figma '.Selector Cube' 276x82, pad 20/32, centered
- * icon-over-label column, gap 4); flexed down from the figma width so all
- * three sit on one row in the 800 panel, wrapping when narrower. */
-.themeCube {
+.tile {
   box-sizing: border-box;
-  flex: 1 1 180px;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 20px 32px;
+  height: 56px;
+  padding: 8px 12px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--dsw-radius-xl);
+  border-radius: var(--dsw-radius-lg);
   background: transparent;
-  font: inherit;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }
 
 @media (hover: hover) {
-  .themeCube:hover:not(.selected) {
+  .tile:hover:not(.selected) {
     background: var(--dsw-alias-interactive-bg-hover);
   }
 }
 
-/* Selected cube: platform fill + the selected border. */
-.selected {
-  background: var(--dsw-alias-bg-module-platform);
-  border-color: var(--dsw-alias-border-selected);
+/* The native radio carries the group semantics and the keyboard; it stays in
+   the accessibility tree and in the tab order while painting nothing. */
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* Narrow settings panel: all three cubes share one row instead of wrapping to
-   two. The equal basis and the tighter horizontal padding keep a four-glyph
-   label ("跟随系统") on one line at a 390px viewport. */
-@media (max-width: 767px) {
-  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .themeCube {
-    flex: 1 1 0;
-    padding: 12px 6px;
-  }
+/* The focus ring belongs to the tile the focused radio draws, so the ring
+   follows the raised contour in both themes. */
+.tile:has(.input:focus-visible) {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.icon {
+  flex: none;
+}
+
+.label {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+
+/* Selected: the raised layer and its soft elevation carry the state, and the
+   primary ink names the choice. The neutral hairline moves into the elevation
+   stroke (transparent border), so the tile never draws two outlines. */
+.selected {
+  border-color: transparent;
+  background: var(--dsw-alias-bg-layer-3);
+  box-shadow: var(--dsw-elevation-soft);
+  color: var(--dsw-alias-label-primary);
 }

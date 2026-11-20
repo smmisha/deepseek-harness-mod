@@ -285,9 +285,9 @@ describe('web e2e: queue row actions', () => {
       { timeout: 10_000 },
     ).toBe(2)
 
-    const stopButton = page.getByRole('button', { name: 'Stop generating' })
+    const stopButton = page.getByRole('button', { name: 'Finish step, then stop' })
     await stopButton.hover()
-    await page.getByRole('tooltip', { name: 'Stop generating Esc Esc', exact: true }).waitFor()
+    await page.getByRole('tooltip', { name: 'Finish step, then stop Esc Esc', exact: true }).waitFor()
     if (method === 'button') await stopButton.click()
     else {
       await input.focus()
@@ -295,7 +295,7 @@ describe('web e2e: queue row actions', () => {
       await page.keyboard.press('Escape')
     }
     await firstSettled
-    await expect.poll(() => page.getByRole('button', { name: 'Stop generating' }).count())
+    await expect.poll(() => page.getByRole('button', { name: 'Finish step, then stop' }).count())
       .toBe(0)
     await expect.poll(() => page.getByRole('button', { name: 'Remove queued message' }).count())
       .toBe(2)
@@ -411,7 +411,7 @@ describe('web e2e: queue row actions', () => {
     await expect.poll(() => page.locator('[data-queue-dock]').count(), { timeout: 10_000 }).toBe(0)
     await page.getByRole('button', { name: 'Clear goal' }).click()
     await expect.poll(() => page.locator('[data-goal-bar]').count(), { timeout: 10_000 }).toBe(0)
-    await page.getByRole('button', { name: 'Stop generating' }).click()
+    await page.getByRole('button', { name: 'Finish step, then stop' }).click()
     await settled
 
     expect(turnEndReasons(sessionEvents)).toEqual(['aborted'])
@@ -444,7 +444,7 @@ describe('web e2e: queue row actions', () => {
 
     const input = page.locator('[data-composer-input]').first()
     const editable = page.locator('[data-composer-input][contenteditable="true"]').first()
-    const stop = page.getByRole('button', { name: 'Stop generating', exact: true })
+    const stop = page.getByRole('button', { name: 'Finish step, then stop', exact: true })
     await editable.waitFor({ timeout: 10_000 })
     await input.fill('/goal Keep working after Stop')
     await input.press('Enter')

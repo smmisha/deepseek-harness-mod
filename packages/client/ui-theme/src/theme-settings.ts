@@ -1,6 +1,9 @@
 /** Theme preferences stored in the Host user-settings document. */
 
 import z from '@deepseek-ai/schemastery'
+import {
+  DEFAULT_MOTION, DEFAULT_PALETTE, MOTION_LEVELS, PALETTES, type MotionLevel, type PaletteId,
+} from './appearance.ts'
 
 /** Built-in preferences accepted at the registry and settings boundaries. */
 export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const
@@ -104,6 +107,12 @@ export interface ThemeSettings {
   codeFontFamily: string
   /** Sidebar terminal fonts placed before the built-in terminal stack; `''` keeps the built-in stack. */
   terminalFontFamily: string
+  /** Color palette layered over the light and dark schemes. */
+  palette: PaletteId
+  /** Accent color as lowercase `#rrggbb`; `''` keeps the palette's or the built-in accent. */
+  accent: string
+  /** Interface motion: follow the system, reduced, or none. */
+  motion: MotionLevel
 }
 
 /**
@@ -144,6 +153,10 @@ export const ThemeSettingsSchema: z<ThemeSettings> = z.object({
   [FONT_FAMILY_FIELDS.text]: z.string().default(''),
   [FONT_FAMILY_FIELDS.code]: z.string().default(''),
   [FONT_FAMILY_FIELDS.terminal]: z.string().default(''),
+  palette: z.union([...PALETTES]).default(DEFAULT_PALETTE),
+  // An empty accent keeps the palette's or the built-in accent; anything else must be #rrggbb.
+  accent: z.string().pattern(/^(?:#[0-9a-f]{6})?$/u).default(''),
+  motion: z.union([...MOTION_LEVELS]).default(DEFAULT_MOTION),
 })
 
 /** CSS Fonts generic and system family keywords, which must stay unquoted. */

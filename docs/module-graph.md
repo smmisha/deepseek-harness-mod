@@ -74,6 +74,7 @@ flowchart TD
   subgraph group_skill["packages/skill"]
     pkg_skill["skill"]
     pkg_skill_filesystem["skill-filesystem"]
+    pkg_skill_install["skill-install"]
     pkg_skill_office["skill-office"]
     pkg_skill_sources["skill-sources"]
     pkg_tool_skill["tool-skill"]
@@ -568,6 +569,10 @@ flowchart TD
   pkg_fs --> pkg_brand
   pkg_fs --> pkg_llm
   pkg_fs --> pkg_sandbox
+  pkg_skill_install --> pkg_error
+  pkg_skill_install --> pkg_home_paths
+  pkg_skill_install --> pkg_skill
+  pkg_skill_install --> pkg_typert_protocol
   pkg_skill_office --> pkg_skill
   pkg_web_fetch_http --> pkg_timeout
   pkg_web_fetch_http --> pkg_web
@@ -1758,6 +1763,7 @@ flowchart TD
 | [`otel`](../packages/telemetry/otel) | `telemetry` | [`session`](../packages/core/session) |
 | [`session-snapshot`](../packages/test-support/session-snapshot) | `test-support` | [`http-proxy`](../packages/util/http-proxy), [`session`](../packages/core/session) |
 | [`fs`](../packages/fs/fs) | `fs` | [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox) |
+| [`skill-install`](../packages/skill/skill-install) | `skill` | [`error`](../packages/util/error), [`home-paths`](../packages/util/home-paths), [`skill`](../packages/skill/skill), [`typert-protocol`](../packages/typert/protocol) |
 | [`skill-office`](../packages/skill/skill-office) | `skill` | [`skill`](../packages/skill/skill) |
 | [`web-fetch-http`](../packages/web/web-fetch-http) | `web` | [`timeout`](../packages/util/timeout), [`web`](../packages/web/web) |
 | [`spill-local`](../packages/spill/spill-local) | `spill` | [`spill`](../packages/spill/spill) |

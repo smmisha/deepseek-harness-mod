@@ -1,46 +1,82 @@
-/* Skills tab: the search field and one group per source. A group head carries
-   the source name, its folder, and the switch that owns every skill below;
-   each skill is a row card matching the Plugins page's list rows — a 48px
-   artwork frame, the name over its one-liner and file, and its switch. Warnings
-   sit under the head, indented to the name they explain. */
+/* Skills tab: a catalog of the skills the Host discovered. The toolbar is one
+   search field, the refresh action, the grouping switch, and the split add
+   button; below it sit the two filters and a quiet summary. The board groups
+   skills by category or by source; each section header carries a disclosure, the
+   section name, and its count, and a source header adds the mark, kind, folder,
+   remove control, and switch. Each skill is a catalog tile of mark, name and
+   source, description, state, and the quiet switch. Selecting a tile opens the
+   detail panel the tab renders beside the list.
+
+   Below the Plugins page's 600px bar width the toolbar collapses the way that
+   page's own actions do: the search takes its own line, every action becomes an
+   icon, and the grouping switch hands its two modes to one icon menu. The tab
+   column is the page bar minus its 20px inline insets below 768px, so the same
+   moment is `width < 560px` here; the tab folds with the page header, never after
+   it. */
 
 .tab {
+  container: skills-tab / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--dsw-space-3, 12px);
+  min-width: 0;
 }
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--dsw-space-2, 8px);
+  gap: 8px;
 }
 
 .search {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 360px;
+}
+
+/* The grouping switch and the add button stay together at the trailing edge, so
+   the search keeps its measure at every width. */
+.toolbarEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+/* The toolbar's icon actions: the Plugins page's 32px geometry, one step up from
+   the 28px sm capsule, so refresh and the compact grouping menu line up with the
+   add button's halves. */
+.actionButton {
+  flex: none;
+  width: 32px;
   height: 32px;
-  padding: 0 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 0;
   border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 13px;
 }
 
-.search:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
-  outline-offset: 1px;
+/* The grouping switch keeps its full trailing position above the collapse; the
+   menu that replaces it below is hidden until then. */
+.groupingWide {
+  flex: none;
 }
 
-/* Add skills: the Plugins page's split button — a primary half and a
-   chevron half that opens the two ways to add. */
+.groupingCompact {
+  display: none;
+}
+
+.groupingMenu {
+  min-width: 180px;
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+/* Add skills: the Plugins page's split button — a primary half and a chevron
+   half that opens every way to add. */
 .addGroup {
   display: inline-flex;
   flex: none;
   align-items: stretch;
-  margin-inline-start: auto;
 }
 
 .addPrimary,
@@ -74,34 +110,42 @@
   max-width: calc(100vw - 48px);
 }
 
+/* A menu row grows with its description instead of clipping it: the two longest
+   locales write three lines here. */
 .addMenu [role='menuitem'] {
-  height: 72px;
+  height: auto;
   box-sizing: border-box;
   gap: 10px;
-  padding: 6px 12px;
+  padding: 8px 10px;
 }
 
 .addMenuItem {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
   white-space: normal;
 }
 
 .addMenuDescription {
-  display: -webkit-box;
-  max-height: 36px;
-  overflow: hidden;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
-/* Narrow panes keep the icon halves and drop the label, as the Plugins toolbar does. */
-@media (max-width: 560px) {
+/* Narrow panes keep the icon halves and drop the label; the button keeps its
+   accessible name from aria-label. The search takes its own line so the actions
+   never squeeze it, and the grouping switch gives way to the icon menu. */
+/* The page's own action row folds below a 767px viewport, which leaves the tab a
+   container of about 700px; the toolbar must fold at the same point instead of
+   squeezing the search and the grouping switch into one line. */
+@container skills-tab (width < 700px) {
+  .search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
   .addLabel {
     display: none;
   }
@@ -111,9 +155,637 @@
     min-width: 32px;
     padding-inline: 0;
   }
+
+  .groupingWide {
+    display: none;
+  }
+
+  .groupingCompact {
+    display: inline-flex;
+  }
+
+  /* The count keeps a whole line instead of trailing the two filters off the edge. */
+  .summary {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    text-align: end;
+  }
 }
 
-/* A folder path needs the width of the Plugins install dialog, not the default confirmation card. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterButton {
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  font-size: 12px;
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.filterLabel {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filterMenu {
+  min-width: 180px;
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+.summary {
+  margin-inline-start: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The catalog and its detail panel share one row; the panel takes a fixed
+   column so every row keeps the same description measure. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.split[data-detail='true'] {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.list {
+  min-width: 0;
+  padding-block: 4px;
+}
+
+@media (max-width: 1200px) {
+  .split[data-detail='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* One source group: a disclosure header and the catalog rows it owns. */
+.group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.groupToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.groupToggle:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.disclosure {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.groupName {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupKind {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.groupPath {
+  overflow: hidden;
+  flex: 1 1 120px;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  margin-inline-start: auto;
+}
+
+.count {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.warning {
+  flex: none;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.groupRule {
+  height: 0.5px;
+  margin: 2px 0 4px;
+  background: var(--dsw-alias-border-l1);
+}
+
+/* The catalog is a board of skill tiles, the way a marketplace presents what it
+ * offers: the grid decides the columns, each tile keeps the same anatomy. */
+.rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One skill tile: source mark, name and switch, the author's description, then
+ * the state line. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.row[data-selected='true'] {
+  border-color: var(--dsw-alias-border-selected);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* A hover state is a pointer affordance, so it waits for a hovering primary input. */
+@media (hover: hover) {
+  .row:hover {
+    border-color: var(--dsw-alias-border-l2);
+    background: var(--dsw-alias-bg-layer-2);
+  }
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.rowMark {
+  display: inline-flex;
+  margin-top: 2px;
+  flex: none;
+}
+
+.ident {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.identName,
+.identNameStatic {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identName {
+  cursor: pointer;
+}
+
+.identName:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.identOrigin {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The author's description: its own block, measured for reading, two lines with
+   a real expansion. Words break only at boundaries; paths use `anywhere` in the
+   detail panel. */
+.desc {
+  min-width: 0;
+}
+
+.descText {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.descText[data-expanded='true'] {
+  -webkit-line-clamp: 3;
+}
+
+.descMore {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.descMore:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 1px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.state[data-state='enabled'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.state[data-state='overridden'] {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.state[data-state='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.rowEnd {
+  display: inline-flex;
+  flex: none;
+  justify-content: flex-end;
+  padding-top: 1px;
+}
+
+/* The switch states a row's setting; the row itself is the catalog entry, so the
+ * control keeps the row's ink instead of borrowing the primary action's brand
+ * fill. Two classes and an element beat the primitive's own
+ * `.switch[aria-checked='true']`, so this stays scoped to this tab. The knob
+ * position and `aria-checked` carry the state. */
+.rowEnd button[role='switch'],
+.groupEnd button[role='switch'] {
+  background: var(--dsw-alias-bg-layer-3);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+.rowEnd button[role='switch'][aria-checked='true'],
+.groupEnd button[role='switch'][aria-checked='true'] {
+  background: var(--dsw-alias-label-tertiary);
+  box-shadow: none;
+}
+
+/* A row's explanation sits under its columns, aligned with the identity. */
+.rowNote {
+  margin: 0;
+  flex: 1 1 100%;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.rowNote[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Added folders that hold no skill are not catalog entries, but dropping one must
+ * stay possible; they sit in one quiet line above the board. */
+.hiddenFolders {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hiddenFoldersLabel {
+  flex: none;
+}
+
+.hiddenFolder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.groupEmpty {
+  padding: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.removeButton {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.more {
+  align-self: flex-start;
+  margin-inline-start: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-state-business-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.more:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+/* Narrow panes stack the columns: mark, identity and switch on the first line,
+   the state under the identity, the description across the row. */
+@media (max-width: 720px) {
+  .rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .state {
+    padding-top: 0;
+  }
+
+  .rowEnd {
+    grid-column: 3 / 4;
+  }
+
+  .rowNote {
+    grid-column: 1 / -1;
+  }
+
+  .groupHead {
+    flex-wrap: wrap;
+  }
+
+  .groupKind {
+    display: none;
+  }
+
+  .groupPath {
+    order: 1;
+    flex: 1 1 100%;
+  }
+}
+
+/* Loading: the same grid as the rows, so the tab does not reflow when they land. */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeletonRow {
+  display: grid;
+  grid-template-columns: 20px minmax(150px, 200px) minmax(0, 1fr) 92px 36px;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 8px;
+}
+
+.skeletonBlock {
+  display: block;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-skeleton);
+}
+
+.skeletonMark {
+  width: 20px;
+  height: 20px;
+}
+
+.skeletonLine {
+  height: 12px;
+}
+
+.skeletonName {
+  width: 120px;
+}
+
+.skeletonOrigin {
+  width: 80px;
+  height: 10px;
+  margin-top: 6px;
+}
+
+.skeletonShortLine {
+  width: 70%;
+  margin-top: 6px;
+}
+
+.skeletonSwitch {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  corner-shape: round;
+}
+
+/* Feedback: an in-place notice keeps the described list on screen. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.noticeIcon {
+  flex: none;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.noticeText {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.status {
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.alert {
+  margin: 0;
+  overflow-wrap: break-word;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.noResults {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+/* Empty inventory: one sentence, the three ways to add a skill, and the quiet
+   row of sources the tab reads. */
+.empty {
+  padding: 72px 24px 80px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.emptyBody {
+  max-width: 52ch;
+  margin: 0 auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.emptySources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.emptyMarks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* A folder path needs the width of the Plugins install dialog, not the default
+   confirmation card. */
 .folderDialog {
   width: min(560px, 100%);
 }
@@ -145,209 +817,42 @@
   min-width: 0;
 }
 
-.removeButton {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  color: var(--dsw-alias-label-secondary);
+/* A drop in progress: the tab dims and names what it accepts. The overlay takes
+   no pointer events, so the drop event still lands on the tab itself. */
+.tab {
+  position: relative;
 }
 
-.group {
+.tab[data-dragging='true'] > *:not(.dropOverlay) {
+  opacity: 0.5;
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.groupHead {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  min-width: 0;
-}
-
-.groupTitle {
-  flex: none;
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  line-height: 22px;
-  font-weight: 500;
-}
-
-.chip {
-  flex: none;
-  padding: 1px 6px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.path {
-  overflow: hidden;
-  flex: 1 1 160px;
-  min-width: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Count, warning, and switch stay together at the row's end. */
-.groupEnd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  margin-inline-start: auto;
-}
-
-.count {
-  flex: none;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.warning {
-  flex: none;
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.cards {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.card {
-  min-width: 0;
-  /* The row's hover-less surface reaches 8px past its content while the card
-     content stays aligned with the group head. */
-  margin: 0 -8px;
-  border-radius: var(--dsw-radius-xl);
-}
-
-.cardHead {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 8px;
-}
-
-.cardIcon {
-  display: inline-flex;
-  flex: none;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-lg);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.cardMain {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.cardTitle {
-  overflow: hidden;
-  color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cardDesc {
-  overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 18px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-}
-
-.cardPath {
-  overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cardEnd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-}
-
-/* Under the title: 8px card padding, the 48px frame, and its 14px gap. */
-.reason {
-  margin: 0;
-  padding: 0 8px 8px 70px;
-  font-size: 12px;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-}
-
-.reasonWarning {
-  color: var(--dsw-alias-state-warn-label);
-}
-
-.reasonError {
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.message {
-  margin: 0;
-  padding: 0 8px;
+  gap: 8px;
+  border: 1px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
+  pointer-events: none;
 }
 
-.error {
-  margin: 0;
-  color: var(--dsw-alias-state-error-primary);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.more {
-  align-self: flex-start;
-  margin-inline-start: 8px;
+/* The archive picker is opened by the add menu; it stays out of the flow. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
   padding: 0;
+  overflow: hidden;
   border: 0;
-  background: none;
-  color: var(--dsw-alias-state-business-primary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  cursor: pointer;
-}
-
-.more:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
-  outline-offset: 1px;
+  clip-path: inset(50%);
 }

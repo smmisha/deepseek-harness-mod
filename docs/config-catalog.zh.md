@@ -264,7 +264,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-session-controller`
 
 - `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `remoteAccess` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `typertGateway` · `workspaceRegistry`
-- `source`: [`packages/api/session-controller/src/index.ts:110`](../packages/api/session-controller/src/index.ts)
+- `source`: [`packages/api/session-controller/src/index.ts:112`](../packages/api/session-controller/src/index.ts)
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -628,6 +628,16 @@ export interface Config {
   registryProbeTimeoutMs: number
   /** Lifetime of a winning registry or unavailable result. */
   registryProbeCacheTtlMs: number
+  /** Bundles whose own configuration also opens as a Settings section, in Settings order. */
+  settingsSections: SettingsSection[]
+}
+
+/** One bundle whose configuration also opens from Settings. */
+export interface SettingsSection {
+  /** npm package name of the bundle. */
+  package: string
+  /** Settings navigation label and section title. */
+  label: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-plugin-manager -->
@@ -734,7 +744,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-client-ui-theme`
 
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/client/ui-theme/src/index.ts:20`](../packages/client/ui-theme/src/index.ts)
+- `source`: [`packages/client/ui-theme/src/index.ts:23`](../packages/client/ui-theme/src/index.ts)
 
 ```ts config-catalog
 /** Runtime preferences projected to the browser. */
@@ -753,10 +763,22 @@ export interface Config {
   codeFontFamily: Volatile<string>
   /** Sidebar terminal font list; `''` keeps the built-in stack. */
   terminalFontFamily: Volatile<string>
+  /** Color palette layered over the light and dark schemes. */
+  palette: Volatile<PaletteId>
+  /** Accent color as lowercase `#rrggbb`; `''` keeps the palette's or the built-in accent. */
+  accent: Volatile<string>
+  /** Interface motion: follow the system, reduced, or none. */
+  motion: Volatile<MotionLevel>
 }
 
 /** Theme preference persisted by the product Appearance row. */
 export type ThemePreference = typeof THEME_PREFERENCES[number]
+
+/** Selected color palette. */
+export type PaletteId = typeof PALETTES[number]
+
+/** Interface motion level. */
+export type MotionLevel = typeof MOTION_LEVELS[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-theme -->
 
@@ -914,7 +936,7 @@ export interface Config extends CuaConfig {
 ## `@deepseek-ai/dsh-deepseek-account`
 
 - `inject`: `credentials` · `authorization`
-- `source`: [`packages/credentials/deepseek-account/src/index.ts:40`](../packages/credentials/deepseek-account/src/index.ts)
+- `source`: [`packages/credentials/deepseek-account/src/index.ts:41`](../packages/credentials/deepseek-account/src/index.ts)
 
 ```ts config-catalog
 /** Deployment-specific platform and request deadlines. */
@@ -1643,6 +1665,104 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-file-reference-local -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-freechat -->
+<a id="deepseek-aidsh-freechat"></a>
+
+## `@deepseek-ai/dsh-freechat`
+
+- `source`: [`packages/experimental/freechat/src/index.ts:107`](../packages/experimental/freechat/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration; every section is optional and defaulted explicitly. */
+export interface Config {
+  /** Listening surface. */
+  readonly server?: Partial<ServerSection> | undefined
+  /** Web-chat transport selection. */
+  readonly transport?: Partial<TransportSection> | undefined
+  /** Rotation budgets. */
+  readonly context?: Partial<ContextPolicy> | undefined
+  /** Durable memory location. */
+  readonly storage?: Partial<StorageSection> | undefined
+  /** Remote model catalog. */
+  readonly registry?: Partial<RegistrySection> | undefined
+  /** Browser connection used by `transport.kind="cdp"`. */
+  readonly cdp?: Partial<CdpSection> | undefined
+  /** Connector document location. */
+  readonly connectors?: Partial<ConnectorsSection> | undefined
+}
+
+/** Listening surface of the proxy. */
+export interface ServerSection {
+  /** Bind address; loopback keeps the proxy off the network. */
+  readonly host: string
+  /** Listen port; zero asks the operating system. */
+  readonly port: number
+  /** Bearer token every client must present; empty disables authentication. */
+  readonly token: string
+  /** Largest accepted request body in bytes. */
+  readonly maxBodyBytes: number
+}
+
+/** How the bridge reaches the signed-in chat page. */
+export interface TransportSection {
+  /**
+   * `electron-guest` drives the desktop guest page and requires the shell to
+   * provide the `freeChatGuestPort` service; `loopback` is the scripted
+   * transport used by tests and by a deployment that only exercises the proxy.
+   */
+  readonly kind: 'loopback' | 'electron-guest' | 'cdp'
+  /** Poll interval while an answer streams. */
+  readonly pollMs: number
+  /** Consecutive unchanged polls that end an answer. */
+  readonly idlePolls: number
+  /** Budget for the guest composer to appear. */
+  readonly readyTimeoutMs: number
+  /** Budget for one answer to finish before the bridge fails visibly. */
+  readonly answerTimeoutMs: number
+}
+
+/** Budget that turns a growing web thread into a rotation. */
+export interface ContextPolicy {
+  /** Hard cap on messages injected into one web session. */
+  readonly maxMessages: number
+  /** Estimated-token cap for one web session. */
+  readonly maxTokens: number
+  /** Newest messages replayed verbatim into a replacement session. */
+  readonly replayTail: number
+  /** Per-message clamp applied before accounting, so one huge paste cannot exhaust a session. */
+  readonly maxCharsPerMessage: number
+}
+
+/** Durable memory location. */
+export interface StorageSection {
+  /** Directory holding one JSONL file per thread plus `index.json`. */
+  readonly directory: string
+}
+
+/** Remote model catalog. */
+export interface RegistrySection {
+  /** HTTPS document listing additional free routes; empty keeps the registry local. */
+  readonly url: string
+  /** Cache lifetime before the next list re-fetches. */
+  readonly ttlMs: number
+}
+
+/** Browser connection the CDP transport uses. */
+export interface CdpSection {
+  /** Debugging port of the Chromium instance. */
+  readonly port: number
+  /** Chat page opened in the dedicated tab. */
+  readonly url: string
+}
+
+/** Connector document location. */
+export interface ConnectorsSection {
+  /** `mcpServers` JSON file the hub reads and a management surface writes. */
+  readonly file: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-freechat -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fs-local -->
 <a id="deepseek-aidsh-fs-local"></a>
 
@@ -2044,7 +2164,7 @@ export interface Config extends ProtocolConfig, ModelListingConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:251`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:277`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -2117,6 +2237,22 @@ export interface PiAiProviderProfile {
    * to answer instead.
    */
   defaultInput?: PiAiModality[]
+  /**
+   * Whether this route offers the models its gateway's served-model listing names
+   * now (default true). A route whose `models` list is written keeps that list; a
+   * listing never replaces it.
+   */
+  followModelListing?: boolean
+  /**
+   * URL of the served-model listing this route follows. Absent, a built-in route
+   * still on its provider's default endpoint follows that provider's listing; a
+   * route pointed elsewhere follows none unless it names a URL here.
+   */
+  modelListingUrl?: string
+  /** Age after which a served listing refreshes in the background (default 600,000). */
+  modelListingMaxAgeMs?: number
+  /** Limit on one served listing request before it counts as failed (default 10,000). */
+  modelListingTimeoutMs?: number
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */
@@ -3469,7 +3605,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-skill`
 
-- `source`: [`packages/skill/skill/src/index.ts:278`](../packages/skill/skill/src/index.ts)
+- `source`: [`packages/skill/skill/src/index.ts:285`](../packages/skill/skill/src/index.ts)
 
 ```ts config-catalog
 /** Skill registry configuration. */
@@ -3486,7 +3622,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-skill-filesystem`
 
 - `inject`: `skills`
-- `source`: [`packages/skill/skill-filesystem/src/index.ts:58`](../packages/skill/skill-filesystem/src/index.ts)
+- `source`: [`packages/skill/skill-filesystem/src/index.ts:74`](../packages/skill/skill-filesystem/src/index.ts)
 
 ```ts config-catalog
 /** Local filesystem skill provider configuration. */
@@ -3560,14 +3696,22 @@ export type PythonEnvironment = 'workspace-dependencies' | 'user'
 - `source`: [`packages/skill/skill-sources/src/index.ts:37`](../packages/skill/skill-sources/src/index.ts)
 
 ```ts config-catalog
-/** Plugin configuration: the persisted switches and the application list. */
+/** Plugin configuration: the persisted switches, the application list, and the category rules. */
 export interface Config {
   /** Other applications' skill folders; every one starts switched off. */
   applications?: SkillApplication[]
+  /**
+   * Category rules a local provider applies to the skills it describes. Omitted
+   * ships the built-in categories; an empty list leaves only the categories
+   * authors declare, so every other skill falls to the Skills tab's "Other" group.
+   */
+  categories?: SkillCategory[]
   /** Source switches keyed by source id; absent keeps the source's default. */
   sources?: Volatile<Record<string, SkillSourceSwitch>>
   /** Per-skill switches keyed by source id, then skill name; absent means enabled. */
   skills?: Volatile<Record<string, Record<string, boolean>>>
+  /** Folders the reader added from the Skills tab, in the order they were added. */
+  folders?: Volatile<SkillFolder[]>
 }
 
 /** Folders of another application whose skills may be shown. */
@@ -3580,10 +3724,32 @@ export interface SkillApplication {
   readonly title: string
 }
 
+/** One configured skill category. */
+export interface SkillCategory {
+  /** Stable identity the Skills tab groups by; the client translates the ids it knows. */
+  readonly id: string
+  /** Reader-facing name, used when the client does not translate `id`. */
+  readonly title: string
+  /** Skill-name prefixes this category claims, matched against the part of a name after any namespace and before its first `-`. */
+  readonly prefixes?: string[]
+  /** Plugin namespaces this category claims, matched against the `plugin:` part of a namespaced skill name. */
+  readonly namespaces?: string[]
+}
+
 /** One source switch stored in this profile's settings. */
 export interface SkillSourceSwitch {
   /** Whether the source contributes skills; absent keeps the source's own default. */
   readonly enabled?: boolean
+}
+
+/**
+ * A folder the reader added from the Skills tab. `addFolder` records its source
+ * switched off, so its skills wait for the reader's switch; a folder stored
+ * before that record existed keeps the non-application default and stays on.
+ */
+export interface SkillFolder {
+  /** Absolute folder scanned for skill bundles. */
+  readonly dir: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill-sources -->
@@ -4817,6 +4983,46 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-typert-loader -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-usage -->
+<a id="deepseek-aidsh-usage"></a>
+
+## `@deepseek-ai/dsh-usage`
+
+- `inject`: `sessionQuery`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/experimental/usage/src/index.ts:46`](../packages/experimental/usage/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Ledger file; a relative path resolves against the profile directory. */
+  readonly ledgerFile: string
+  /** DeepSeek balance source. */
+  readonly deepseek: DeepSeekSection
+  /** Token budgets keyed by provider route id, edited live on the Usage page. */
+  readonly limits: Volatile<Record<string, UsageBudget>>
+}
+
+/** Where the DeepSeek balance comes from. */
+export interface DeepSeekSection {
+  /** Credential the DeepSeek API route reads its key from. */
+  readonly apiKeyEnv: string
+  /** API origin. */
+  readonly baseURL: string
+}
+
+/** Token budget per rolling window, as configured under the provider id; an absent window is unbounded. */
+export interface UsageBudget {
+  /** Tokens allowed in any rolling five hours. */
+  readonly fiveHours?: number | undefined
+  /** Tokens allowed in any rolling seven days. */
+  readonly week?: number | undefined
+  /** Tokens allowed in any rolling thirty days. */
+  readonly month?: number | undefined
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-usage -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-user-approval -->
 <a id="deepseek-aidsh-user-approval"></a>
 
@@ -5125,6 +5331,7 @@ export interface Config {
 | `@deepseek-ai/dsh-browser-use` | — | [`packages/browser-use/browser-use/src/index.ts`](../packages/browser-use/browser-use/src/index.ts) |
 | `@deepseek-ai/dsh-client-file-upload` | `agents` · `attachments` · `commands` · `connection` | [`packages/client/file-upload/src/index.ts`](../packages/client/file-upload/src/index.ts) |
 | `@deepseek-ai/dsh-client-locale` | — | [`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts) |
+| `@deepseek-ai/dsh-client-locale-uk` | — | [`packages/client/locale-uk/src/index.ts`](../packages/client/locale-uk/src/index.ts) |
 | `@deepseek-ai/dsh-client-modules` | `loader` | [`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts) |
 | `@deepseek-ai/dsh-client-resources` | — | [`packages/client/resources/src/index.ts`](../packages/client/resources/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-action-cards` | — | [`packages/experimental/client-ui-action-cards/src/index.ts`](../packages/experimental/client-ui-action-cards/src/index.ts) |
@@ -5333,6 +5540,7 @@ export interface Config {
 | `@deepseek-ai/dsh-session-snapshot` | — | [`packages/test-support/session-snapshot/src/index.ts`](../packages/test-support/session-snapshot/src/index.ts) |
 | `@deepseek-ai/dsh-session-telemetry` | — | [`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts) |
 | `@deepseek-ai/dsh-session-title-llm` | — | [`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts) |
+| `@deepseek-ai/dsh-skill-install` | — | [`packages/skill/skill-install/src/index.ts`](../packages/skill/skill-install/src/index.ts) |
 | `@deepseek-ai/dsh-ssh-helper-runtime` | — | [`packages/ssh/ssh-helper-runtime/src/index.ts`](../packages/ssh/ssh-helper-runtime/src/index.ts) |
 | `@deepseek-ai/dsh-timeout` | — | [`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts) |
 | `@deepseek-ai/dsh-tool-testkit` | — | [`packages/test-support/tool-testkit/src/index.ts`](../packages/test-support/tool-testkit/src/index.ts) |

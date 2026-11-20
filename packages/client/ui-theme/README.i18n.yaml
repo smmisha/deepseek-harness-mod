@@ -18,11 +18,14 @@
   en: 5a279269e31713c1
   zh: dcd5c31fbdfd63e2
 /deepseek-ai-dsh-client-ui-theme/use-this-package/appearance-and-font-size:
-  en: 7dff01929847efd1
-  zh: ec04b4c4485aba96
+  en: 34f363890543956e
+  zh: bf09916446c2ae07
 /deepseek-ai-dsh-client-ui-theme/use-this-package/fonts:
   en: b45d5b48ca799c3a
   zh: af65514b3759204f
+/deepseek-ai-dsh-client-ui-theme/use-this-package/palette-accent-and-motion:
+  en: 2bace4f7d9584b8b
+  zh: f91cc2a4d8a098d6
 /deepseek-ai-dsh-client-ui-theme/use-this-package/registering-a-theme:
   en: 5244fc168d0a03f8
   zh: c7ab12fdf8c6c55b

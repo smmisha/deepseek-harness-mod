@@ -33,13 +33,24 @@ Use this provider when skills live on disk — in the repository, a custom direc
 
 ### Skill format
 
-A skill is either a directory bundle `<name>/SKILL.md` or a flat file `<name>.md` at the top level of a scanned root; nested `**/SKILL.md` files are deliberately not discovered. The file starts with YAML frontmatter: required `name` and `description`, plus optional `whenToUse`, `metadata`, `disable-model-invocation`, and `user-invocable`.
+A skill is either a directory bundle `<name>/SKILL.md` or a flat file `<name>.md` at the top level of a scanned root; nested `**/SKILL.md` files are deliberately not discovered. The file starts with YAML frontmatter: required `name` and `description`, plus optional `whenToUse`, `category`, `metadata`, `disable-model-invocation`, and `user-invocable`.
 
 `disable-model-invocation: true` keeps the skill out of model-facing catalogs and loaders; `user-invocable: false` keeps it out of human-facing commands, and omitted fields default to permitting their surface. The two keys accept YAML booleans plus the case-insensitive `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0` forms; a rejected spelling or a non-boolean value drops the whole skill with a warning rather than silently permitting a surface.
 
 Catalog entries and loaded skills expose the resolved instruction-file path, so symlinked directories and flat files can open as regular-file previews. Reload locators and resource bases retain the discovered paths, including symlinks.
 
 The catalog and the body have separate lifecycles: discovery parses frontmatter into the catalog entry, and every load re-reads the current file, so editing a skill body needs no versioning or cache invalidation.
+
+### Categories
+
+`describeSources()` derives one category per skill for the Skills tab. First match wins:
+
+1. The frontmatter declares a category: `category`, a flat `metadata.category` key, or a `category` field inside the `metadata` mapping. The author's word is matched against the configured rules; a word no rule claims becomes its own category, identified by that word and titled with it.
+2. The skill name carries a plugin namespace, such as `ckm:banner-design` → `ckm`.
+3. The skill name carries a prefix: the part after any namespace and before its first `-`, such as `gcp-agent-builder` → `gcp`. A one-word name is its own prefix.
+4. No rule claims the skill: the row reports no category.
+
+The rules are not this provider's configuration. They live in the [`skill-sources`](../skill-sources/README.md#categories) entry and reach the provider through `skillSources.visibility().categories`, so one deployment states its categories once for every mounted provider instance. Derivation reads the frontmatter and the name only: it opens no file, writes nothing, and does not change the model catalog. A row whose frontmatter could not be read carries no name, so it has no category either.
 
 ### Roots and priority
 
@@ -81,6 +92,21 @@ The remaining `watch*` fields tune Chokidar behavior — polling, stability wind
 A switched-off source or skill never reaches the model catalog or `/skill`: `list()` skips switched-off roots before discovery and watching, and `get()` drops the skill before the registry merges providers. The application folders and the switches are not part of this provider's configuration; they belong to the [`skill-sources`](../skill-sources/README.md) profile entry, which this provider reads through the `skillSources` service and which the Skills tab writes. Every write invalidates each mounted provider, so the next step publishes a replacement catalog. `describeSources()` caches discovery per folder and only re-resolves statuses after a switch write.
 
 Folders the reader adds from the Skills tab are `folder:<dir>` sources that rank `350`, between configured custom roots and the user roots, and start on. The `skillSources` namespace adds one through `addFolder(dir)`, which expands a leading `~`, answers `relative` for a path that is still not absolute and `missing` for a folder the Host cannot find, and otherwise returns `added` or `exists`; `removeFolder(dir)` drops a folder from the list and leaves its files. A listed folder that disappeared is still described, with `exists: false`, so the tab can offer its removal.
+
+### Skill rows for the Skills tab
+
+`describeSources()` collects what the Skills tab renders for every skill, beyond name, path, and status:
+
+| Field | Meaning |
+|---|---|
+| `description` | The parsed description with every whitespace run collapsed to one space, so a YAML block scalar renders as one paragraph. Catalog entries keep the author's original whitespace. |
+| `language` | `metadata.language` when it is a language tag; the tab sets `lang` from it and `dir="auto"` on author text always. |
+| `files` | Up to 100 files, three folder levels deep: the path relative to the skill folder, its byte size, and whether it is a script (a `scripts` or `bin` folder, or an interpreter or executable extension). Listing reads metadata only; nothing is opened or run. |
+| `provenance` | `metadata.repository` and, when present, `metadata.commit` and an ISO-8601 `metadata.installedAt`. Absent for a skill no installer recorded. |
+| `category` | Category identity the configured rules give the skill; absent when no rule claims it. A declared word no rule claims becomes `declared:<word>`, so two distinct words stay two categories. |
+| `categoryTitle` | Reader-facing name of `category`: the claiming rule's `title`, or the declared word. The Skills tab translates the built-in ids and shows this otherwise. |
+
+An `application` source row also carries `applicationId`, the configured application id (`claude-code`, `codex`, …), so the tab maps a source mark and a translated name; harness and added-folder rows carry none.
 
 ### Change detection
 
@@ -156,6 +182,9 @@ These limits define when the provider is a poor fit or needs special operational
 - **I/O failures omit the whole root** — one unreadable skill also hides its readable siblings for that observation. Other roots remain available, so a lower-priority same-name skill can supply the description and loaded body. Discovery retries on each lookup and restores normal priority when the root recovers.
 - **Missing-root observation polls one path segment** — roots absent at startup use `fs.watchFile` at `watchPollIntervalMs` until Chokidar can attach, trading bounded detection latency for reliable creation detection across IDE, Git, and shell workflows.
 - **No body revision protocol** — a loaded body is ordinary retained tool history; later file edits affect later calls but neither rewrite old results nor announce that the body changed.
+- **Provenance is installer-written** — a row reports `repository`, `commit`, and `installedAt` only when an installer wrote them into the skill's frontmatter `metadata`; this package installs nothing, so a skill copied by hand carries no provenance.
+- **The file list is a bounded snapshot** — a bundle deeper than three folders or larger than 100 files is truncated, and the row does not say so.
+- **A category is derived, never stored** — the row reports what the configured rules and the current frontmatter say at describe time. A rule change regroups the Skills tab without touching any skill file, and a declared word no rule claims stays its own category for as long as the author keeps it.
 
 <a id="dev-note"></a>
 ### Dev Note

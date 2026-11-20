@@ -2,7 +2,9 @@
 import type {} from '@deepseek-ai/dsh-settings'
 
 import type { Volatile, Context } from '@deepseek-ai/cordis'
-import type { ChatSettings, CollapseTiming, FoldedReplies, LinkOpening, PerformanceUsageMode } from './chat-settings.ts'
+import type {
+  BubbleWidth, ChatSettings, CollapseTiming, FoldedReplies, LinkOpening, MessageLayout, PerformanceUsageMode,
+} from './chat-settings.ts'
 import z from '@deepseek-ai/schemastery'
 import { TRANSCRIPT_VIEW_FIELD } from './chat-settings.ts'
 
@@ -26,6 +28,10 @@ export interface Config {
   performanceUsage: Volatile<PerformanceUsageMode>
   /** Default destination for Chat HTTP(S) links. */
   linkOpening: Volatile<LinkOpening>
+  /** User-message presentation: bubbles or flat rows. */
+  messageLayout: Volatile<MessageLayout>
+  /** User-bubble width preset. */
+  bubbleWidth: Volatile<BubbleWidth>
 }
 
 /** Live preferences projected to the browser. */
@@ -35,6 +41,8 @@ export const Config = z.object({
   foldedReplies: ChatSettingsFields.foldedReplies.volatile(),
   performanceUsage: ChatSettingsFields['performanceUsage'].volatile(),
   linkOpening: ChatSettingsFields.linkOpening.volatile(),
+  messageLayout: ChatSettingsFields.messageLayout.volatile(),
+  bubbleWidth: ChatSettingsFields.bubbleWidth.volatile(),
 })
 
 /** Host preferences are consumed through the configuration form projection.

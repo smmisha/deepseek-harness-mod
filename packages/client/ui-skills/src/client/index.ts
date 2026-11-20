@@ -9,10 +9,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the `ctx.remote` Context merge and the `plugins.tab` declaration.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-skill-filesystem/remote'
+import type {} from '@deepseek-ai/dsh-skill-install/remote'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 // Type-only: the `ctx.uiWorkspace` merge used to open a chat and the Host folder chooser.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { SkillsSection, type SkillsFace } from './SkillsSection.tsx'
+import type { FaceResult } from './skills-install.ts'
+import { createSkillsStore } from './skills-store.ts'
 import { de, en, es, fr, ja, pt, ru, zh, NS, type SkillsLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -23,7 +26,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Services the tab reads. */
-export const inject = ['slots', 'locale', 'remote', 'remote.skillSources']
+export const inject = ['slots', 'locale', 'remote', 'remote.skillSources', 'remote.skillInstall']
 
 /**
  * Contribute the Skills tab to the Plugins page.
@@ -70,12 +73,56 @@ export function apply(ctx: ClientContext): void {
       const response = await ctx.remote.skillSources.removeFolder(path)
       return response.ok ? undefined : response.error.message
     },
+    async catalogs() {
+      return settled(ctx.remote.skillInstall.catalogs())
+    },
+    async repository(input) {
+      return settled(ctx.remote.skillInstall.repository(input))
+    },
+    async previewRepository(input, folder) {
+      return settled(ctx.remote.skillInstall.previewRepository(input, folder))
+    },
+    async previewArchive(fileName, content) {
+      return settled(ctx.remote.skillInstall.previewArchive(fileName, content))
+    },
+    async previewFolder(folderName, files) {
+      return settled(ctx.remote.skillInstall.previewFolder(folderName, files))
+    },
+    async installSkill(previewId, name, replace) {
+      return settled(ctx.remote.skillInstall.installSkill(previewId, name, replace))
+    },
+    async removeInstalled(name) {
+      const response = await ctx.remote.skillInstall.removeSkill(name)
+      return response.ok ? undefined : response.error.message
+    },
   }
-  ctx.slots.inject('plugins.tab', () => ctx.slots.register({
-    name: 'plugins.tab',
-    id: 'skills',
-    label: () => t('title'),
-    locale: NS,
-    inject: face,
-  }, SkillsSection))
+  ctx.slots.inject('plugins.tab', () => {
+    // One store instance for the tab's lifetime: group collapse and the open
+    // detail panel survive leaving and returning to the tab.
+    const handle = createSkillsStore(), instance = handle.create()
+    const store: typeof handle = { ...handle, create: () => instance }
+    return ctx.slots.register({
+      name: 'plugins.tab',
+      id: 'skills',
+      label: () => t('title'),
+      locale: NS,
+      store,
+      inject: face,
+    }, SkillsSection)
+  })
+}
+
+/**
+ * Fold one Remote answer into the face's outcome, keeping the failure code the
+ * dialog turns into a localized sentence.
+ * @param response - the generated Remote call's promise.
+ * @returns the value, or the code and diagnostic the Host reported.
+ */
+async function settled<Value>(response: Promise<{ readonly ok: true; readonly value: Value } | {
+  readonly ok: false
+  readonly error: { readonly code: string; readonly message: string }
+}>): Promise<FaceResult<Value>> {
+  const answer = await response
+  if (answer.ok) return { ok: true, value: answer.value }
+  return { ok: false, failure: { code: answer.error.code, message: answer.error.message } }
 }

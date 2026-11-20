@@ -81,7 +81,7 @@
 }
 
 .failure {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-size: 14px;
   line-height: 22px;
   text-align: center;

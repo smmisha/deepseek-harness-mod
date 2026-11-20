@@ -27,10 +27,13 @@ export const ChatFlow = memo(function ChatFlow({
   entries, pendingInputs, lastInputTurn, deferCollapse,
   useSession, useChat, useChatNode, useChatNodeBottom, useChatNodeProcess, useChatGroup, usePresentation, useConnectionState,
   useStore, actions, renderSlot, renderFactorySlot, t, useGroupAction, useGroupHeaderAction,
-  cwd, openFile, inspectCall, forkAt, loadImage,
+  cwd, openFile, inspectCall, forkAt, editMessage, loadImage, pendingSteer,
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
   const running = useSession(snapshot => snapshot.running)
+  // A Host-accepted stop keeps the running bit until the ending lands; the tail
+  // status then names the requested ending instead of the clock.
+  const stopping = useSession(snapshot => snapshot.stopRequested)
   const disconnected = useConnectionState(state => state === 'disconnected' || state === 'connecting')
   const latestTurnAnchor = useChat(snapshot => snapshot.navigation.items().at(-1)?.anchorKey)
   const runningStartTime = useChatNode(latestTurnAnchor ?? '', (node) => {
@@ -47,7 +50,7 @@ export const ChatFlow = memo(function ChatFlow({
   const seatProps = {
     nodeStore, useChatNode, useChatNodeBottom, useChatNodeProcess, usePresentation,
     useStore, actions, renderSlot, t, useGroupAction, deferCollapse,
-    cwd, openFile, inspectCall, forkAt, loadImage,
+    cwd, openFile, inspectCall, forkAt, editMessage, loadImage,
   }
   const rows = entries.map((entry) => {
     switch (entry.kind) {
@@ -74,7 +77,7 @@ export const ChatFlow = memo(function ChatFlow({
     const row = isLocalSubmission(item)
       ? <PendingSubmissionBubble key={item.requestId} submission={item}
         loadImage={loadImage} renderFactorySlot={renderFactorySlot} t={t} />
-      : <PendingSteeringBubble key={item.id} content={item.content}
+      : <PendingSteeringBubble key={item.id} itemId={item.id} content={item.content} pendingSteer={pendingSteer}
         loadImage={loadImage} renderFactorySlot={renderFactorySlot} t={t} />
     if (index <= firstTranscript) leadingRows.push(row)
     else if (isTranscriptEcho(item)) openingRows.push(row)
@@ -94,7 +97,7 @@ export const ChatFlow = memo(function ChatFlow({
   return [
     ...rows, ...leadingRows, ...openingRows,
     ...running || holding ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected}
-      holding={holding} t={t} />] : [],
+      holding={holding} stopping={stopping} t={t} />] : [],
     ...pendingRows,
   ]
 })

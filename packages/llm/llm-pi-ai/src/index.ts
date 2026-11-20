@@ -68,6 +68,7 @@ import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
+import { ModelListingCache } from './live-listing.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import type { StoredModelDiscoveryProfile } from './discovery.ts'
@@ -176,6 +177,19 @@ export function apply(ctx: Context, config: Config): void {
   const settingsNs = ctx.fiber.entry?.options.id ?? NS
   let lastRaw: ReturnType<Config['providers']['get']> | undefined
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
+  let lastListingVersion = -1
+  // Served-model listings of the routes that follow one; a loaded or refreshed listing
+  // advances the version, which re-resolves the profiles on the next read.
+  const modelListings = new ModelListingCache({
+    onFailure: (provider, detail) => {
+      ctx.logger.warn(
+        `llm-pi-ai: the served-model listing for route "${provider}" failed (${detail}); the installed catalog stays in use`,
+      )
+    },
+    onSkipped: (provider, notes) => {
+      ctx.logger.warn(`llm-pi-ai: the served-model listing for route "${provider}" skips entries: ${notes.join('; ')}`)
+    },
+  })
   /**
    * The resolved profiles for the current configuration, memoized by the raw
    * snapshot's identity — which is also what makes the adapter's own snapshot
@@ -187,9 +201,14 @@ export function apply(ctx: Context, config: Config): void {
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = config.providers.get()
-    if (raw === lastRaw && memoized !== undefined) return memoized
-    const next = resolveProfiles(structuredClone(raw) as import('./config.ts').Options['providers'], 'deferred')
+    if (raw === lastRaw && modelListings.version === lastListingVersion && memoized !== undefined) return memoized
+    const next = resolveProfiles(
+      structuredClone(raw) as import('./config.ts').Options['providers'],
+      'deferred',
+      provider => modelListings.liveModels(provider),
+    )
     lastRaw = raw
+    lastListingVersion = modelListings.version
     memoized = next
     return next
   }
@@ -238,6 +257,7 @@ export function apply(ctx: Context, config: Config): void {
     profiles,
     resolveApiKey,
     auth,
+    modelListings,
     prepareHeaders: (request, headers) => ctx.waterfall('llm-pi-ai/request-headers', request, headers, () => headers),
     resolveAttachments: () => ctx.get('attachments'),
     resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
